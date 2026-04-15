@@ -149,8 +149,6 @@
         v-model:fog-mode="fogMode"
         v-model:marker-color="activeMarkerColor"
         :is-g-m="sessionStore.isGM"
-        :live-mode="mapStore.gmMode === 'live'"
-        :image-mode="displayMapType === 'image'"
         class="absolute bottom-4 left-1/2 -translate-x-1/2"
       />
 
@@ -238,6 +236,12 @@ async function pushLive() {
 }
 
 watch(fogMode, (val) => { if (val) hexStore.deselectHex() })
+
+watch(() => mapStore.maps.length, (newLen, oldLen) => {
+  if (oldLen === 0 && newLen > 0 && sessionStore.isGM) {
+    showMapSettings.value = true
+  }
+})
 
 watch(displayMapId, async (newId) => {
   if (newId) {

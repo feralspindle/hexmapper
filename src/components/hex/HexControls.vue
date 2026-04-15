@@ -1,30 +1,5 @@
 <template>
   <div class="flex items-center gap-2 bg-stone-900/90 border border-stone-600 rounded-full px-4 py-2 backdrop-blur">
-    <template v-if="!liveMode && !imageMode">
-      <button
-        v-for="terrain in TERRAIN_TYPES"
-        :key="terrain.id"
-        :title="terrain.label"
-        :class="[
-          'w-6 h-6 rounded-full border-2 transition-transform hover:scale-110',
-          !fogMode && activeTerrain === terrain.id ? 'border-parchment-300 scale-110' : 'border-transparent',
-        ]"
-        :style="{ backgroundColor: terrain.color }"
-        @click="selectTerrain(terrain.id)"
-      />
-      <button
-        title="Clear hex"
-        :class="[
-          'w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs transition-transform hover:scale-110',
-          !fogMode && activeTerrain === null ? 'border-parchment-300' : 'border-stone-500',
-          'bg-stone-800 text-stone-400',
-        ]"
-        @click="selectTerrain(null)"
-      >
-        ✕
-      </button>
-    </template>
-
     <button
       v-for="m in MARKER_COLORS"
       :key="m.id"
@@ -82,26 +57,17 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useHexStore, TERRAIN_TYPES, MARKER_COLORS } from '@/stores/hexStore.js'
+import { useHexStore, MARKER_COLORS } from '@/stores/hexStore.js'
 
 const props = defineProps({
-  isGM:      { type: Boolean, default: false },
-  fogMode:   { type: Boolean, default: false },
-  liveMode:  { type: Boolean, default: false },
-  imageMode: { type: Boolean, default: false },
+  isGM:    { type: Boolean, default: false },
+  fogMode: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:fogMode', 'update:markerColor'])
 
 const hexStore = useHexStore()
-const activeTerrain = ref('plains')
-const activeMarker  = ref(null)
-
-function selectTerrain(id) {
-  if (props.fogMode) emit('update:fogMode', false)
-  activeTerrain.value = id
-  applyToSelected()
-}
+const activeMarker = ref(null)
 
 function selectMarker(id) {
   if (props.fogMode) emit('update:fogMode', false)
@@ -109,15 +75,5 @@ function selectMarker(id) {
   emit('update:markerColor', id)
 }
 
-function applyToSelected() {
-  if (!hexStore.selectedHex) return
-  const { q, r } = hexStore.selectedHex
-  if (activeTerrain.value === null) {
-    hexStore.deleteHex(q, r)
-  } else {
-    hexStore.upsertHex(q, r, { terrain_type: activeTerrain.value, color: null })
-  }
-}
-
-defineExpose({ activeTerrain, applyToSelected, activeMarker })
+defineExpose({ activeMarker })
 </script>

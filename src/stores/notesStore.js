@@ -23,10 +23,11 @@ export const useNotesStore = defineStore('notes', () => {
       .eq('hex_cell_id', hexCellId)
       .order('created_at', { ascending: true })
     loading.value = false
+    if (currentContextKey !== key) return
     if (data) notes.value = data
 
     channel = supabase
-      .channel(`notes:hex:${hexCellId}`)
+      .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -51,10 +52,11 @@ export const useNotesStore = defineStore('notes', () => {
       .eq('element_id', elementId)
       .order('created_at', { ascending: true })
     loading.value = false
+    if (currentContextKey !== key) return
     if (data) notes.value = data
 
     channel = supabase
-      .channel(`notes:dungeon:${elementId}`)
+      .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
