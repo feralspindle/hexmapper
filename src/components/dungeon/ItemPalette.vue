@@ -11,7 +11,6 @@
         'text-stone-300 hover:text-parchment-200 hover:bg-stone-700 cursor-grab active:cursor-grabbing',
       ]"
       @mousedown.prevent="onMouseDown($event, item)"
-      @click="onClick(item.type)"
     >
       <i :class="item.faClass" />
     </button>
@@ -19,22 +18,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useD } from '@/stores/dungeonStore.js'
 import { ROOM_ITEM_TYPES } from '@/lib/roomItems.js'
 import { useItemDrag } from '@/composables/useItemDrag.js'
 
-const dungeonStore = useD()
 const { startDrag } = useItemDrag()
-
-const selectedRoomId = computed(() =>
-  dungeonStore.selectedElement?.type === 'room' ? dungeonStore.selectedElement.id : null
-)
-
-function onClick(type) {
-  if (!selectedRoomId.value) return
-  dungeonStore.addRoomItem(selectedRoomId.value, type)
-}
 
 function onMouseDown(e, item) {
   startDrag(item.type, item.faClass, e.clientX, e.clientY)

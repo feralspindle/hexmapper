@@ -196,20 +196,29 @@ onUnmounted(() => {
   sessionStore.cleanupPresence()
 })
 
+let dragMoved = false
+
 function onGlobalMouseMove(e) {
-  if (itemDrag.active) updatePosition(e.clientX, e.clientY)
+  if (itemDrag.active) { dragMoved = true; updatePosition(e.clientX, e.clientY) }
 }
 
 function onGlobalMouseUp(e) {
   if (!itemDrag.active) return
+  const moved = dragMoved
   const drop = endDrag()
+  dragMoved = false
   if (drop && canvasComp.value) {
-    canvasComp.value.dropItem(drop.type, drop.x, drop.y)
+    if (moved) {
+      canvasComp.value.dropItem(drop.type, drop.x, drop.y)
+    } else {
+      canvasComp.value.addToSelectedRoom(drop.type)
+    }
   }
 }
 
 watchEffect(() => {
   if (itemDrag.active) {
+    dragMoved = false
     window.addEventListener('mousemove', onGlobalMouseMove)
     window.addEventListener('mouseup', onGlobalMouseUp)
   } else {

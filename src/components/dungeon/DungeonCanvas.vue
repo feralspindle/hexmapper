@@ -374,7 +374,19 @@ function dropItem(type, clientX, clientY) {
   }
 }
 
-defineExpose({ zoomIn, zoomOut, resetZoom, dropItem })
+function addToSelectedRoom(type) {
+  const sel = dungeonStore.selectedElement
+  if (sel?.type !== 'room') return
+  const room = dungeonStore.rooms.get(sel.id)
+  if (!room) return
+  const cx = room.origin_x + room.width / 2
+  const cy = room.origin_y + room.height / 2
+  const step = editorAvatarSize.value / cellPx.value
+  const free = findFreeSlot(room, cx, cy, room.items ?? [], step)
+  dungeonStore.addRoomItem(sel.id, type, free.x, free.y)
+}
+
+defineExpose({ zoomIn, zoomOut, resetZoom, dropItem, addToSelectedRoom })
 
 let isPanning = false
 let panStart = { x: 0, y: 0 }
