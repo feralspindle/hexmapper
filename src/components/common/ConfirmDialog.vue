@@ -1,0 +1,33 @@
+<template>
+  <Teleport to="body">
+    <div
+      v-if="state.visible"
+      class="fixed inset-0 z-50 flex items-center justify-center"
+    >
+      <div class="absolute inset-0 bg-black/60" @click="cancel" />
+      <div class="relative bg-stone-950 border-2 border-stone-600 p-5 shadow-[4px_4px_0_rgba(0,0,0,0.6)] w-72 flex flex-col gap-4">
+        <p class="text-parchment-200 text-sm text-center font-body">{{ state.message }}</p>
+        <div class="flex gap-2 justify-center">
+          <button
+            class="px-4 py-1.5 border border-stone-600 text-sm text-stone-300 bg-stone-800 hover:bg-stone-700 transition-colors font-display tracking-wide"
+            @click="cancel"
+          >
+            Cancel
+          </button>
+          <button
+            class="px-4 py-1.5 border border-red-900 text-sm text-red-300 bg-red-950 hover:bg-red-900 transition-colors font-display tracking-wide"
+            @click="accept"
+          >
+            <i class="fa-solid fa-trash fa-xs mr-1" />Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<script setup>
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
+
+const { state, accept, cancel } = useConfirmDialog()
+</script>

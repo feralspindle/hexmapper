@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0c0d10;
+  font-family: 'IM Fell English', Georgia, serif;
+}
+
+#app {
+  width: 100%;
+}
+
+
+.dungeon-label {
+  cursor: pointer;
+}
+.dungeon-label:hover {
+  fill: #f5d76e;
+}
+
+svg {
+  user-select: none;
+}
+
+.cursor-pan,
+.cursor-pan * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 2L11 11L13 11L13 15L19 15L19 11L21 11Z' fill='white' stroke='%23222' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M16 30L21 21L19 21L19 17L13 17L13 21L11 21Z' fill='white' stroke='%23222' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M2 16L11 11L11 13L15 13L15 19L11 19L11 21Z' fill='white' stroke='%23222' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M30 16L21 11L21 13L17 13L17 19L21 19L21 21Z' fill='white' stroke='%23222' stroke-width='1.5' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23d4a84b' stroke='%23222' stroke-width='1'/%3E%3C/svg%3E") 16 16, move !important;
+}
+
+.cursor-pan:active,
+.cursor-pan:active * {
+  cursor: grabbing !important;
+}

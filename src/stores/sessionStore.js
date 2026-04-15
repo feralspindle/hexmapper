@@ -1,0 +1,233 @@
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/authStore.js'
+import router from '@/router/index.js'
+
+const CLIENT_ID = crypto.randomUUID()
+
+export const useSessionStore = defineStore('session', () => {
+  const sessionId      = ref(null)
+  const sessionName    = ref('Untitled Campaign')
+  const sessionOwnerId = ref(null)
+  const activeMapId    = ref(null)
+  const loading        = ref(false)
+  const error          = ref(null)
+
+  const isGM = computed(() => {
+    const authStore = useAuthStore()
+    return !!authStore.user?.id && authStore.user.id === sessionOwnerId.value
+  })
+
+  const userSessions   = ref([])
+  const joinedSessions = ref([])
+  const sessionsLoading = ref(false)
+
+  let sessionChannel  = null
+  let presenceChannel = null
+
+  const onlineUsers = ref([])
+  const latestJoin  = ref(null)
+
+  function _applySessionRow(data) {
+    sessionId.value      = data.id
+    sessionName.value    = data.name
+    sessionOwnerId.value = data.owner_id
+    activeMapId.value    = data.active_map_id ?? null
+  }
+
+  function _subscribeToSession(id) {
+    if (sessionChannel) supabase.removeChannel(sessionChannel)
+    sessionChannel = supabase
+      .channel(`session:${id}:config`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${id}` },
+        ({ new: row }) => {
+          if (row.name !== undefined)          sessionName.value = row.name
+          if (row.active_map_id !== undefined) activeMapId.value = row.active_map_id ?? null
+        },
+      )
+      .subscribe()
+  }
+
+  async function fetchUserSessions() {
+    const authStore = useAuthStore()
+    if (!authStore.user) return
+    sessionsLoading.value = true
+
+    const [ownedRes, joinedRes] = await Promise.all([
+      supabase
+        .from('sessions')
+        .select('id, name, created_at, updated_at')
+        .eq('owner_id', authStore.user.id)
+        .order('updated_at', { ascending: false }),
+
+      supabase
+        .from('session_members')
+        .select('last_seen_at, session:session_id(id, name, created_at, updated_at, owner_id)')
+        .eq('user_id', authStore.user.id)
+        .order('last_seen_at', { ascending: false }),
+    ])
+
+    sessionsLoading.value = false
+
+    if (!ownedRes.error) userSessions.value = ownedRes.data ?? []
+
+    if (!joinedRes.error) {
+      const ownedIds = new Set((ownedRes.data ?? []).map(s => s.id))
+      joinedSessions.value = (joinedRes.data ?? [])
+        .map(row => row.session)
+        .filter(s => s && !ownedIds.has(s.id))
+    }
+  }
+
+  async function createSession() {
+    const authStore = useAuthStore()
+    loading.value = true
+    error.value = null
+    try {
+      const { data, error: err } = await supabase
+        .from('sessions')
+        .insert({ name: sessionName.value, owner_id: authStore.user?.id })
+        .select()
+        .single()
+      if (err) throw err
+      _applySessionRow(data)
+      userSessions.value = [data, ...userSessions.value]
+      _subscribeToSession(data.id)
+      router.push({ name: 'hex-map', params: { sessionId: data.id } })
+    } catch (e) {
+      error.value = e.message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function joinSession(id) {
+    const authStore = useAuthStore()
+    loading.value = true
+    error.value = null
+    try {
+      const { data, error: err } = await supabase
+        .from('sessions')
+        .select()
+        .eq('id', id)
+        .single()
+      if (err) throw err
+      _applySessionRow(data)
+
+      if (authStore.user?.id) {
+        await supabase
+          .from('session_members')
+          .upsert(
+            { session_id: id, user_id: authStore.user.id, last_seen_at: new Date().toISOString() },
+            { onConflict: 'session_id,user_id' },
+          )
+      }
+
+      _subscribeToSession(id)
+    } catch (e) {
+      error.value = 'Session not found. Check the ID and try again.'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updateSessionName(name) {
+    const prev = sessionName.value
+    sessionName.value = name
+    const { error: err } = await supabase
+      .from('sessions')
+      .update({ name })
+      .eq('id', sessionId.value)
+    if (err) sessionName.value = prev
+    else {
+      const idx = userSessions.value.findIndex(s => s.id === sessionId.value)
+      if (idx !== -1) userSessions.value[idx] = { ...userSessions.value[idx], name }
+    }
+  }
+
+  async function setActiveMapId(mapId) {
+    const prev = activeMapId.value
+    activeMapId.value = mapId
+    const { error: err } = await supabase
+      .from('sessions')
+      .update({ active_map_id: mapId })
+      .eq('id', sessionId.value)
+    if (err) { console.error('setActiveMapId:', err.message); activeMapId.value = prev }
+  }
+
+  function initPresence(id) {
+    const authStore = useAuthStore()
+    if (presenceChannel) supabase.removeChannel(presenceChannel)
+
+    const syncUsers = () => {
+      const state = presenceChannel.presenceState()
+      const latest = Object.values(state).map(e => e.at(-1)).filter(Boolean)
+      const byUser = new Map()
+      for (const p of latest) byUser.set(p.user_id ?? p._clientId, p)
+      onlineUsers.value = [...byUser.values()]
+    }
+
+    let _ready = false
+
+    presenceChannel = supabase
+      .channel(`session:${id}:presence`, {
+        config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
+      })
+      .on('presence', { event: 'sync' }, () => { syncUsers(); _ready = true })
+      .on('presence', { event: 'join' }, ({ newPresences }) => {
+        syncUsers()
+        if (!_ready) return
+        for (const p of newPresences) {
+          if (p.user_id && p.user_id === authStore.user?.id) continue
+          latestJoin.value = { ...p, _ts: Date.now() }
+        }
+      })
+      .on('presence', { event: 'leave' }, syncUsers)
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED') return
+        presenceChannel.track({
+          user_id:      authStore.user?.id ?? null,
+          _clientId:    CLIENT_ID,
+          display_name: authStore.displayName ?? 'Adventurer',
+          avatar_url:   authStore.avatarUrl ?? null,
+        })
+      })
+  }
+
+  function cleanupPresence() {
+    if (presenceChannel) { supabase.removeChannel(presenceChannel); presenceChannel = null }
+    onlineUsers.value = []
+    latestJoin.value  = null
+  }
+
+  function cleanup() {
+    if (sessionChannel) { supabase.removeChannel(sessionChannel); sessionChannel = null }
+    cleanupPresence()
+  }
+
+  return {
+    sessionId,
+    sessionName,
+    sessionOwnerId,
+    activeMapId,
+    isGM,
+    loading,
+    error,
+    userSessions,
+    joinedSessions,
+    sessionsLoading,
+    onlineUsers,
+    latestJoin,
+    fetchUserSessions,
+    createSession,
+    joinSession,
+    updateSessionName,
+    setActiveMapId,
+    initPresence,
+    cleanupPresence,
+    cleanup,
+  }
+})

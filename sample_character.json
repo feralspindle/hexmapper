@@ -1,0 +1,243 @@
+{
+  "name": "Shazkhag",
+  "stats": {
+    "STR": 13,
+    "DEX": 13,
+    "CON": 8,
+    "INT": 14,
+    "WIS": 11,
+    "CHA": 8
+  },
+  "rolledStats": {
+    "STR": 13,
+    "DEX": 13,
+    "CON": 8,
+    "INT": 14,
+    "WIS": 11,
+    "CHA": 8
+  },
+  "ancestry": "Half-Orc",
+  "class": "Thief",
+  "level": 1,
+  "levels": [
+    {
+      "level": 1,
+      "talentRolledDesc": "Gain advantage on initiative rolls",
+      "talentRolledName": "AdvOnInitiative",
+      "Rolled12TalentOrTwoStatPoints": "",
+      "Rolled12ChosenTalentDesc": "",
+      "Rolled12ChosenTalentName": "",
+      "HitPointRoll": 4,
+      "stoutHitPointRoll": 0
+    }
+  ],
+  "XP": 0,
+  "ambitionTalentLevel": {
+    "level": 1,
+    "talentRolledDesc": "",
+    "talentRolledName": "",
+    "Rolled12TalentOrTwoStatPoints": "",
+    "Rolled12ChosenTalentDesc": "",
+    "Rolled12ChosenTalentName": "",
+    "HitPointRoll": 0,
+    "stoutHitPointRoll": 0
+  },
+  "title": "Footpad",
+  "alignment": "Lawful",
+  "background": "Banished",
+  "deity": "Saint Terragnis",
+  "maxHitPoints": 3,
+  "armorClass": 12,
+  "gearSlotsTotal": 13,
+  "gearSlotsUsed": 7,
+  "bonuses": [
+    {
+      "sourceType": "Class",
+      "sourceName": "Thief",
+      "sourceCategory": "Talent",
+      "gainedAtLevel": 1,
+      "name": "AdvOnInitiative",
+      "bonusTo": "",
+      "bonusName": "AdvOnInitiative"
+    }
+  ],
+  "goldRolled": 35,
+  "gold": 0,
+  "silver": 0,
+  "copper": 0,
+  "gear": [
+    {
+      "instanceId": "mnw2lfr2",
+      "gearId": "w3",
+      "name": "Crossbow",
+      "type": "weapon",
+      "quantity": 1,
+      "totalUnits": 1,
+      "slots": 1,
+      "cost": 8,
+      "currency": "gp"
+    },
+    {
+      "instanceId": "mnw2lfr3",
+      "gearId": "s5",
+      "name": "Crossbow bolts",
+      "type": "sundry",
+      "quantity": 1,
+      "totalUnits": 20,
+      "slots": 1,
+      "cost": 1,
+      "currency": "gp"
+    },
+    {
+      "instanceId": "mnw2lfr4",
+      "gearId": "w36",
+      "name": "Dagger (obsidian)",
+      "type": "weapon",
+      "quantity": 1,
+      "totalUnits": 1,
+      "slots": 1,
+      "cost": 3,
+      "currency": "gp"
+    },
+    {
+      "instanceId": "mnw2lfr5",
+      "gearId": "a1",
+      "name": "Leather armor",
+      "type": "armor",
+      "quantity": 1,
+      "totalUnits": 1,
+      "slots": 1,
+      "cost": 10,
+      "currency": "gp"
+    },
+    {
+      "instanceId": "mnw2lfr6",
+      "gearId": "s2",
+      "name": "Backpack",
+      "type": "sundry",
+      "quantity": 1,
+      "totalUnits": 1,
+      "slots": 0,
+      "cost": 2,
+      "currency": "gp"
+    },
+    {
+      "instanceId": "mnw2lfr7",
+      "gearId": "s8",
+      "name": "Flint and steel",
+      "type": "sundry",
+      "quantity": 1,
+      "totalUnits": 1,
+      "slots": 1,
+      "cost": 5,
+      "currency": "sp"
+    },
+    {
+      "instanceId": "mnw2lfr8",
+      "gearId": "s17",
+      "name": "Torch",
+      "type": "sundry",
+      "quantity": 1,
+      "totalUnits": 1,
+      "slots": 1,
+      "cost": 5,
+      "currency": "sp"
+    },
+    {
+      "instanceId": "mnw2lfr9",
+      "gearId": "s12",
+      "name": "Mirror",
+      "type": "sundry",
+      "quantity": 1,
+      "totalUnits": 1,
+      "slots": 1,
+      "cost": 10,
+      "currency": "gp"
+    }
+  ],
+  "treasures": [],
+  "magicItems": [],
+  "attacks": [
+    "CROSSBOW: +1 (F), 1d6 (skip move to reload, 2H)",
+    "DAGGER (OBSIDIAN): +2/+1 (N), 1d6+1/1d6 (BREAKABLE, FIN)",
+    "Backstab: +1 weapon die of damage with surprise attacks"
+  ],
+  "ledger": [
+    {
+      "goldChange": 35,
+      "silverChange": 0,
+      "copperChange": 0,
+      "desc": "Starting gold",
+      "notes": ""
+    },
+    {
+      "goldChange": -8,
+      "silverChange": 0,
+      "copperChange": 0,
+      "desc": "Buy Crossbow",
+      "notes": ""
+    },
+    {
+      "goldChange": -1,
+      "silverChange": 0,
+      "copperChange": 0,
+      "desc": "Buy Crossbow bolts",
+      "notes": ""
+    },
+    {
+      "goldChange": -3,
+      "silverChange": 0,
+      "copperChange": 0,
+      "desc": "Buy Dagger (obsidian)",
+      "notes": ""
+    },
+    {
+      "goldChange": -10,
+      "silverChange": 0,
+      "copperChange": 0,
+      "desc": "Buy Leather armor",
+      "notes": ""
+    },
+    {
+      "goldChange": -2,
+      "silverChange": 0,
+      "copperChange": 0,
+      "desc": "Buy Backpack",
+      "notes": ""
+    },
+    {
+      "goldChange": 0,
+      "silverChange": -5,
+      "copperChange": 0,
+      "desc": "Buy Flint and steel",
+      "notes": ""
+    },
+    {
+      "goldChange": 0,
+      "silverChange": -5,
+      "copperChange": 0,
+      "desc": "Buy Torch",
+      "notes": ""
+    },
+    {
+      "goldChange": -10,
+      "silverChange": 0,
+      "copperChange": 0,
+      "desc": "Buy Mirror",
+      "notes": ""
+    }
+  ],
+  "spellsKnown": "None",
+  "languages": "Common, Orcish",
+  "creationMethod": "Random 1",
+  "coreRulesOnly": true,
+  "activeSources": [
+    "SD",
+    "SG",
+    "CS1",
+    "CS2",
+    "CS3",
+    "CS4"
+  ],
+  "edits": []
+}
