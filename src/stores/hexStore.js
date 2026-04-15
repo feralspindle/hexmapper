@@ -101,13 +101,13 @@ export const useHexStore = defineStore('hex', () => {
   }
 
   async function upsertHex(q, r, patch) {
+    if (!currentMapId.value) {
+      console.warn('upsertHex called with no currentMapId — skipping')
+      return
+    }
     const key = cellKey(q, r)
     const existing = hexCells.value.get(key)
     const merged = {
-      session_id: currentSessionId.value,
-      map_id: currentMapId.value,
-      q,
-      r,
       label: '',
       notes: '',
       terrain_type: null,
@@ -116,6 +116,11 @@ export const useHexStore = defineStore('hex', () => {
       revealed: false,
       ...existing,
       ...patch,
+      // Always override with current context — existing/patch must not win here
+      session_id: currentSessionId.value,
+      map_id: currentMapId.value,
+      q,
+      r,
       source_client: CLIENT_ID,
     }
     hexCells.value.set(key, merged)
@@ -272,6 +277,10 @@ export const useHexStore = defineStore('hex', () => {
   function cleanup() {
     if (channel) supabase.removeChannel(channel)
     channel = null
+    currentMapId.value = null
+    currentSessionId.value = null
+    hexCells.value = new Map()
+    selectedHex.value = null
   }
 
   return {
