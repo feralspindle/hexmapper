@@ -204,6 +204,7 @@ function onPanEnd() {
     }
   }
   panning = false
+  didPan = false
 }
 
 function onWheel(e) {
