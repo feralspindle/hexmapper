@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import router from '@/router/index.js'
+import { useMapStore } from '@/stores/mapStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
 
@@ -231,6 +232,7 @@ export const useHexStore = defineStore('hex', () => {
         updates.push(row)
       }
     }
+    await useMapStore().setFogRevealAll(true)
     if (!updates.length) return
     const { error } = await supabase.from('hex_cells').upsert(updates, { onConflict: 'map_id,q,r' })
     if (error) { console.error('revealAll error:', error.message); await init(currentSessionId.value, currentMapId.value) }
@@ -246,6 +248,7 @@ export const useHexStore = defineStore('hex', () => {
         updates.push(row)
       }
     }
+    await useMapStore().setFogRevealAll(false)
     if (!updates.length) return
     const { error } = await supabase.from('hex_cells').upsert(updates, { onConflict: 'map_id,q,r' })
     if (error) { console.error('hideAll error:', error.message); await init(currentSessionId.value, currentMapId.value) }

@@ -222,6 +222,13 @@
                 <i class="fa-solid fa-scroll" />
                 <span class="hidden sm:inline">Notes</span>
               </RouterLink>
+              <button
+                class="flex items-center px-3 py-3 border-l border-stone-700 text-stone-600 hover:text-red-400 hover:bg-stone-750 transition-colors text-xs shrink-0 self-stretch"
+                title="Delete campaign"
+                @click.stop="deleteSession(s.id)"
+              >
+                <i class="fa-solid fa-trash" />
+              </button>
             </div>
           </div>
         </div>
@@ -354,6 +361,13 @@ async function join() {
 
 function openSession(id) {
   router.push({ name: 'hex-map', params: { sessionId: id } })
+}
+
+async function deleteSession(id) {
+  const s = sessionStore.userSessions.find(s => s.id === id)
+  if (!s) return
+  if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return
+  await sessionStore.deleteSession(id)
 }
 
 function formatDate(iso) {

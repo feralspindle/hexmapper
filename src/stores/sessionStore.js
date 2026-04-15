@@ -104,6 +104,13 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function deleteSession(id) {
+    const { error: err } = await supabase.from('sessions').delete().eq('id', id)
+    if (err) { console.error('deleteSession:', err.message); return false }
+    userSessions.value = userSessions.value.filter(s => s.id !== id)
+    return true
+  }
+
   async function joinSession(id) {
     const authStore = useAuthStore()
     loading.value = true
@@ -223,6 +230,7 @@ export const useSessionStore = defineStore('session', () => {
     latestJoin,
     fetchUserSessions,
     createSession,
+    deleteSession,
     joinSession,
     updateSessionName,
     setActiveMapId,

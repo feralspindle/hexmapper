@@ -137,12 +137,19 @@
         :map-image-offset-y="displayMapImageOffsetY"
         :map-grid-offset-x="displayMapGridOffsetX"
         :map-grid-offset-y="displayMapGridOffsetY"
+        :map-fog-reveal-all="displayMapFogRevealAll"
         :move-mode="mapStore.gmMode === 'edit' ? moveMode : 'none'"
         class="absolute inset-0"
         @hex-click="onHexClick"
         @hex-context="onHexContext"
         @image-offset-change="onImageOffsetChange"
         @grid-offset-change="onGridOffsetChange"
+      />
+
+      <div
+        v-if="fogMode && sessionStore.isGM"
+        class="absolute inset-0 pointer-events-none z-[4]"
+        style="box-shadow: inset 0 0 0 4px rgba(148,163,184,0.35), inset 0 0 80px rgba(100,116,139,0.18)"
       />
 
       <HexControls
@@ -219,6 +226,7 @@ const displayMapImageOffsetX   = computed(() => mapStore.gmMode === 'edit' ? map
 const displayMapImageOffsetY   = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapImageOffsetY   : mapStore.mapImageOffsetY)
 const displayMapGridOffsetX    = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapGridOffsetX    : mapStore.mapGridOffsetX)
 const displayMapGridOffsetY    = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapGridOffsetY    : mapStore.mapGridOffsetY)
+const displayMapFogRevealAll   = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapFogRevealAll   : mapStore.mapFogRevealAll)
 
 async function goLive() {
   if (!mapStore.gmMapOffsetLocked) {

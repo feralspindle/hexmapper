@@ -73,7 +73,9 @@ export const useMapStore = defineStore('map', () => {
   const gmMapImageOffsetY  = computed(() => gmMap.value?.map_image_offset_y ?? 0)
   const gmMapGridOffsetX   = computed(() => gmMap.value?.map_grid_offset_x  ?? 0)
   const gmMapGridOffsetY   = computed(() => gmMap.value?.map_grid_offset_y  ?? 0)
-  const gmMapOffsetLocked  = computed(() => gmMap.value?.map_offset_locked  ?? false)
+  const gmMapOffsetLocked    = computed(() => gmMap.value?.map_offset_locked  ?? false)
+  const gmMapFogRevealAll    = computed(() => gmMap.value?.fog_reveal_all     ?? false)
+  const mapFogRevealAll      = computed(() => activeMap.value?.fog_reveal_all ?? false)
 
   async function init(sessionId) {
     _currentSessionId = sessionId
@@ -248,6 +250,17 @@ export const useMapStore = defineStore('map', () => {
     return true
   }
 
+  async function setFogRevealAll(value) {
+    const map = gmMap.value
+    if (!map) return
+    maps.value = maps.value.map(m => m.id === map.id ? { ...m, fog_reveal_all: value } : m)
+    const { error } = await supabase.from('maps').update({ fog_reveal_all: value }).eq('id', map.id)
+    if (error) {
+      console.error('setFogRevealAll:', error.message)
+      maps.value = maps.value.map(m => m.id === map.id ? { ...m, fog_reveal_all: !value } : m)
+    }
+  }
+
   async function pushLiveDraft() {
     const map = gmMap.value
     if (!map || !hasDraft.value) return false
@@ -313,6 +326,8 @@ export const useMapStore = defineStore('map', () => {
     gmMapGridOffsetX,
     gmMapGridOffsetY,
     gmMapOffsetLocked,
+    gmMapFogRevealAll,
+    mapFogRevealAll,
     hasDraft,
     init,
     cleanup,
@@ -324,6 +339,7 @@ export const useMapStore = defineStore('map', () => {
     cloneMap,
     updateActiveMap,
     pushLiveDraft,
+    setFogRevealAll,
     uploadMapImage,
   }
 })

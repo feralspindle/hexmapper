@@ -84,8 +84,9 @@ const props = defineProps({
   cell: Object,
   isSelected: Boolean,
   isGM: { type: Boolean, default: false },
-  fogMode: { type: Boolean, default: false },
-  imageMode: { type: Boolean, default: false },
+  fogMode:         { type: Boolean, default: false },
+  imageMode:       { type: Boolean, default: false },
+  mapFogRevealAll: { type: Boolean, default: false },
   size: { type: Number, default: HEX_SIZE },
   hexH: { type: Number, default: null },
 })
@@ -101,7 +102,7 @@ const polygonPoints = computed(() => {
 
 const isRevealed = computed(() => props.cell?.revealed ?? false)
 
-const visibleToPlayer = computed(() => props.isGM || isRevealed.value)
+const visibleToPlayer = computed(() => props.isGM || isRevealed.value || props.mapFogRevealAll)
 
 const terrainColor = computed(() => {
   if (props.cell?.color) return props.cell.color
