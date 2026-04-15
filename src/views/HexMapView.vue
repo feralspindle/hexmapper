@@ -211,7 +211,7 @@ const chatStore      = useChatStore()
 const characterStore = useCharacterStore()
 
 const displayMapId = computed(() =>
-  mapStore.gmMode === 'edit' && mapStore.gmMapId
+  sessionStore.isGM && mapStore.gmMode === 'edit' && mapStore.gmMapId
     ? mapStore.gmMapId
     : sessionStore.activeMapId
 )

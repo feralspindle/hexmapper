@@ -59,7 +59,7 @@
 
         <label
           class="flex items-center gap-3 cursor-pointer"
-          :class="isFirst || isOnly ? 'opacity-50 pointer-events-none' : ''"
+          :class="isFirst ? 'opacity-50 pointer-events-none' : ''"
         >
           <div
             :class="[
@@ -81,7 +81,7 @@
             v-model="setActive"
             type="checkbox"
             class="hidden"
-            :disabled="isFirst || isOnly"
+            :disabled="isFirst"
           />
         </label>
 
@@ -119,12 +119,11 @@ const mapStore = useMapStore()
 
 const name        = ref('World Map')
 const mapType     = ref('hex')
-const setActive   = ref(true)
+const setActive   = ref(false)
 const saving      = ref(false)
 const nameInputEl = ref(null)
 
 const isFirst = computed(() => mapStore.maps.length === 0)
-const isOnly  = computed(() => mapStore.maps.length <= 1)
 
 onMounted(() => nextTick(() => nameInputEl.value?.select()))
 
@@ -138,7 +137,7 @@ async function submit() {
   saving.value = true
   try {
     const map = await mapStore.createMap({ name: trimmed, mapType: mapType.value })
-    if (map && (setActive.value || isFirst.value || isOnly.value)) {
+    if (map && (setActive.value || isFirst.value)) {
       await mapStore.setActiveMap(map.id)
     }
     close()

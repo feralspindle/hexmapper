@@ -1,12 +1,12 @@
 -- Enable REPLICA IDENTITY FULL on tables that use UPDATE/DELETE realtime events
 -- so the full row (not just changed columns) is available in the event payload
-ALTER TABLE public.hex_cells   REPLICA IDENTITY FULL;
-ALTER TABLE public.maps        REPLICA IDENTITY FULL;
-ALTER TABLE public.sessions    REPLICA IDENTITY FULL;
-ALTER TABLE public.rooms       REPLICA IDENTITY FULL;
-ALTER TABLE public.corridors   REPLICA IDENTITY FULL;
-ALTER TABLE public.dungeons    REPLICA IDENTITY FULL;
-ALTER TABLE public.map_drafts  REPLICA IDENTITY FULL;
+ALTER TABLE public.hex_cells        REPLICA IDENTITY FULL;
+ALTER TABLE public.maps             REPLICA IDENTITY FULL;
+ALTER TABLE public.sessions         REPLICA IDENTITY FULL;
+ALTER TABLE public.dungeon_rooms    REPLICA IDENTITY FULL;
+ALTER TABLE public.dungeon_corridors REPLICA IDENTITY FULL;
+ALTER TABLE public.dungeons         REPLICA IDENTITY FULL;
+ALTER TABLE public.map_drafts       REPLICA IDENTITY FULL;
 
 -- Add all tables that need realtime to the supabase_realtime publication
 -- Uses a DO block to skip tables already in the publication
@@ -20,8 +20,8 @@ DECLARE
     'hex_cells',
     'maps',
     'sessions',
-    'rooms',
-    'corridors',
+    'dungeon_rooms',
+    'dungeon_corridors',
     'dungeons',
     'hex_notes',
     'dungeon_element_notes',
