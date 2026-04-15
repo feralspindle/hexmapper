@@ -100,9 +100,9 @@ const polygonPoints = computed(() => {
   return cornersToPoints(corners)
 })
 
-const isRevealed = computed(() => props.cell?.revealed ?? false)
+const isRevealed = computed(() => (props.cell?.revealed ?? false) || props.mapFogRevealAll)
 
-const visibleToPlayer = computed(() => props.isGM || isRevealed.value || props.mapFogRevealAll)
+const visibleToPlayer = computed(() => props.isGM || isRevealed.value)
 
 const terrainColor = computed(() => {
   if (props.cell?.color) return props.cell.color
