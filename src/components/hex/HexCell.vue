@@ -33,13 +33,12 @@
       >{{ cell.marker_label.slice(0, 14) }}</text>
     </g>
 
+    <g v-if="visibleToPlayer && cell?.has_dungeon" transform="translate(16, -20)" class="pointer-events-none">
+      <circle r="7" fill="#1c1522" stroke="#9b7bb5" stroke-width="1.5" />
+      <text text-anchor="middle" dy="4" font-size="9" fill="#c9a8e0">D</text>
+    </g>
+
     <template v-if="visibleToPlayer && !imageMode">
-
-      <g v-if="cell?.has_dungeon" transform="translate(16, -20)">
-        <circle r="7" fill="#1c1522" stroke="#9b7bb5" stroke-width="1.5" />
-        <text text-anchor="middle" dy="4" font-size="9" fill="#c9a8e0">D</text>
-      </g>
-
 
       <text
         v-if="cell?.label"

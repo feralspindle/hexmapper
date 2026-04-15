@@ -172,6 +172,10 @@ export const useHexStore = defineStore('hex', () => {
   }
 
   async function createDungeon(q, r, name = 'Unnamed Dungeon') {
+    if (!currentMapId.value) {
+      console.warn('createDungeon called with no currentMapId — skipping')
+      return
+    }
     const key = cellKey(q, r)
     const cell = hexCells.value.get(key)
 
@@ -180,7 +184,7 @@ export const useHexStore = defineStore('hex', () => {
       const { data, error } = await supabase
         .from('hex_cells')
         .upsert(
-          { session_id: currentSessionId.value, map_id: currentMapId.value, q, r, has_dungeon: true, source_client: CLIENT_ID },
+          { session_id: currentSessionId.value, q, r, has_dungeon: true, source_client: CLIENT_ID, map_id: currentMapId.value },
           { onConflict: 'map_id,q,r' },
         )
         .select()
@@ -260,7 +264,8 @@ export const useHexStore = defineStore('hex', () => {
   }
 
   function navigateToDungeon(dungeonId) {
-    router.push({ name: 'dungeon', params: { sessionId: currentSessionId.value, dungeonId } })
+    const sessionId = currentSessionId.value ?? router.currentRoute.value.params.sessionId
+    router.push({ name: 'dungeon', params: { sessionId, dungeonId } })
   }
 
   async function clearAll() {
