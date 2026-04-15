@@ -55,8 +55,8 @@
               :y="r.origin_y * cellPx - viewport.offsetY + (r.height * cellPx) / 2 + 4"
               text-anchor="middle"
               class="dungeon-label pointer-events-auto cursor-pointer"
-              fill="#e8e0d0"
-              font-size="11"
+              fill="#333"
+              font-size="12"
               font-family="'Crimson Text', serif"
               @dblclick.stop="openAnnotation('room', id)"
             >{{ room.label }}</text>

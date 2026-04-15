@@ -28,8 +28,8 @@
         text-anchor="middle"
         :y="-markerY + markerR + 8"
         :font-size="7 * (size / 48)"
-        fill="#f3f0e8"
-        style="text-shadow: 0 1px 3px rgba(0,0,0,1); font-family: 'Crimson Text', serif;"
+        fill="#333"
+        style="text-shadow: 0 1px 2px rgba(0,0,0,0.75); font-family: 'Crimson Text', serif;"
       >{{ cell.marker_label.slice(0, 14) }}</text>
     </g>
 
@@ -45,7 +45,7 @@
         text-anchor="middle"
         dy="4"
         :font-size="labelSize"
-        fill="#f3f0e8"
+        fill="#333"
         class="pointer-events-none"
         style="text-shadow: 0 1px 2px rgba(0,0,0,0.9); font-family: 'Crimson Text', serif;"
       >
