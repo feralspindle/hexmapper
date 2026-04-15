@@ -110,6 +110,7 @@ export const useMapStore = defineStore('map', () => {
         { event: '*', schema: 'public', table: 'maps', filter: `session_id=eq.${sessionId}` },
         ({ eventType, new: row, old }) => {
           if (eventType === 'INSERT') {
+            if (maps.value.find(m => m.id === row.id)) return
             maps.value = [...maps.value, row].sort(
               (a, b) => new Date(a.created_at) - new Date(b.created_at),
             )
@@ -147,6 +148,9 @@ export const useMapStore = defineStore('map', () => {
       .select()
       .single()
     if (error) { console.error('createMap:', error.message); return null }
+    if (!maps.value.find(m => m.id === data.id)) {
+      maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    }
     return data
   }
 
