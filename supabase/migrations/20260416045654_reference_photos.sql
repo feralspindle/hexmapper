@@ -1,5 +1,5 @@
 -- Reference photos library
-create table reference_photos (
+create table if not exists reference_photos (
   id           uuid primary key default gen_random_uuid(),
   session_id   text not null,
   user_id      uuid references auth.users(id),
@@ -10,17 +10,26 @@ create table reference_photos (
 
 alter table reference_photos enable row level security;
 
-create policy "anyone can view reference photos"
-  on reference_photos for select using (true);
+do $$ begin
+  create policy "anyone can view reference photos"
+    on reference_photos for select using (true);
+exception when duplicate_object then null;
+end $$;
 
-create policy "owner can insert reference photos"
-  on reference_photos for insert with check (auth.uid() = user_id);
+do $$ begin
+  create policy "owner can insert reference photos"
+    on reference_photos for insert with check (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
 
-create policy "owner can delete reference photos"
-  on reference_photos for delete using (auth.uid() = user_id);
+do $$ begin
+  create policy "owner can delete reference photos"
+    on reference_photos for delete using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
 
 -- Photo broadcast events (realtime trigger for all clients)
-create table photo_broadcasts (
+create table if not exists photo_broadcasts (
   id         uuid primary key default gen_random_uuid(),
   session_id text not null,
   user_id    uuid references auth.users(id),
@@ -32,11 +41,17 @@ create table photo_broadcasts (
 
 alter table photo_broadcasts enable row level security;
 
-create policy "anyone can view photo broadcasts"
-  on photo_broadcasts for select using (true);
+do $$ begin
+  create policy "anyone can view photo broadcasts"
+    on photo_broadcasts for select using (true);
+exception when duplicate_object then null;
+end $$;
 
-create policy "authenticated users can broadcast photos"
-  on photo_broadcasts for insert with check (auth.uid() = user_id);
+do $$ begin
+  create policy "authenticated users can broadcast photos"
+    on photo_broadcasts for insert with check (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
 
 -- Enable realtime for broadcast events
 alter publication supabase_realtime add table photo_broadcasts;
