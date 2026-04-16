@@ -139,6 +139,7 @@ function cancelUpload() {
 }
 
 async function broadcast(photo) {
+  if (!confirm(`Reveal "${photo.name}" to all players?`)) return
   await photoStore.broadcastPhoto(photo)
 }
 
