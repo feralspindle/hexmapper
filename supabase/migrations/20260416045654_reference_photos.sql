@@ -55,3 +55,31 @@ end $$;
 
 -- Enable realtime for broadcast events
 alter publication supabase_realtime add table photo_broadcasts;
+
+-- Storage policies for the reference-photos bucket
+do $$ begin
+  create policy "authenticated users can upload reference photos"
+    on storage.objects for insert
+    with check (
+      bucket_id = 'reference-photos'
+      and auth.role() = 'authenticated'
+    );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "anyone can read reference photos"
+    on storage.objects for select
+    using (bucket_id = 'reference-photos');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "owner can delete reference photos from storage"
+    on storage.objects for delete
+    using (
+      bucket_id = 'reference-photos'
+      and auth.uid() = owner
+    );
+exception when duplicate_object then null;
+end $$;
