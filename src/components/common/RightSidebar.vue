@@ -42,6 +42,10 @@
       </div>
     </div>
 
+    <div v-if="sessionStore.isGM" v-show="activeTab === 'photos'" class="flex-1 min-h-0 overflow-hidden">
+      <ReferencePhotoManager class="h-full" />
+    </div>
+
   </div>
 </template>
 
@@ -49,21 +53,25 @@
 import { ref, computed, watch } from 'vue'
 import { useHexStore } from '@/stores/hexStore.js'
 import { useD } from '@/stores/dungeonStore.js'
+import { useSessionStore } from '@/stores/sessionStore.js'
 import DiceRoller from './DiceRoller.vue'
 import ChatPanel from './ChatPanel.vue'
 import AnnotationPanel from './AnnotationPanel.vue'
+import ReferencePhotoManager from './ReferencePhotoManager.vue'
 
 const props = defineProps({
   context: { type: String, required: true },
 })
 
-const hexStore = useHexStore()
+const hexStore     = useHexStore()
 const dungeonStore = useD()
+const sessionStore = useSessionStore()
 
-const tabs = [
-  { id: 'dice', label: 'Dice', icon: 'fa-solid fa-dice' },
-  { id: 'info', label: 'Info', icon: 'fa-solid fa-circle-info' },
-]
+const tabs = computed(() => [
+  { id: 'dice',   label: 'Dice',   icon: 'fa-solid fa-dice' },
+  { id: 'info',   label: 'Info',   icon: 'fa-solid fa-circle-info' },
+  ...(sessionStore.isGM ? [{ id: 'photos', label: 'Photos', icon: 'fa-solid fa-images' }] : []),
+])
 
 const activeTab = ref('dice')
 

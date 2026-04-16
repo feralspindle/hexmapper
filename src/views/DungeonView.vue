@@ -126,6 +126,7 @@
 
       <RightSidebar context="dungeon" />
     </div>
+    <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
   </div>
 </template>
 
@@ -148,6 +149,8 @@ import TorchTimer from '@/components/dungeon/TorchTimer.vue'
 import DiceRollToast from '@/components/dungeon/DiceRollToast.vue'
 import ChatToast from '@/components/common/ChatToast.vue'
 import BugReportButton from '@/components/common/BugReportButton.vue'
+import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
+import { usePhotoStore } from '@/stores/photoStore.js'
 import CharacterDrawer from '@/components/common/CharacterDrawer.vue'
 import CharacterPicker from '@/components/common/CharacterPicker.vue'
 import { useItemDrag } from '@/composables/useItemDrag.js'
@@ -162,7 +165,8 @@ const dungeonStore = useD()
 const diceStore = useDiceStore()
 const chatStore = useChatStore()
 const characterStore = useCharacterStore()
-const authStore = useAuthStore()
+const authStore  = useAuthStore()
+const photoStore = usePhotoStore()
 const avatarError = ref(false)
 const canvasComp = ref(null)
 const charOpen = ref(false)
@@ -186,6 +190,7 @@ onMounted(async () => {
   chatStore.init(sessionId)
   characterStore.loadAll(sessionId)
   sessionStore.initPresence(sessionId)
+  photoStore.init(sessionId)
 })
 
 onUnmounted(() => {

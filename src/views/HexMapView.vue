@@ -173,6 +173,7 @@
     </div>
 
     <NewMapModal v-if="mapStore.newMapModalOpen" />
+    <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
   </div>
 </template>
 
@@ -185,6 +186,7 @@ import { useHexStore } from '@/stores/hexStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
+import { usePhotoStore } from '@/stores/photoStore.js'
 import AppNav from '@/components/common/AppNav.vue'
 import HexGrid from '@/components/hex/HexGrid.vue'
 import HexControls from '@/components/hex/HexControls.vue'
@@ -194,6 +196,7 @@ import DiceRollToast from '@/components/dungeon/DiceRollToast.vue'
 import ChatToast from '@/components/common/ChatToast.vue'
 import JoinToast from '@/components/common/JoinToast.vue'
 import RightSidebar from '@/components/common/RightSidebar.vue'
+import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
 
 const hexGridEl         = ref(null)
 const charOpen          = ref(false)
@@ -212,6 +215,7 @@ const hexStore       = useHexStore()
 const diceStore      = useDiceStore()
 const chatStore      = useChatStore()
 const characterStore = useCharacterStore()
+const photoStore     = usePhotoStore()
 
 const displayMapId = computed(() =>
   sessionStore.isGM && mapStore.gmMode === 'edit' && mapStore.gmMapId
@@ -279,6 +283,7 @@ onMounted(async () => {
   chatStore.init(sessionId)
   characterStore.loadAll(sessionId)
   sessionStore.initPresence(sessionId)
+  photoStore.init(sessionId)
 })
 
 onUnmounted(() => {
