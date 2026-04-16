@@ -8,6 +8,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
 export const usePhotoStore = defineStore('photo', () => {
   const photos           = ref([])
+  const broadcastHistory = ref([]) // deduplicated, newest-first; shown in player gallery
   const currentBroadcast = ref(null) // { id, photo_url, photo_name }
   const loading          = ref(false)
   const uploading        = ref(false)
@@ -19,7 +20,7 @@ export const usePhotoStore = defineStore('photo', () => {
     cleanup()
     currentSessionId = sessionId
 
-    await _loadPhotos(sessionId)
+    await Promise.all([_loadPhotos(sessionId), _loadBroadcastHistory(sessionId)])
 
     channel = supabase
       .channel(`photo_broadcasts:${sessionId}`)
@@ -33,9 +34,34 @@ export const usePhotoStore = defineStore('photo', () => {
         },
         ({ new: row }) => {
           currentBroadcast.value = row
+          _addToBroadcastHistory(row)
         },
       )
       .subscribe()
+  }
+
+  async function _loadBroadcastHistory(sessionId) {
+    const { data, error } = await supabase
+      .from('photo_broadcasts')
+      .select('id, photo_url, photo_name, created_at')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+    if (error) { console.error('photoStore._loadBroadcastHistory:', error.message); return }
+    // Deduplicate by photo_url, keeping the most recent broadcast for each
+    const seen = new Set()
+    broadcastHistory.value = (data ?? []).filter(row => {
+      if (seen.has(row.photo_url)) return false
+      seen.add(row.photo_url)
+      return true
+    })
+  }
+
+  function _addToBroadcastHistory(row) {
+    // Remove any existing entry for this url, then prepend the new one
+    broadcastHistory.value = [
+      { id: row.id, photo_url: row.photo_url, photo_name: row.photo_name, created_at: row.created_at },
+      ...broadcastHistory.value.filter(p => p.photo_url !== row.photo_url),
+    ]
   }
 
   async function _loadPhotos(sessionId) {
@@ -119,12 +145,13 @@ export const usePhotoStore = defineStore('photo', () => {
   function cleanup() {
     if (channel) { supabase.removeChannel(channel); channel = null }
     photos.value           = []
+    broadcastHistory.value = []
     currentBroadcast.value = null
     currentSessionId       = null
   }
 
   return {
-    photos, currentBroadcast, loading, uploading,
+    photos, broadcastHistory, currentBroadcast, loading, uploading,
     init, uploadPhoto, deletePhoto, broadcastPhoto, dismissBroadcast, cleanup,
   }
 })

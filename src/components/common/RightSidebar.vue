@@ -5,17 +5,17 @@
       <button
         v-for="tab in tabs"
         :key="tab.id"
-        class="relative flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-display uppercase tracking-wider transition-colors"
+        class="relative flex-1 flex items-center justify-center py-2.5 transition-colors"
         :class="activeTab === tab.id
           ? 'text-parchment-200 border-b-2 border-parchment-400 -mb-px bg-stone-900'
           : 'text-stone-500 hover:text-stone-300 border-b-2 border-transparent -mb-px'"
+        :title="tab.label"
         @click="activeTab = tab.id"
       >
         <i :class="tab.icon" />
-        {{ tab.label }}
         <span
           v-if="tab.id === 'info' && hasSelection && activeTab !== 'info'"
-          class="w-1.5 h-1.5 rounded-full bg-parchment-400"
+          class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-parchment-400"
         />
       </button>
     </div>
@@ -42,8 +42,9 @@
       </div>
     </div>
 
-    <div v-if="sessionStore.isGM" v-show="activeTab === 'photos'" class="flex-1 min-h-0 overflow-hidden">
-      <ReferencePhotoManager class="h-full" />
+    <div v-show="activeTab === 'photos'" class="flex-1 min-h-0 overflow-hidden">
+      <ReferencePhotoManager v-if="sessionStore.isGM" class="h-full" />
+      <BroadcastPhotoGallery v-else class="h-full" />
     </div>
 
   </div>
@@ -58,6 +59,7 @@ import DiceRoller from './DiceRoller.vue'
 import ChatPanel from './ChatPanel.vue'
 import AnnotationPanel from './AnnotationPanel.vue'
 import ReferencePhotoManager from './ReferencePhotoManager.vue'
+import BroadcastPhotoGallery from './BroadcastPhotoGallery.vue'
 
 const props = defineProps({
   context: { type: String, required: true },
@@ -70,7 +72,7 @@ const sessionStore = useSessionStore()
 const tabs = computed(() => [
   { id: 'dice',   label: 'Dice',   icon: 'fa-solid fa-dice' },
   { id: 'info',   label: 'Info',   icon: 'fa-solid fa-circle-info' },
-  ...(sessionStore.isGM ? [{ id: 'photos', label: 'Photos', icon: 'fa-solid fa-images' }] : []),
+  { id: 'photos', label: 'Photos', icon: 'fa-solid fa-images' },
 ])
 
 const activeTab = ref('dice')
