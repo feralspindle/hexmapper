@@ -198,6 +198,7 @@ const charOpen          = ref(false)
 const fogMode           = ref(false)
 const activeMarkerColor = ref(null)
 const showMapSettings   = ref(false)
+const initialized       = ref(false)
 const moveMode          = ref('none')
 
 const route = useRoute()
@@ -246,7 +247,7 @@ async function pushLive() {
 watch(fogMode, (val) => { if (val) hexStore.deselectHex() })
 
 watch(() => mapStore.maps.length, (newLen, oldLen) => {
-  if (oldLen === 0 && newLen > 0 && sessionStore.isGM) {
+  if (initialized.value && oldLen === 0 && newLen > 0 && sessionStore.isGM) {
     showMapSettings.value = true
   }
 })
@@ -263,6 +264,7 @@ onMounted(async () => {
     await sessionStore.joinSession(sessionId)
   }
   await mapStore.init(sessionId)
+  initialized.value = true
 
   if (mapStore.maps.length === 0) {
     mapStore.newMapModalOpen = true
