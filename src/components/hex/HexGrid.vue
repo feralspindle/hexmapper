@@ -34,6 +34,7 @@
             :is-g-m="isGM"
             :fog-mode="fogMode"
             :image-mode="imageMode"
+            :settings-open="settingsOpen"
             :map-fog-reveal-all="mapFogRevealAll"
             :size="hexSize"
             :hex-h="hexHProp"
@@ -67,6 +68,7 @@ const props = defineProps({
   mapGridOffsetY:   { type: Number,  default: 0     },
   moveMode:         { type: String,  default: 'none' },
   mapFogRevealAll:  { type: Boolean, default: false },
+  settingsOpen:     { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['hex-click', 'hex-context', 'image-offset-change', 'grid-offset-change'])

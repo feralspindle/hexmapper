@@ -1,6 +1,13 @@
 <template>
   <div class="absolute left-12 top-1/2 -translate-y-1/2 z-20 w-80 bg-stone-900 border border-stone-600 rounded-lg shadow-2xl p-4 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
-    <div class="text-xs font-display text-parchment-200 uppercase tracking-wider">Map Settings</div>
+    <div class="flex items-center justify-between">
+      <div class="text-xs font-display text-parchment-200 uppercase tracking-wider">Map Settings</div>
+      <button
+        class="w-6 h-6 flex items-center justify-center text-stone-500 hover:text-stone-200 hover:bg-stone-700 rounded transition-colors"
+        title="Close"
+        @click="emit('close')"
+      ><i class="fa-solid fa-xmark text-xs" /></button>
+    </div>
 
     <div class="flex gap-2">
       <button
@@ -183,7 +190,7 @@ import { useHexStore } from '@/stores/hexStore.js'
 const props = defineProps({
   moveMode: { type: String, default: 'none' },
 })
-const emit = defineEmits(['update:moveMode'])
+const emit = defineEmits(['update:moveMode', 'close'])
 
 const mapStore = useMapStore()
 const hexStore = useHexStore()

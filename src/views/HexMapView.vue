@@ -120,6 +120,7 @@
       <MapImageSettings
         v-if="showMapSettings && sessionStore.isGM && mapStore.gmMode === 'edit'"
         v-model:move-mode="moveMode"
+        @close="showMapSettings = false"
       />
 
       <HexGrid
@@ -139,6 +140,7 @@
         :map-grid-offset-y="displayMapGridOffsetY"
         :map-fog-reveal-all="displayMapFogRevealAll"
         :move-mode="mapStore.gmMode === 'edit' ? moveMode : 'none'"
+        :settings-open="showMapSettings"
         class="absolute inset-0"
         @hex-click="onHexClick"
         @hex-context="onHexContext"

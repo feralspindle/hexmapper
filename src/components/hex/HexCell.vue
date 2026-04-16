@@ -10,8 +10,8 @@
     <polygon
       :points="polygonPoints"
       :fill="hexFill"
-      :stroke="isSelected ? '#f5d76e' : (imageMode ? 'rgba(255,255,255,0.18)' : '#374151')"
-      :stroke-width="isSelected ? 2.5 / (size / 48) : 1 / (size / 48)"
+      :stroke="isSelected ? '#f5d76e' : (imageMode ? (settingsOpen ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.18)') : '#374151')"
+      :stroke-width="isSelected ? 2.5 / (size / 48) : (imageMode && settingsOpen ? 2 / (size / 48) : 1 / (size / 48))"
       class="transition-colors duration-150"
     />
 
@@ -85,6 +85,7 @@ const props = defineProps({
   isGM: { type: Boolean, default: false },
   fogMode:         { type: Boolean, default: false },
   imageMode:       { type: Boolean, default: false },
+  settingsOpen:    { type: Boolean, default: false },
   mapFogRevealAll: { type: Boolean, default: false },
   size: { type: Number, default: HEX_SIZE },
   hexH: { type: Number, default: null },
