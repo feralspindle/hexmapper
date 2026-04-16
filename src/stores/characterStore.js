@@ -9,6 +9,17 @@ export function statMod(value) {
   return Math.floor((value - 10) / 2)
 }
 
+export function parseDamageDie(str) {
+  if (!str) return null
+  const match = str.trim().match(/^(\d*)d(\d+)([+-]\d+)?$/i)
+  if (!match) return null
+  return {
+    count:    parseInt(match[1] || '1', 10),
+    sides:    parseInt(match[2], 10),
+    modifier: match[3] ? parseInt(match[3], 10) : 0,
+  }
+}
+
 export function parseAttack(str) {
   const colonIdx = str.indexOf(':')
   const label = colonIdx >= 0 ? str.slice(0, colonIdx).trim() : str
@@ -144,6 +155,29 @@ export const useCharacterStore = defineStore('character', () => {
     updateField(type, next)
   }
 
+  function addGearItem(item) {
+    if (!character.value) return
+    const newItem = {
+      instanceId: crypto.randomUUID(),
+      name: item.name,
+      slots: Number(item.slots) || 0,
+      quantity: Number(item.quantity) || 1,
+      type: item.type ?? 'sundry',
+      disabled: false,
+    }
+    updateField('gear', [...(character.value.gear ?? []), newItem])
+    if (newItem.type === 'weapon') {
+      const attackEntry = {
+        id: crypto.randomUUID(),
+        raw: `${newItem.name}: +0 to hit`,
+        damageDie: item.damageDie?.trim() || null,
+        disabled: false,
+        gearInstanceId: newItem.instanceId,
+      }
+      updateField('attacks', [...(character.value.attacks ?? []), attackEntry])
+    }
+  }
+
   function updateGearItem(instanceId, patch) {
     if (!character.value?.gear) return
     updateField('gear', character.value.gear.map(item =>
@@ -201,7 +235,7 @@ export const useCharacterStore = defineStore('character', () => {
     loading, saving,
     loadAll, setActive, importCharacter, deleteCharacter,
     updateField, adjustHp, adjustMoney,
-    updateGearItem, deleteGearItem, updateAttack, deleteAttack,
+    addGearItem, updateGearItem, deleteGearItem, updateAttack, deleteAttack,
     cleanup,
   }
 })

@@ -100,7 +100,16 @@
                     @click="rollAttack(atk)"
                   >
                     <div class="text-xs font-bold truncate" :class="atk.disabled ? 'line-through text-stone-500' : 'text-parchment-200'">{{ atk.label }}</div>
-                    <div class="text-xs text-stone-500 truncate">{{ atk.raw.split(':').slice(1).join(':').trim() }}</div>
+                    <div class="text-xs text-stone-500 text-wrap">{{ atk.raw.split(':').slice(1).join(':').trim() }}</div>
+                  </button>
+                  <button
+                    v-if="atk.damageDie && !atk.disabled && canEdit"
+                    class="flex flex-col items-center justify-center px-2 shrink-0 border-l border-stone-700 hover:bg-stone-700 transition-colors gap-0.5"
+                    :title="`Roll damage (${atk.damageDie})`"
+                    @click="rollDamage(atk)"
+                  >
+                    <i class="fa-solid fa-dice text-red-400 text-xs" />
+                    <span class="text-red-400 font-mono leading-none" style="font-size:9px">{{ atk.damageDie }}</span>
                   </button>
                   <div v-if="canEdit" class="flex flex-col justify-center gap-1 px-1.5 shrink-0 border-l border-stone-700 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
@@ -120,9 +129,16 @@
               <template v-else>
                 <div class="p-2 space-y-1.5">
                   <input
-                    v-model="editAtkDraft"
+                    v-model="editAtkDraft.raw"
                     class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
-                    placeholder="Name: +bonus to hit, damage…"
+                    placeholder="Name: +bonus to hit…"
+                    @keyup.enter="saveAtkEdit(atk.idx)"
+                    @keyup.escape="editingAtkIdx = null"
+                  />
+                  <input
+                    v-model="editAtkDraft.damageDie"
+                    class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+                    placeholder="Damage die, e.g. 1d8+2 (optional)"
                     @keyup.enter="saveAtkEdit(atk.idx)"
                     @keyup.escape="editingAtkIdx = null"
                   />
@@ -169,11 +185,55 @@
               :style="{ width: `${Math.min(100, slotRatio * 100)}%` }"
             />
           </div>
+          <button
+            v-if="canEdit"
+            class="mt-2 w-full py-1.5 text-xs rounded bg-stone-700 hover:bg-stone-600 text-stone-300 hover:text-stone-100 transition-colors"
+            @click="showAddGear = !showAddGear"
+          >+ Add Gear</button>
+        </div>
+
+        <div v-if="showAddGear && canEdit" class="bg-stone-800 rounded p-2 space-y-1.5">
+          <input
+            v-model="newGearDraft.name"
+            class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+            placeholder="Item name"
+            @keyup.enter="submitAddGear"
+          />
+          <div class="flex gap-2">
+            <label class="flex-1 flex flex-col gap-0.5">
+              <span class="text-stone-500 text-xs">Slots</span>
+              <input v-model.number="newGearDraft.slots" type="number" min="0" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400" />
+            </label>
+            <label class="flex-1 flex flex-col gap-0.5">
+              <span class="text-stone-500 text-xs">Qty</span>
+              <input v-model.number="newGearDraft.quantity" type="number" min="1" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400" />
+            </label>
+            <label class="flex-1 flex flex-col gap-0.5">
+              <span class="text-stone-500 text-xs">Type</span>
+              <select v-model="newGearDraft.type" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400">
+                <option value="weapon">Weapon</option>
+                <option value="armor">Armor</option>
+                <option value="sundry">Sundry</option>
+              </select>
+            </label>
+          </div>
+          <label v-if="newGearDraft.type === 'weapon'" class="flex flex-col gap-0.5">
+            <span class="text-stone-500 text-xs">Damage die</span>
+            <input
+              v-model="newGearDraft.damageDie"
+              class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+              placeholder="e.g. 1d8, 2d6+2 (optional)"
+            />
+          </label>
+          <div class="flex gap-2 justify-end">
+            <button class="text-xs text-parchment-400 hover:text-parchment-200 transition-colors" @click="submitAddGear">Add</button>
+            <button class="text-xs text-stone-500 hover:text-stone-300 transition-colors" @click="showAddGear = false">Cancel</button>
+          </div>
         </div>
 
         <div class="flex flex-col gap-1.5">
           <div
-            v-for="item in char.gear"
+            v-for="item in sortedGear"
             :key="item.instanceId"
             class="bg-stone-800 rounded overflow-hidden transition-opacity"
             :class="item.disabled ? 'opacity-40' : ''"
@@ -320,7 +380,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useCharacterStore, statMod, parseAttack } from '@/stores/characterStore.js'
+import { useCharacterStore, statMod, parseAttack, parseDamageDie } from '@/stores/characterStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 
 const characterStore = useCharacterStore()
@@ -358,9 +418,10 @@ const stats = computed(() => {
 const parsedAttacks = computed(() => {
   if (!char.value?.attacks) return []
   return char.value.attacks.map((a, idx) => {
-    const raw = typeof a === 'string' ? a : (a.raw ?? '')
+    const raw      = typeof a === 'string' ? a : (a.raw ?? '')
     const disabled = typeof a === 'object' ? (a.disabled ?? false) : false
-    return { ...parseAttack(raw), idx, disabled }
+    const damageDie = typeof a === 'object' ? (a.damageDie ?? null) : null
+    return { ...parseAttack(raw), idx, disabled, damageDie }
   })
 })
 
@@ -371,22 +432,44 @@ const effectiveGearSlotsUsed = computed(() => {
     .reduce((sum, item) => sum + (item.slots ?? 0) * (item.quantity ?? 1), 0)
 })
 
+const GEAR_TYPE_ORDER = { weapon: 0, armor: 1, sundry: 2 }
+
+const sortedGear = computed(() => {
+  if (!char.value?.gear) return []
+  return [...char.value.gear].sort((a, b) =>
+    (GEAR_TYPE_ORDER[a.type] ?? 2) - (GEAR_TYPE_ORDER[b.type] ?? 2)
+  )
+})
+
 const slotRatio = computed(() => {
   if (!char.value) return 0
   return effectiveGearSlotsUsed.value / (char.value.gearSlotsTotal || 1)
 })
 
 const editingAtkIdx = ref(null)
-const editAtkDraft = ref('')
+const editAtkDraft  = ref({ raw: '', damageDie: '' })
 
 function startAtkEdit(atk) {
   editingAtkIdx.value = atk.idx
-  editAtkDraft.value = atk.raw
+  editAtkDraft.value  = { raw: atk.raw, damageDie: atk.damageDie ?? '' }
 }
 
 function saveAtkEdit(idx) {
-  characterStore.updateAttack(idx, { raw: editAtkDraft.value.trim() })
+  characterStore.updateAttack(idx, {
+    raw:      editAtkDraft.value.raw.trim(),
+    damageDie: editAtkDraft.value.damageDie.trim() || null,
+  })
   editingAtkIdx.value = null
+}
+
+const showAddGear  = ref(false)
+const newGearDraft = ref({ name: '', slots: 1, quantity: 1, type: 'sundry', damageDie: '' })
+
+function submitAddGear() {
+  if (!newGearDraft.value.name.trim()) return
+  characterStore.addGearItem(newGearDraft.value)
+  newGearDraft.value = { name: '', slots: 1, quantity: 1, type: 'sundry', damageDie: '' }
+  showAddGear.value = false
 }
 
 const editingGearId = ref(null)
@@ -414,5 +497,16 @@ function rollStat(stat) {
 
 function rollAttack(atk) {
   diceStore.rollDice({ d20: 1 }, atk.bonus, atk.label, characterStore.activeId)
+}
+
+function rollDamage(atk) {
+  const parsed = parseDamageDie(atk.damageDie)
+  if (!parsed) return
+  diceStore.rollDice(
+    { [`d${parsed.sides}`]: parsed.count },
+    parsed.modifier,
+    `${atk.label} damage`,
+    characterStore.activeId,
+  )
 }
 </script>
