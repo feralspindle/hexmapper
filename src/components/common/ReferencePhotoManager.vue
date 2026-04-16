@@ -1,7 +1,6 @@
 <template>
   <div class="flex flex-col h-full overflow-hidden">
 
-    <!-- Upload -->
     <div class="shrink-0 p-3 border-b border-stone-700 flex flex-col gap-2">
       <label
         class="block w-full py-2 px-3 rounded text-xs text-center transition-colors cursor-pointer"
@@ -21,14 +20,13 @@
       <p v-if="uploadError" class="text-xs text-red-400">{{ uploadError }}</p>
     </div>
 
-    <!-- Name input shown after file is picked -->
     <div v-if="pendingFile" class="shrink-0 p-3 border-b border-stone-700 flex flex-col gap-2 bg-stone-800">
       <div class="text-xs text-stone-400">Photo name</div>
       <input
         v-model="pendingName"
         type="text"
         class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400"
-        placeholder="e.g. Ancient Ring, Throne Room…"
+        placeholder="e.g. Ancient Ring"
         @keyup.enter="confirmUpload"
       />
       <div class="flex gap-2">
@@ -47,10 +45,9 @@
       </div>
     </div>
 
-    <!-- Photo grid -->
     <div class="flex-1 overflow-y-auto p-2">
       <div v-if="photoStore.loading" class="flex items-center justify-center h-24 text-stone-500 text-xs">
-        Loading…
+        Loading...
       </div>
 
       <div
@@ -73,7 +70,6 @@
             class="w-full h-24 object-cover block"
           />
 
-          <!-- Hover overlay -->
           <div class="absolute inset-0 flex flex-col items-center justify-center gap-1.5
                       bg-black/0 opacity-0 group-hover:bg-black/60 group-hover:opacity-100
                       transition-all">
@@ -91,7 +87,6 @@
             </button>
           </div>
 
-          <!-- Name label -->
           <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pt-4 pb-1">
             <span class="text-xs text-stone-300 truncate block">{{ photo.name }}</span>
           </div>
@@ -105,8 +100,10 @@
 <script setup>
 import { ref } from 'vue'
 import { usePhotoStore } from '@/stores/photoStore.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 
-const photoStore  = usePhotoStore()
+const photoStore        = usePhotoStore()
+const { confirm: dlg }  = useConfirmDialog()
 const uploadError = ref('')
 const pendingFile = ref(null)
 const pendingName = ref('')
@@ -138,13 +135,15 @@ function cancelUpload() {
   uploadError.value = ''
 }
 
-async function broadcast(photo) {
-  if (!confirm(`Reveal "${photo.name}" to all players?`)) return
-  await photoStore.broadcastPhoto(photo)
+function broadcast(photo) {
+  dlg(
+    `Reveal "${photo.name}" to all players?`,
+    () => photoStore.broadcastPhoto(photo),
+    { confirmLabel: 'Reveal', confirmIcon: 'fa-solid fa-tower-broadcast fa-xs', confirmClass: 'border-parchment-600 text-parchment-200 bg-parchment-800 hover:bg-parchment-700' },
+  )
 }
 
-async function remove(photo) {
-  if (!confirm(`Delete "${photo.name}"? This cannot be undone.`)) return
-  await photoStore.deletePhoto(photo)
+function remove(photo) {
+  dlg(`Delete "${photo.name}"? This cannot be undone.`, () => photoStore.deletePhoto(photo))
 }
 </script>

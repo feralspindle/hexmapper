@@ -15,10 +15,11 @@
             Cancel
           </button>
           <button
-            class="px-4 py-1.5 border border-red-900 text-sm text-red-300 bg-red-950 hover:bg-red-900 transition-colors font-display tracking-wide"
+            class="px-4 py-1.5 border text-sm transition-colors font-display tracking-wide"
+            :class="state.confirmClass"
             @click="accept"
           >
-            <i class="fa-solid fa-trash fa-xs mr-1" />Delete
+            <i v-if="state.confirmIcon" :class="[state.confirmIcon, 'mr-1']" />{{ state.confirmLabel }}
           </button>
         </div>
       </div>

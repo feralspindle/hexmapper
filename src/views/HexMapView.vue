@@ -174,6 +174,7 @@
 
     <NewMapModal v-if="mapStore.newMapModalOpen" />
     <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
+    <ConfirmDialog />
   </div>
 </template>
 
@@ -192,6 +193,7 @@ import HexGrid from '@/components/hex/HexGrid.vue'
 import HexControls from '@/components/hex/HexControls.vue'
 import MapImageSettings from '@/components/hex/MapImageSettings.vue'
 import NewMapModal from '@/components/hex/NewMapModal.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DiceRollToast from '@/components/dungeon/DiceRollToast.vue'
 import ChatToast from '@/components/common/ChatToast.vue'
 import JoinToast from '@/components/common/JoinToast.vue'
