@@ -96,6 +96,14 @@
 
           <button
             class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-xs text-stone-400 hover:text-stone-200"
+            @click="newCharOpen = true; open = false"
+          >
+            <i class="fa-solid fa-user-plus text-xs" />
+            New trashbag
+          </button>
+
+          <button
+            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-xs text-stone-400 hover:text-stone-200"
             @click="importMode = true"
           >
             <i class="fa-solid fa-file-import text-xs" />
@@ -142,18 +150,22 @@
       </div>
     </Transition>
   </div>
+
+  <NewCharacterModal v-if="newCharOpen" @close="newCharOpen = false" />
 </template>
 
 <script setup>
 import { ref, watch, nextTick, onUnmounted } from 'vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import NewCharacterModal from './NewCharacterModal.vue'
 
 const characterStore = useCharacterStore()
 const sessionStore = useSessionStore()
 
 const open = ref(false)
 const importMode = ref(false)
+const newCharOpen = ref(false)
 const pasteText = ref('')
 const importError = ref('')
 const wrapperEl = ref(null)
