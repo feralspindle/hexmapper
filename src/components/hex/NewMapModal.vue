@@ -64,13 +64,13 @@
           <div
             :class="[
               'w-8 h-5 rounded-full relative transition-colors shrink-0',
-              setActive ? 'bg-parchment-500' : 'bg-stone-700',
+              (setActive || isFirst) ? 'bg-parchment-500' : 'bg-stone-700',
             ]"
           >
             <div
               :class="[
                 'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
-                setActive ? 'translate-x-3.5' : 'translate-x-0.5',
+                (setActive || isFirst) ? 'translate-x-3.5' : 'translate-x-0.5',
               ]"
             />
           </div>

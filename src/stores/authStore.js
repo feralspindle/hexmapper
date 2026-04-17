@@ -50,8 +50,11 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data.session?.user ?? null
     loading.value = false
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       user.value = session?.user ?? null
+      if (event === 'SIGNED_OUT') {
+        router.push({ name: 'home' })
+      }
     })
   }
 

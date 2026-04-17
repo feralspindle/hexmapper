@@ -6,13 +6,13 @@
       :title="`${m.label} marker`"
       :class="[
         'w-6 h-6 rounded-full border-2 transition-transform hover:scale-110',
-        activeMarker === m.id ? 'border-parchment-300 scale-110 ring-1 ring-parchment-400/50' : 'border-transparent',
+        displayMarker === m.id ? 'border-parchment-300 scale-110 ring-1 ring-parchment-400/50' : 'border-transparent',
       ]"
       :style="{ backgroundColor: m.color }"
       @click="selectMarker(m.id)"
     />
     <button
-      v-if="activeMarker"
+      v-if="displayMarker"
       title="Exit marker mode"
       class="w-6 h-6 rounded-full border-2 border-stone-500 bg-stone-800 text-stone-400 flex items-center justify-center text-sm hover:border-stone-300 hover:text-stone-200 transition-all"
       @click="selectMarker(null)"
@@ -56,7 +56,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useHexStore, MARKER_COLORS } from '@/stores/hexStore.js'
 
 const props = defineProps({
@@ -68,6 +68,16 @@ const emit = defineEmits(['update:fogMode', 'update:markerColor'])
 
 const hexStore = useHexStore()
 const activeMarker = ref(null)
+
+// Marker already on the currently-selected hex (may differ from activeMarker).
+const selectedHexMarker = computed(() => {
+  const hex = hexStore.selectedHex
+  if (!hex) return null
+  return hexStore.hexCells.get(`${hex.q}:${hex.r}`)?.marker_color ?? null
+})
+
+// Whichever is truthy takes precedence for highlight / X-button visibility.
+const displayMarker = computed(() => activeMarker.value ?? selectedHexMarker.value)
 
 function selectMarker(id) {
   if (props.fogMode) emit('update:fogMode', false)

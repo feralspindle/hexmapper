@@ -304,8 +304,18 @@ function onHexClick(q, r) {
     hexStore.selectHex(q, r)
   } else {
     hexStore.selectHex(q, r)
+    // Sync the bottom bar to the hex's existing marker so the X button can clear it.
+    const cell = hexStore.hexCells.get(`${q}:${r}`)
+    activeMarkerColor.value = cell?.marker_color ?? null
   }
 }
+
+watch(activeMarkerColor, (color) => {
+  if (hexStore.selectedHex) {
+    const { q, r } = hexStore.selectedHex
+    hexStore.upsertHex(q, r, { marker_color: color ?? null })
+  }
+})
 
 function onHexContext(q, r) {
   hexStore.selectHex(q, r)

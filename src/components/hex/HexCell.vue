@@ -26,10 +26,10 @@
       <text
         v-if="cell?.marker_label"
         text-anchor="middle"
-        :y="-markerY + markerR + 8"
-        :font-size="7 * (size / 48)"
-        fill="#333"
-        style="text-shadow: 0 1px 2px rgba(0,0,0,0.75); font-family: 'Crimson Text', serif;"
+        :y="-markerY + markerR + 11"
+        :font-size="11 * (size / 48)"
+        fill="#f5f0e8"
+        style="text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.8); font-family: 'Crimson Text', serif; font-weight: 600;"
       >{{ cell.marker_label.slice(0, 14) }}</text>
     </g>
 
