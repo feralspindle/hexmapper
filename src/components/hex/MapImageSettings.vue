@@ -34,7 +34,7 @@
           <i class="fa-solid fa-upload mr-1.5" />{{ mapStore.gmMap?.map_image_path ? 'Replace image' : 'Upload map image' }}
           <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="handleUpload" />
         </label>
-        <p class="text-sm text-stone-600 mt-1">JPEG, PNG, or WebP · max 10 MB</p>
+        <p class="text-sm text-stone-600 mt-1">JPEG, PNG, or WebP I guess if youre a fucking psychopath · max 50 MB</p>
         <p v-if="uploadError" class="text-sm text-red-400 mt-1">{{ uploadError }}</p>
         <div v-if="uploading" class="flex items-center gap-2 text-sm text-stone-400 mt-1">
           <i class="fa-solid fa-spinner fa-spin" />Uploading…
