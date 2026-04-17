@@ -93,8 +93,13 @@ export const useAuthStore = defineStore('auth', () => {
     router.push({ name: 'home' })
   }
 
+  async function markWelcomeSeen() {
+    const { data } = await supabase.auth.updateUser({ data: { welcome_seen: true } })
+    if (data.user) user.value = data.user
+  }
+
   return {
     user, loading, isAuthenticated, displayName, avatarUrl, provider,
-    init, signInWithDiscord, signInWithEmail, signUpWithEmail, signOut,
+    init, signInWithDiscord, signInWithEmail, signUpWithEmail, signOut, markWelcomeSeen,
   }
 })

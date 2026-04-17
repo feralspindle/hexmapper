@@ -174,6 +174,7 @@
 
     <NewMapModal v-if="mapStore.newMapModalOpen" />
     <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
+    <WelcomeModal v-if="showWelcome" @close="showWelcome = false" />
     <ConfirmDialog />
   </div>
 </template>
@@ -181,6 +182,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useMapStore } from '@/stores/mapStore.js'
 import { useHexStore } from '@/stores/hexStore.js'
@@ -199,6 +201,7 @@ import ChatToast from '@/components/common/ChatToast.vue'
 import JoinToast from '@/components/common/JoinToast.vue'
 import RightSidebar from '@/components/common/RightSidebar.vue'
 import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
+import WelcomeModal from '@/components/common/WelcomeModal.vue'
 
 const hexGridEl         = ref(null)
 const charOpen          = ref(false)
@@ -207,10 +210,12 @@ const activeMarkerColor = ref(null)
 const showMapSettings   = ref(false)
 const initialized       = ref(false)
 const moveMode          = ref('none')
+const showWelcome       = ref(false)
 
 const route = useRoute()
 const sessionId = route.params.sessionId
 
+const authStore      = useAuthStore()
 const sessionStore   = useSessionStore()
 const mapStore       = useMapStore()
 const hexStore       = useHexStore()
@@ -286,6 +291,8 @@ onMounted(async () => {
   characterStore.loadAll(sessionId)
   sessionStore.initPresence(sessionId)
   photoStore.init(sessionId)
+
+  if (!authStore.user?.user_metadata?.welcome_seen) showWelcome.value = true
 })
 
 onUnmounted(() => {
