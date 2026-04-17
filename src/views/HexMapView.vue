@@ -12,8 +12,8 @@
         v-if="sessionStore.isGM && mapStore.gmMapId === sessionStore.activeMapId"
         class="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 bg-stone-900/90 border border-red-700/60 rounded-full px-3 py-1 backdrop-blur"
       >
-        <i class="fa-solid fa-tower-broadcast text-red-500 text-xs animate-pulse" />
-        <span class="text-xs font-semibold text-red-400 tracking-widest uppercase">Live</span>
+        <i class="fa-solid fa-tower-broadcast text-red-500 text-sm animate-pulse" />
+        <span class="text-sm font-semibold text-red-400 tracking-widest uppercase">Live</span>
       </div>
 
       <div class="absolute left-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-1 bg-stone-900/90 border border-stone-600 rounded-lg p-1.5 backdrop-blur">
@@ -24,7 +24,7 @@
         >+</button>
         <button
           title="Reset zoom"
-          class="w-8 h-8 flex items-center justify-center text-stone-400 hover:text-parchment-200 hover:bg-stone-700 rounded transition-colors text-xs font-mono"
+          class="w-8 h-8 flex items-center justify-center text-stone-400 hover:text-parchment-200 hover:bg-stone-700 rounded transition-colors text-sm font-mono"
           @click="hexGridEl?.resetZoom()"
         >1:1</button>
         <button
@@ -58,7 +58,7 @@
             ]"
             @click="showMapSettings = !showMapSettings"
           >
-            <i class="fa-solid fa-map text-xs" />
+            <i class="fa-solid fa-map text-sm" />
           </button>
         </template>
 
@@ -69,7 +69,7 @@
             class="w-8 h-8 flex items-center justify-center rounded transition-colors text-sm bg-red-900/60 text-red-400 hover:bg-red-800/80 hover:text-red-200"
             @click="goLive"
           >
-            <i class="fa-solid fa-tower-broadcast text-xs" />
+            <i class="fa-solid fa-tower-broadcast text-sm" />
           </button>
         </template>
 
@@ -80,7 +80,7 @@
             class="w-8 h-8 flex items-center justify-center rounded transition-colors text-sm bg-amber-900/60 text-amber-400 hover:bg-amber-800/80 hover:text-amber-200"
             @click="pushLive"
           >
-            <i class="fa-solid fa-upload text-xs" />
+            <i class="fa-solid fa-upload text-sm" />
           </button>
         </template>
 
@@ -96,7 +96,7 @@
             ]"
             @click="mapStore.gmMode = 'edit'"
           >
-            <i class="fa-solid fa-pencil text-xs" />
+            <i class="fa-solid fa-pencil text-sm" />
           </button>
           <button
             title="Live mode — see what players see"
@@ -112,7 +112,7 @@
               v-if="mapStore.gmMode === 'live'"
               class="w-1.5 h-1.5 rounded-full bg-green-300 animate-pulse"
             />
-            <i v-else class="fa-solid fa-eye text-xs" />
+            <i v-else class="fa-solid fa-eye text-sm" />
           </button>
         </template>
       </div>

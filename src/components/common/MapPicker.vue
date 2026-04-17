@@ -1,14 +1,14 @@
 <template>
   <div class="relative" ref="wrapperEl">
     <button
-      class="flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors max-w-40"
+      class="flex items-center gap-1.5 text-sm px-2 py-1 rounded transition-colors max-w-40"
       :class="open
         ? 'text-stone-900 bg-parchment-400'
         : 'text-parchment-400 hover:text-parchment-200 hover:bg-stone-800'"
       @click="open = !open"
     >
-      <i class="fa-solid fa-map text-xs shrink-0" />
-      <i class="fa-solid fa-chevron-down text-xs shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" />
+      <i class="fa-solid fa-map text-sm shrink-0" />
+      <i class="fa-solid fa-chevron-down text-sm shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" />
       <span class="truncate">{{ mapStore.gmMap?.name ?? 'Maps' }}</span>
     </button>
 
@@ -25,7 +25,7 @@
         class="absolute top-full right-0 mt-1.5 w-60 bg-stone-800 border border-stone-600 rounded-lg shadow-2xl z-50 overflow-hidden"
         @click.stop
       >
-        <div v-if="mapStore.loading" class="px-3 py-3 text-xs text-stone-500">Loading…</div>
+        <div v-if="mapStore.loading" class="px-3 py-3 text-sm text-stone-500">Loading…</div>
 
         <template v-else>
           <button
@@ -46,13 +46,13 @@
               v-if="renamingId === map.id"
               ref="renameInputEl"
               v-model="renameDraft"
-              class="flex-1 bg-stone-600 border border-parchment-500 rounded px-1.5 py-0.5 text-xs text-stone-100 focus:outline-none"
+              class="flex-1 bg-stone-600 border border-parchment-500 rounded px-1.5 py-0.5 text-sm text-stone-100 focus:outline-none"
               @keydown.enter="commitRename(map.id)"
               @keydown.escape="renamingId = null"
               @blur="commitRename(map.id)"
               @click.stop
             />
-            <span v-else class="flex-1 text-xs text-stone-200 truncate">{{ map.name }}</span>
+            <span v-else class="flex-1 text-sm text-stone-200 truncate">{{ map.name }}</span>
 
             <span
               v-if="map.id === mapStore.gmMapId && map.id !== sessionStore.activeMapId"
@@ -81,10 +81,10 @@
           <div class="border-t border-stone-700" />
 
           <button
-            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-xs text-stone-400 hover:text-stone-200"
+            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-sm text-stone-400 hover:text-stone-200"
             @click="openNewMapModal"
           >
-            <i class="fa-solid fa-plus text-xs" />
+            <i class="fa-solid fa-plus text-sm" />
             New map
           </button>
         </template>
@@ -97,9 +97,11 @@
 import { ref, watch, nextTick, onUnmounted } from 'vue'
 import { useMapStore } from '@/stores/mapStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 
 const mapStore     = useMapStore()
 const sessionStore = useSessionStore()
+const { confirm }  = useConfirmDialog()
 
 const open          = ref(false)
 const renamingId    = ref(null)
@@ -139,14 +141,18 @@ function openNewMapModal() {
   mapStore.newMapModalOpen = true
 }
 
-async function confirmDelete(map) {
-  if (!confirm(`Delete "${map.name}"? All hex data on this map will be permanently erased.`)) return
-  const remaining = mapStore.maps.filter(m => m.id !== map.id)
-  if (map.id === sessionStore.activeMapId && remaining.length) {
-    await mapStore.setActiveMap(remaining[0].id)
-  } else if (map.id === mapStore.gmMapId && remaining.length) {
-    mapStore.selectGmMap(remaining[0].id)
-  }
-  await mapStore.deleteMap(map.id)
+function confirmDelete(map) {
+  confirm(
+    `Delete "${map.name}"? All hex data on this map will be permanently erased.`,
+    async () => {
+      const remaining = mapStore.maps.filter(m => m.id !== map.id)
+      if (map.id === sessionStore.activeMapId && remaining.length) {
+        await mapStore.setActiveMap(remaining[0].id)
+      } else if (map.id === mapStore.gmMapId && remaining.length) {
+        mapStore.selectGmMap(remaining[0].id)
+      }
+      await mapStore.deleteMap(map.id)
+    },
+  )
 }
 </script>

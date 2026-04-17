@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-stone-900/90 border border-stone-700 rounded-lg p-3 text-xs font-body">
+  <div class="bg-stone-900/90 border border-stone-700 rounded-lg p-3 text-sm font-body">
     <p class="text-stone-400 mb-2 font-display text-xs uppercase tracking-wider">Terrain</p>
     <div class="grid grid-cols-2 gap-x-4 gap-y-1">
       <div v-for="t in TERRAIN_TYPES" :key="t.id" class="flex items-center gap-1.5">

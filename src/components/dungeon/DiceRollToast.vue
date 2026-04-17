@@ -14,15 +14,15 @@
         </div>
 
         <div class="min-w-0 flex-1">
-          <div v-if="toast.roll.label" class="text-parchment-400/80 text-xs uppercase tracking-wider mb-0.5" style="font-family: 'Crimson Text', serif">
+          <div v-if="toast.roll.label" class="text-parchment-400/80 text-sm uppercase tracking-wider mb-0.5" style="font-family: 'Crimson Text', serif">
             {{ toast.roll.label }}
           </div>
 
           <div class="flex items-baseline gap-1.5">
             <span class="font-mono font-bold leading-none text-2xl text-parchment-200">{{ toast.roll.total }}</span>
             <span class="text-stone-300 text-sm font-mono">{{ rollLabel(toast.roll) }}</span>
-            <span v-if="isCrit(toast.roll)" class="text-amber-300 text-xs font-bold ml-auto">CRIT!</span>
-            <span v-else-if="isFumble(toast.roll)" class="text-red-400 text-xs font-bold ml-auto">FAIL</span>
+            <span v-if="isCrit(toast.roll)" class="text-amber-300 text-sm font-bold ml-auto">CRIT!</span>
+            <span v-else-if="isFumble(toast.roll)" class="text-red-400 text-sm font-bold ml-auto">FAIL</span>
           </div>
 
           <div v-if="toast.roll.results?.length" class="text-stone-300 text-sm mt-0.5 font-mono leading-snug">

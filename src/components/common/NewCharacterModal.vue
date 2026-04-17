@@ -16,103 +16,103 @@
 
           <!-- Identity -->
           <div class="flex flex-col gap-3">
-            <div class="text-xs text-stone-500 uppercase tracking-wider">Identity</div>
+            <div class="text-sm text-stone-500 uppercase tracking-wider">Identity</div>
 
             <div class="flex gap-3">
               <label class="flex-[2] flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Name <span class="text-red-500">*</span></span>
+                <span class="text-sm text-stone-400">Name <span class="text-red-500">*</span></span>
                 <input
                   ref="nameInputEl"
                   v-model="form.name"
                   type="text"
                   placeholder="Aldric Thornwood"
-                  class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600"
+                  class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600"
                 />
               </label>
               <label class="flex-1 flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Level</span>
+                <span class="text-sm text-stone-400">Level</span>
                 <input
                   v-model.number="form.level"
                   type="number" min="1" max="20"
-                  class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400"
+                  class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400"
                 />
               </label>
             </div>
 
             <div class="flex gap-3">
               <label class="flex-1 flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Ancestry</span>
-                <input v-model="form.ancestry" type="text" placeholder="Human" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
+                <span class="text-sm text-stone-400">Ancestry</span>
+                <input v-model="form.ancestry" type="text" placeholder="Human" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
               </label>
               <label class="flex-1 flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Class</span>
-                <input v-model="form.class" type="text" placeholder="Fighter" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
+                <span class="text-sm text-stone-400">Class</span>
+                <input v-model="form.class" type="text" placeholder="Fighter" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
               </label>
             </div>
 
             <label class="flex flex-col gap-1">
-              <span class="text-xs text-stone-400">Title</span>
-              <input v-model="form.title" type="text" placeholder="The Brave" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
+              <span class="text-sm text-stone-400">Title</span>
+              <input v-model="form.title" type="text" placeholder="The Brave" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
             </label>
 
             <div class="flex gap-3">
               <label class="flex-1 flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Alignment</span>
-                <input v-model="form.alignment" type="text" placeholder="Neutral" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
+                <span class="text-sm text-stone-400">Alignment</span>
+                <input v-model="form.alignment" type="text" placeholder="Neutral" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
               </label>
               <label class="flex-1 flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Background</span>
-                <input v-model="form.background" type="text" placeholder="Soldier" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
+                <span class="text-sm text-stone-400">Background</span>
+                <input v-model="form.background" type="text" placeholder="Soldier" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
               </label>
             </div>
 
             <div class="flex gap-3">
               <label class="flex-1 flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Deity</span>
-                <input v-model="form.deity" type="text" placeholder="—" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
+                <span class="text-sm text-stone-400">Deity</span>
+                <input v-model="form.deity" type="text" placeholder="—" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
               </label>
               <label class="flex-1 flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Languages</span>
-                <input v-model="form.languages" type="text" placeholder="Common" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
+                <span class="text-sm text-stone-400">Languages</span>
+                <input v-model="form.languages" type="text" placeholder="Common" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600" />
               </label>
             </div>
           </div>
 
           <!-- Combat Stats -->
           <div class="flex flex-col gap-3">
-            <div class="text-xs text-stone-500 uppercase tracking-wider">Combat Stats</div>
+            <div class="text-sm text-stone-500 uppercase tracking-wider">Combat Stats</div>
             <div class="grid grid-cols-4 gap-3">
               <label class="flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Max HP</span>
-                <input v-model.number="form.maxHitPoints" type="number" min="1" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
+                <span class="text-sm text-stone-400">Max HP</span>
+                <input v-model.number="form.maxHitPoints" type="number" min="1" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-xs text-stone-400">AC</span>
-                <input v-model.number="form.armorClass" type="number" min="0" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
+                <span class="text-sm text-stone-400">AC</span>
+                <input v-model.number="form.armorClass" type="number" min="0" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-xs text-stone-400">XP</span>
-                <input v-model.number="form.XP" type="number" min="0" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
+                <span class="text-sm text-stone-400">XP</span>
+                <input v-model.number="form.XP" type="number" min="0" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-xs text-stone-400">Gear Slots</span>
-                <input v-model.number="form.gearSlotsTotal" type="number" min="0" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
+                <span class="text-sm text-stone-400">Gear Slots</span>
+                <input v-model.number="form.gearSlotsTotal" type="number" min="0" class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 text-center" />
               </label>
             </div>
           </div>
 
           <!-- Ability Scores -->
           <div class="flex flex-col gap-3">
-            <div class="text-xs text-stone-500 uppercase tracking-wider">Ability Scores</div>
+            <div class="text-sm text-stone-500 uppercase tracking-wider">Ability Scores</div>
             <div class="grid grid-cols-6 gap-2">
               <label v-for="stat in STATS" :key="stat" class="flex flex-col items-center gap-1">
-                <span class="text-xs text-stone-400">{{ stat }}</span>
+                <span class="text-sm text-stone-400">{{ stat }}</span>
                 <input
                   v-model.number="form.stats[stat]"
                   type="number" min="1" max="20"
-                  class="w-full bg-stone-800 border border-stone-600 rounded px-1 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 text-center"
+                  class="w-full bg-stone-800 border border-stone-600 rounded px-1 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400 text-center"
                 />
-                <span class="text-xs font-mono" :class="statMod(form.stats[stat]) >= 0 ? 'text-green-400' : 'text-red-400'">
+                <span class="text-sm font-mono" :class="statMod(form.stats[stat]) >= 0 ? 'text-green-400' : 'text-red-400'">
                   {{ statMod(form.stats[stat]) >= 0 ? '+' : '' }}{{ statMod(form.stats[stat]) }}
                 </span>
               </label>
@@ -123,12 +123,12 @@
 
         <div class="flex gap-2 px-6 py-4 border-t border-stone-700 shrink-0">
           <button
-            class="flex-1 py-2 text-xs rounded bg-stone-700 hover:bg-stone-600 text-stone-300 transition-colors"
+            class="flex-1 py-2 text-sm rounded bg-stone-700 hover:bg-stone-600 text-stone-300 transition-colors"
             @click="emit('close')"
           >Cancel</button>
           <button
             :disabled="!form.name.trim() || saving"
-            class="flex-1 py-2 text-xs rounded font-semibold transition-colors disabled:opacity-40 disabled:cursor-default"
+            class="flex-1 py-2 text-sm rounded font-semibold transition-colors disabled:opacity-40 disabled:cursor-default"
             :class="form.name.trim() && !saving ? 'bg-parchment-500 hover:bg-parchment-400 text-stone-900' : 'bg-stone-700 text-stone-500'"
             @click="submit"
           >

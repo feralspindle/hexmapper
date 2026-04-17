@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-1 bg-stone-900/90 border border-stone-600 rounded-lg p-1.5 backdrop-blur">
+  <div class="flex flex-col items-center gap-1 bg-stone-900/90 border border-stone-600 rounded-lg p-1.5 backdrop-blur">
     <button
       v-for="tool in tools"
       :key="tool.mode"
@@ -15,7 +15,7 @@
       <i :class="[tool.icon, 'text-sm']" />
     </button>
 
-    <div class="border-t border-stone-700 my-0.5" />
+    <div class="border-t border-stone-700 my-0.5 self-stretch" />
 
 
     <button
@@ -35,7 +35,7 @@
       @click="props.canvas?.resetZoom()"
     >1:1</button>
 
-    <div class="border-t border-stone-700 my-0.5" />
+    <div v-if="dungeonStore.selectedElement" class="border-t border-stone-700 my-0.5 self-stretch" />
 
 
     <button
@@ -48,8 +48,8 @@
     </button>
 
     <div v-if="dungeonStore.selectedElement?.type === 'room'" class="flex flex-col gap-1">
-      <div class="border-t border-stone-700 my-0.5" />
-      <p class="text-stone-400 text-xs text-center uppercase tracking-widest">Fill</p>
+      <div class="border-t border-stone-700 my-0.5 self-stretch" />
+      <p class="text-stone-400 text-sm text-center uppercase tracking-widest">Fill</p>
       <div class="grid grid-cols-2 gap-1">
         <button
           v-for="color in roomColors"

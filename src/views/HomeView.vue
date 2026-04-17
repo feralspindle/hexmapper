@@ -46,7 +46,7 @@
               <div v-if="emailConfirmSent" class="text-center py-2">
                 <p class="text-parchment-200 font-display mb-2">Check your inbox</p>
                 <p class="text-stone-400 text-sm">You should get a confirmation link from Supabase Auth at <span class="text-stone-200">{{ emailField }}</span>. Click it to activate your account</p>
-                <button class="mt-4 text-stone-500 hover:text-stone-300 text-xs underline" @click="emailConfirmSent = false">Back</button>
+                <button class="mt-4 text-stone-500 hover:text-stone-300 text-sm underline" @click="emailConfirmSent = false">Back</button>
               </div>
 
               <template v-else>
@@ -66,7 +66,7 @@
 
                 <form @submit.prevent="handleEmailSubmit" class="space-y-3">
                   <div v-if="emailMode === 'signup'">
-                    <label class="block text-stone-400 text-xs mb-1">Username</label>
+                    <label class="block text-stone-400 text-sm mb-1">Username</label>
                     <input
                       v-model="usernameField"
                       type="text"
@@ -77,7 +77,7 @@
                     />
                   </div>
                   <div>
-                    <label class="block text-stone-400 text-xs mb-1">Email</label>
+                    <label class="block text-stone-400 text-sm mb-1">Email</label>
                     <input
                       v-model="emailField"
                       type="email"
@@ -88,7 +88,7 @@
                     />
                   </div>
                   <div>
-                    <label class="block text-stone-400 text-xs mb-1">Password</label>
+                    <label class="block text-stone-400 text-sm mb-1">Password</label>
                     <input
                       v-model="passwordField"
                       type="password"
@@ -110,7 +110,7 @@
 
             </template>
 
-            <p v-if="authError" class="text-red-400 text-xs mt-3">{{ authError }}</p>
+            <p v-if="authError" class="text-red-400 text-sm mt-3">{{ authError }}</p>
           </div>
         </div>
       </template>
@@ -132,7 +132,7 @@
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-parchment-200 font-display truncate">{{ authStore.displayName }}</p>
-            <p class="text-stone-500 text-xs">{{ authStore.provider === 'discord' ? 'Signed in via Discord' : 'Signed in via email' }}</p>
+            <p class="text-stone-500 text-sm">{{ authStore.provider === 'discord' ? 'Signed in via Discord' : 'Signed in via email' }}</p>
           </div>
           <button
             @click="authStore.signOut()"
@@ -160,7 +160,7 @@
               {{ sessionStore.loading ? 'Creating…' : 'Create' }}
             </button>
           </div>
-          <p v-if="sessionStore.error" class="text-red-400 text-xs mt-2">{{ sessionStore.error }}</p>
+          <p v-if="sessionStore.error" class="text-red-400 text-sm mt-2">{{ sessionStore.error }}</p>
         </div>
 
         <div class="bg-stone-800 border border-stone-600 rounded-lg p-5 mb-6">
@@ -181,7 +181,7 @@
               Join
             </button>
           </div>
-          <p v-if="joinError" class="text-red-400 text-xs mt-2">{{ joinError }}</p>
+          <p v-if="joinError" class="text-red-400 text-sm mt-2">{{ joinError }}</p>
         </div>
 
         <div class="mb-6">
@@ -210,20 +210,20 @@
               >
                 <div class="min-w-0">
                   <p class="text-parchment-200 font-display truncate group-hover:text-parchment-100">{{ s.name }}</p>
-                  <p class="text-stone-500 text-xs mt-0.5">{{ formatDate(s.updated_at) }}</p>
+                  <p class="text-stone-500 text-sm mt-0.5">{{ formatDate(s.updated_at) }}</p>
                 </div>
                 <span class="text-stone-600 group-hover:text-stone-400 text-lg ml-3 shrink-0">›</span>
               </button>
               <RouterLink
                 :to="{ name: 'campaign-notes', params: { sessionId: s.id } }"
-                class="flex items-center gap-1.5 px-3 py-3 border-l border-stone-700 text-stone-500 hover:text-parchment-300 hover:bg-stone-750 transition-colors text-xs shrink-0 self-stretch"
+                class="flex items-center gap-1.5 px-3 py-3 border-l border-stone-700 text-stone-500 hover:text-parchment-300 hover:bg-stone-750 transition-colors text-sm shrink-0 self-stretch"
                 title="View hex notes"
               >
                 <i class="fa-solid fa-scroll" />
                 <span class="hidden sm:inline">Notes</span>
               </RouterLink>
               <button
-                class="flex items-center px-3 py-3 border-l border-stone-700 text-stone-600 hover:text-red-400 hover:bg-stone-750 transition-colors text-xs shrink-0 self-stretch"
+                class="flex items-center px-3 py-3 border-l border-stone-700 text-stone-600 hover:text-red-400 hover:bg-stone-750 transition-colors text-sm shrink-0 self-stretch"
                 title="Delete campaign"
                 @click.stop="deleteSession(s.id)"
               >
@@ -252,13 +252,13 @@
               >
                 <div class="min-w-0">
                   <p class="text-parchment-200 font-display truncate group-hover:text-parchment-100">{{ s.name }}</p>
-                  <p class="text-stone-500 text-xs mt-0.5">{{ formatDate(s.updated_at) }}</p>
+                  <p class="text-stone-500 text-sm mt-0.5">{{ formatDate(s.updated_at) }}</p>
                 </div>
                 <span class="text-stone-600 group-hover:text-stone-400 text-lg ml-3 shrink-0">›</span>
               </button>
               <RouterLink
                 :to="{ name: 'campaign-notes', params: { sessionId: s.id } }"
-                class="flex items-center gap-1.5 px-3 py-3 border-l border-stone-700 text-stone-500 hover:text-parchment-300 hover:bg-stone-750 transition-colors text-xs shrink-0 self-stretch"
+                class="flex items-center gap-1.5 px-3 py-3 border-l border-stone-700 text-stone-500 hover:text-parchment-300 hover:bg-stone-750 transition-colors text-sm shrink-0 self-stretch"
                 title="View hex notes"
               >
                 <i class="fa-solid fa-scroll" />
@@ -278,10 +278,12 @@ import { ref, onMounted } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
 const authStore = useAuthStore()
+const { confirm } = useConfirmDialog()
 
 const newName = ref('Untitled Campaign')
 const joinInput = ref('')
@@ -363,11 +365,13 @@ function openSession(id) {
   router.push({ name: 'hex-map', params: { sessionId: id } })
 }
 
-async function deleteSession(id) {
+function deleteSession(id) {
   const s = sessionStore.userSessions.find(s => s.id === id)
   if (!s) return
-  if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return
-  await sessionStore.deleteSession(id)
+  confirm(
+    `Delete "${s.name}"? This cannot be undone.`,
+    () => sessionStore.deleteSession(id),
+  )
 }
 
 function formatDate(iso) {

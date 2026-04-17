@@ -2,7 +2,7 @@
   <div class="flex flex-col h-full overflow-hidden">
 
     <div class="flex-1 overflow-y-auto p-2">
-      <div v-if="photoStore.loading" class="flex items-center justify-center h-24 text-stone-500 text-xs">
+      <div v-if="photoStore.loading" class="flex items-center justify-center h-24 text-stone-500 text-sm">
         Loading…
       </div>
 
@@ -11,7 +11,7 @@
         class="flex flex-col items-center justify-center h-full gap-2 text-stone-600 px-4 text-center"
       >
         <i class="fa-solid fa-eye-slash text-2xl" />
-        <span class="text-xs">Nothing revealed yet</span>
+        <span class="text-sm">Nothing revealed yet</span>
       </div>
 
       <div v-else class="grid grid-cols-2 gap-2">
@@ -27,7 +27,7 @@
             class="w-full h-24 object-cover block transition-opacity group-hover:opacity-80"
           />
           <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pt-4 pb-1">
-            <span class="text-xs text-stone-300 truncate block">{{ photo.photo_name }}</span>
+            <span class="text-sm text-stone-300 truncate block">{{ photo.photo_name }}</span>
           </div>
         </button>
       </div>

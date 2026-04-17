@@ -3,7 +3,7 @@
 
     <div class="shrink-0 p-3 border-b border-stone-700 flex flex-col gap-2">
       <label
-        class="block w-full py-2 px-3 rounded text-xs text-center transition-colors cursor-pointer"
+        class="block w-full py-2 px-3 rounded text-sm text-center transition-colors cursor-pointer"
         :class="photoStore.uploading
           ? 'bg-stone-700 text-stone-500 pointer-events-none'
           : 'bg-stone-700 hover:bg-stone-600 text-stone-200'"
@@ -17,21 +17,21 @@
           @change="handleUpload"
         />
       </label>
-      <p v-if="uploadError" class="text-xs text-red-400">{{ uploadError }}</p>
+      <p v-if="uploadError" class="text-sm text-red-400">{{ uploadError }}</p>
     </div>
 
     <div v-if="pendingFile" class="shrink-0 p-3 border-b border-stone-700 flex flex-col gap-2 bg-stone-800">
-      <div class="text-xs text-stone-400">Photo name</div>
+      <div class="text-sm text-stone-400">Photo name</div>
       <input
         v-model="pendingName"
         type="text"
-        class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400"
+        class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-100 focus:outline-none focus:border-parchment-400"
         placeholder="e.g. Ancient Ring"
         @keyup.enter="confirmUpload"
       />
       <div class="flex gap-2">
         <button
-          class="flex-1 py-1.5 rounded text-xs bg-parchment-500 hover:bg-parchment-400 text-stone-900 font-semibold transition-colors disabled:opacity-50"
+          class="flex-1 py-1.5 rounded text-sm bg-parchment-500 hover:bg-parchment-400 text-stone-900 font-semibold transition-colors disabled:opacity-50"
           :disabled="photoStore.uploading"
           @click="confirmUpload"
         >
@@ -39,14 +39,14 @@
           {{ photoStore.uploading ? 'Uploading…' : 'Upload' }}
         </button>
         <button
-          class="flex-1 py-1.5 rounded text-xs bg-stone-700 hover:bg-stone-600 text-stone-300 transition-colors"
+          class="flex-1 py-1.5 rounded text-sm bg-stone-700 hover:bg-stone-600 text-stone-300 transition-colors"
           @click="cancelUpload"
         >Cancel</button>
       </div>
     </div>
 
     <div class="flex-1 overflow-y-auto p-2">
-      <div v-if="photoStore.loading" class="flex items-center justify-center h-24 text-stone-500 text-xs">
+      <div v-if="photoStore.loading" class="flex items-center justify-center h-24 text-stone-500 text-sm">
         Loading...
       </div>
 
@@ -55,7 +55,7 @@
         class="flex flex-col items-center justify-center h-24 gap-2 text-stone-600"
       >
         <i class="fa-solid fa-images text-2xl" />
-        <span class="text-xs">No photos yet</span>
+        <span class="text-sm">No photos yet</span>
       </div>
 
       <div v-else class="grid grid-cols-2 gap-2">
@@ -74,13 +74,13 @@
                       bg-black/0 opacity-0 group-hover:bg-black/60 group-hover:opacity-100
                       transition-all">
             <button
-              class="px-2.5 py-1 rounded bg-parchment-500 hover:bg-parchment-400 text-stone-900 text-xs font-semibold transition-colors"
+              class="px-2.5 py-1 rounded bg-parchment-500 hover:bg-parchment-400 text-stone-900 text-sm font-semibold transition-colors"
               @click="broadcast(photo)"
             >
               <i class="fa-solid fa-tower-broadcast mr-1" />Broadcast
             </button>
             <button
-              class="text-stone-400 hover:text-red-400 text-xs transition-colors"
+              class="text-stone-400 hover:text-red-400 text-sm transition-colors"
               @click="remove(photo)"
             >
               <i class="fa-solid fa-trash mr-1" />Delete
@@ -88,7 +88,7 @@
           </div>
 
           <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pt-4 pb-1">
-            <span class="text-xs text-stone-300 truncate block">{{ photo.name }}</span>
+            <span class="text-sm text-stone-300 truncate block">{{ photo.name }}</span>
           </div>
         </div>
       </div>

@@ -184,7 +184,7 @@
                   <span v-else>{{ editor.display_name?.charAt(0)?.toUpperCase() }}</span>
                 </div>
                 <div
-                  class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded text-xs whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded text-sm whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
                   style="background:#1c1917;border:1px solid #44403c;color:#e7e5e4;z-index:50;"
                 >
                   {{ editor.display_name }}
@@ -321,6 +321,19 @@ function findFreeSlot(room, desiredX, desiredY, existingItems, step) {
   const minY = room.origin_y + m
   const maxY = room.origin_y + room.height - m
 
+  // Label sits at the room center. Deprioritize slots whose item bounding box
+  // overlaps the label text. exW covers ~2 item-widths (text can be wide);
+  // exH covers the label line + dimensions line below it (~1.2 item-heights).
+  const labelCx = room.origin_x + room.width  / 2
+  const labelCy = room.origin_y + room.height / 2
+  const exW = step * 2
+  const exH = step * 1.2
+  function overlapsLabel(x, y) {
+    return !!room.label &&
+      Math.abs(x - labelCx) < exW &&
+      Math.abs(y - labelCy) < exH
+  }
+
   const candidates = []
   for (let gy = minY; gy <= maxY + 0.001; gy += step) {
     for (let gx = minX; gx <= maxX + 0.001; gx += step) {
@@ -328,9 +341,12 @@ function findFreeSlot(room, desiredX, desiredY, existingItems, step) {
     }
   }
 
-  candidates.sort((a, b) =>
-    Math.hypot(a.x - desiredX, a.y - desiredY) - Math.hypot(b.x - desiredX, b.y - desiredY)
-  )
+  candidates.sort((a, b) => {
+    const aLabel = overlapsLabel(a.x, a.y) ? 1 : 0
+    const bLabel = overlapsLabel(b.x, b.y) ? 1 : 0
+    if (aLabel !== bLabel) return aLabel - bLabel
+    return Math.hypot(a.x - desiredX, a.y - desiredY) - Math.hypot(b.x - desiredX, b.y - desiredY)
+  })
 
   for (const pos of candidates) {
     if (!existingItems.some(item => Math.hypot(item.x - pos.x, item.y - pos.y) < step * 0.9)) {
@@ -798,7 +814,7 @@ function drawCorridors() {
     const x2 = c.x2 * cs - viewport.value.offsetX
     const y2 = c.y2 * cs - viewport.value.offsetY
     const isSelected = dungeonStore.selectedElement?.id === id
-    const cw = (c.width ?? 1) * cs
+    const cw = (c.width ?? 1) * cs * 2
 
     ctx.lineCap = 'square'
 

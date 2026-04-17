@@ -1,13 +1,13 @@
 <template>
   <div class="relative" ref="wrapperEl">
     <button
-      class="flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors max-w-36"
+      class="flex items-center gap-1.5 text-sm px-2 py-1 rounded transition-colors max-w-36"
       :class="open
         ? 'text-stone-900 bg-parchment-400'
         : 'text-parchment-400 hover:text-parchment-200 hover:bg-stone-800'"
       @click="open = !open"
     >
-      <i class="fa-solid fa-chevron-down text-xs shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" />
+      <i class="fa-solid fa-chevron-down text-sm shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" />
       <span class="truncate">{{ characterStore.character?.name ?? 'Characters' }}</span>
     </button>
 
@@ -27,7 +27,7 @@
 
        
         <template v-if="!importMode">
-          <div v-if="characterStore.loading" class="px-3 py-3 text-xs text-stone-500">
+          <div v-if="characterStore.loading" class="px-3 py-3 text-sm text-stone-500">
             Loading…
           </div>
 
@@ -46,16 +46,16 @@
               @click="selectChar(char.id)"
             >
               <i
-                class="fa-solid fa-check text-parchment-400 text-xs w-3 shrink-0"
+                class="fa-solid fa-check text-parchment-400 text-sm w-3 shrink-0"
                 :class="char.id === characterStore.activeId ? 'opacity-100' : 'opacity-0'"
               />
-              <span class="flex-1 text-xs text-stone-200 truncate">{{ char.data?.name ?? 'Unnamed' }}</span>
+              <span class="flex-1 text-sm text-stone-200 truncate">{{ char.data?.name ?? 'Unnamed' }}</span>
               <button
                 class="opacity-0 group-hover:opacity-100 text-stone-600 hover:text-red-400 transition-colors shrink-0"
                 title="Delete character"
                 @click.stop="confirmDelete(char)"
               >
-                <i class="fa-solid fa-trash text-xs" />
+                <i class="fa-solid fa-trash text-sm" />
               </button>
             </button>
 
@@ -70,23 +70,23 @@
                 @click="selectChar(char.id)"
               >
                 <i
-                  class="fa-solid fa-check text-parchment-400 text-xs w-3 shrink-0"
+                  class="fa-solid fa-check text-parchment-400 text-sm w-3 shrink-0"
                   :class="char.id === characterStore.activeId ? 'opacity-100' : 'opacity-0'"
                 />
-                <i class="fa-solid fa-user text-stone-500 text-xs shrink-0" />
-                <span class="flex-1 text-xs text-stone-300 truncate">{{ char.data?.name ?? 'Unnamed' }}</span>
+                <i class="fa-solid fa-user text-stone-500 text-sm shrink-0" />
+                <span class="flex-1 text-sm text-stone-300 truncate">{{ char.data?.name ?? 'Unnamed' }}</span>
               </button>
             </template>
 
             <template v-if="!sessionStore.isGM">
-              <div v-if="!characterStore.myCharacters.length" class="px-3 py-3 text-xs text-stone-500 italic">
+              <div v-if="!characterStore.myCharacters.length" class="px-3 py-3 text-sm text-stone-500 italic">
                 No characters yet
               </div>
             </template>
 
             <div
               v-if="sessionStore.isGM && !characterStore.characters.length"
-              class="px-3 py-3 text-xs text-stone-500 italic"
+              class="px-3 py-3 text-sm text-stone-500 italic"
             >
               No trashbags in this campaign yet
             </div>
@@ -95,18 +95,18 @@
           <div class="border-t border-stone-700" />
 
           <button
-            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-xs text-stone-400 hover:text-stone-200"
+            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-sm text-stone-400 hover:text-stone-200"
             @click="newCharOpen = true; open = false"
           >
-            <i class="fa-solid fa-user-plus text-xs" />
+            <i class="fa-solid fa-user-plus text-sm" />
             New trashbag
           </button>
 
           <button
-            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-xs text-stone-400 hover:text-stone-200"
+            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-sm text-stone-400 hover:text-stone-200"
             @click="importMode = true"
           >
-            <i class="fa-solid fa-file-import text-xs" />
+            <i class="fa-solid fa-file-import text-sm" />
             Import trashbag
           </button>
         </template>
@@ -118,7 +118,7 @@
                 class="text-stone-500 hover:text-stone-300 transition-colors"
                 @click="importMode = false; importError = ''"
               >
-                <i class="fa-solid fa-arrow-left text-xs" />
+                <i class="fa-solid fa-arrow-left text-sm" />
               </button>
               <span class="text-xs text-stone-400 font-display">Import trashbag</span>
             </div>
@@ -127,19 +127,19 @@
               v-model="pasteText"
               rows="6"
               placeholder="Paste trashbag JSON here"
-              class="w-full text-xs bg-stone-950/40 border border-stone-600 rounded p-2 resize-none focus:outline-none focus:border-parchment-500 font-mono text-stone-300 placeholder-stone-500"
+              class="w-full text-sm bg-stone-950/40 border border-stone-600 rounded p-2 resize-none focus:outline-none focus:border-parchment-500 font-mono text-stone-300 placeholder-stone-500"
             />
 
-            <p v-if="importError" class="text-red-400 text-xs mt-1.5">{{ importError }}</p>
+            <p v-if="importError" class="text-red-400 text-sm mt-1.5">{{ importError }}</p>
 
             <div class="flex gap-2 mt-2">
               <button
-                class="flex-1 py-1.5 rounded text-xs bg-stone-600 hover:bg-stone-500 transition-colors text-stone-200"
+                class="flex-1 py-1.5 rounded text-sm bg-stone-600 hover:bg-stone-500 transition-colors text-stone-200"
                 @click="handlePaste"
               >
                 Import JSON
               </button>
-              <label class="flex-1 py-1.5 rounded text-xs bg-stone-600 hover:bg-stone-500 transition-colors text-center cursor-pointer text-stone-200">
+              <label class="flex-1 py-1.5 rounded text-sm bg-stone-600 hover:bg-stone-500 transition-colors text-center cursor-pointer text-stone-200">
                 Upload file
                 <input type="file" accept=".json,application/json" class="hidden" @change="handleFile" />
               </label>
@@ -158,10 +158,12 @@
 import { ref, watch, nextTick, onUnmounted } from 'vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import NewCharacterModal from './NewCharacterModal.vue'
 
 const characterStore = useCharacterStore()
 const sessionStore = useSessionStore()
+const { confirm } = useConfirmDialog()
 
 const open = ref(false)
 const importMode = ref(false)
@@ -184,9 +186,11 @@ function selectChar(id) {
   open.value = false
 }
 
-async function confirmDelete(char) {
-  if (!confirm(`Delete "${char.data?.name ?? 'this character'}"? This cannot be undone.`)) return
-  await characterStore.deleteCharacter(char.id)
+function confirmDelete(char) {
+  confirm(
+    `Delete "${char.data?.name ?? 'this character'}"? This cannot be undone.`,
+    () => characterStore.deleteCharacter(char.id),
+  )
 }
 
 function parseJson(text) {

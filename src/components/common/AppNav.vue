@@ -43,7 +43,7 @@
           class="w-6 h-6 rounded-full border-2 border-stone-600 flex items-center justify-center text-white text-xs font-display transition-transform group-hover:scale-110"
           :class="viewerColor(viewer.user_id ?? viewer._clientId)"
         >{{ viewer.display_name?.charAt(0)?.toUpperCase() }}</div>
-        <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 bg-stone-900 border border-stone-700 rounded text-xs text-stone-200 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+        <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 bg-stone-900 border border-stone-700 rounded text-sm text-stone-200 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
           {{ viewer.display_name }}
         </div>
       </div>
@@ -54,7 +54,7 @@
       <CharacterPicker />
 
       <button
-        class="flex items-center gap-1.5 text-xs transition-colors px-2 py-1 rounded"
+        class="flex items-center gap-1.5 text-sm transition-colors px-2 py-1 rounded"
         :class="charOpen
           ? 'text-stone-900 bg-parchment-400'
           : 'text-parchment-400 hover:text-parchment-200 hover:bg-stone-800'"
@@ -66,7 +66,7 @@
       </button>
 
       <button
-        class="flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors"
+        class="flex items-center gap-1.5 text-sm px-2 py-1 rounded transition-colors"
         :class="showLegend
           ? 'text-stone-900 bg-parchment-400'
           : 'text-parchment-400 hover:text-parchment-200 hover:bg-stone-800'"
@@ -94,9 +94,9 @@
           >
             {{ authStore.displayName?.charAt(0)?.toUpperCase() }}
           </div>
-          <span class="text-stone-300 text-xs truncate max-w-28">{{ authStore.displayName }}</span>
+          <span class="text-stone-300 text-sm truncate max-w-28">{{ authStore.displayName }}</span>
           <button
-            class="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+            class="text-stone-500 hover:text-stone-300 text-sm transition-colors"
             title="Sign out"
             @click="authStore.signOut()"
           >

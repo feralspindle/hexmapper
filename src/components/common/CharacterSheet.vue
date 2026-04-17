@@ -3,16 +3,16 @@
 
     <template v-if="!characterStore.character">
       <div class="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <i class="fa-solid fa-scroll text-3xl text-stone-600" />
-        <p class="text-sm text-stone-500">No character selected.</p>
-        <p class="text-xs text-stone-600">Use the <i class="fa-solid fa-chevron-down" /> menu next to the Character button to import or select a character.</p>
+        <i class="fa-solid fa-scroll text-3xl text-stone-500" />
+        <p class="text-sm text-stone-400">No character selected.</p>
+        <p class="text-sm text-stone-500">Use the <i class="fa-solid fa-chevron-down" /> menu next to the Character button to import or select a character.</p>
       </div>
     </template>
 
     <template v-else>
       <div
         v-if="!canEdit"
-        class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-stone-800 border-b border-stone-700 text-xs text-stone-500"
+        class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-stone-800 border-b border-stone-700 text-sm text-stone-400"
       >
         <i class="fa-solid fa-eye" />
         Viewing — read only
@@ -20,19 +20,19 @@
 
       <div class="shrink-0 px-3 pt-2 pb-1.5 border-b border-stone-700">
         <div class="font-display text-parchment-200 truncate leading-tight">{{ char.name }}</div>
-        <div class="text-xs text-stone-500 truncate">
+        <div class="text-sm text-stone-400 truncate">
           {{ char.ancestry }} {{ char.class }} · Lvl {{ char.level }} · {{ char.title }}
         </div>
       </div>
 
-      <div class="shrink-0 flex border-b border-stone-700 text-xs">
+      <div class="shrink-0 flex border-b border-stone-700 text-sm">
         <button
           v-for="t in subTabs"
           :key="t.id"
           class="flex-1 py-1.5 font-display uppercase tracking-wider transition-colors"
           :class="subTab === t.id
             ? 'text-parchment-200 border-b-2 border-parchment-400 -mb-px bg-stone-900'
-            : 'text-stone-500 hover:text-stone-300 border-b-2 border-transparent -mb-px'"
+            : 'text-stone-400 hover:text-stone-300 border-b-2 border-transparent -mb-px'"
           @click="subTab = t.id"
         >{{ t.label }}</button>
       </div>
@@ -40,20 +40,20 @@
       <div v-if="subTab === 'stats'" class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         <div class="flex gap-2">
           <div class="flex-1 bg-stone-800 rounded p-2 flex flex-col items-center gap-1">
-            <span class="text-xs text-stone-500 uppercase tracking-wider">HP</span>
+            <span class="text-sm text-stone-400 uppercase tracking-wider">HP</span>
             <div class="flex items-center gap-2">
               <button v-if="canEdit" class="w-6 h-6 rounded bg-stone-700 hover:bg-stone-600 text-sm flex items-center justify-center" @click="characterStore.adjustHp(-1)">−</button>
               <span class="text-xl font-bold text-parchment-200 w-10 text-center">{{ char.currentHp }}</span>
               <button v-if="canEdit" class="w-6 h-6 rounded bg-stone-700 hover:bg-stone-600 text-sm flex items-center justify-center" @click="characterStore.adjustHp(1)">+</button>
             </div>
-            <span class="text-xs text-stone-600">/ {{ char.maxHitPoints }}</span>
+            <span class="text-sm text-stone-500">/ {{ char.maxHitPoints }}</span>
           </div>
           <div class="flex-1 bg-stone-800 rounded p-2 flex flex-col items-center justify-center gap-1">
-            <span class="text-xs text-stone-500 uppercase tracking-wider">AC</span>
+            <span class="text-sm text-stone-400 uppercase tracking-wider">AC</span>
             <span class="text-xl font-bold text-parchment-200">{{ char.armorClass }}</span>
           </div>
           <div class="flex-1 bg-stone-800 rounded p-2 flex flex-col items-center justify-center gap-1">
-            <span class="text-xs text-stone-500 uppercase tracking-wider">XP</span>
+            <span class="text-sm text-stone-400 uppercase tracking-wider">XP</span>
             <span class="text-xl font-bold text-parchment-200">{{ char.XP ?? 0 }}</span>
           </div>
         </div>
@@ -67,24 +67,24 @@
             :disabled="!canEdit"
             @click="rollStat(stat)"
           >
-            <span class="text-xs text-stone-500 uppercase tracking-wider group-hover:text-stone-400">{{ stat.key }}</span>
+            <span class="text-sm text-stone-400 uppercase tracking-wider group-hover:text-stone-300">{{ stat.key }}</span>
             <span class="text-lg font-bold text-parchment-200">{{ stat.value }}</span>
-            <span class="text-xs" :class="stat.mod >= 0 ? 'text-green-400' : 'text-red-400'">
+            <span class="text-sm" :class="stat.mod >= 0 ? 'text-green-400' : 'text-red-400'">
               {{ stat.mod >= 0 ? '+' : '' }}{{ stat.mod }}
             </span>
           </button>
         </div>
 
-        <div class="text-xs text-stone-500 space-y-0.5 bg-stone-800 rounded p-2">
-          <div><span class="text-stone-600">Alignment:</span> {{ char.alignment }}</div>
-          <div><span class="text-stone-600">Background:</span> {{ char.background }}</div>
-          <div v-if="char.deity"><span class="text-stone-600">Deity:</span> {{ char.deity }}</div>
-          <div><span class="text-stone-600">Languages:</span> {{ char.languages }}</div>
+        <div class="text-sm text-stone-400 space-y-0.5 bg-stone-800 rounded p-2">
+          <div><span class="text-stone-500">Alignment:</span> {{ char.alignment }}</div>
+          <div><span class="text-stone-500">Background:</span> {{ char.background }}</div>
+          <div v-if="char.deity"><span class="text-stone-500">Deity:</span> {{ char.deity }}</div>
+          <div><span class="text-stone-500">Languages:</span> {{ char.languages }}</div>
         </div>
       </div>
       <div v-else-if="subTab === 'combat'" class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         <div>
-          <div class="text-xs text-stone-500 uppercase tracking-wider mb-1.5">Attacks</div>
+          <div class="text-sm text-stone-400 uppercase tracking-wider mb-1.5">Attacks</div>
           <div class="flex flex-col gap-1.5">
             <div
               v-for="atk in parsedAttacks"
@@ -99,8 +99,8 @@
                     :disabled="atk.disabled || !canEdit"
                     @click="rollAttack(atk)"
                   >
-                    <div class="text-xs font-bold truncate" :class="atk.disabled ? 'line-through text-stone-500' : 'text-parchment-200'">{{ atk.label }}</div>
-                    <div class="text-xs text-stone-500 text-wrap">{{ atk.raw.split(':').slice(1).join(':').trim() }}</div>
+                    <div class="text-sm font-bold truncate" :class="atk.disabled ? 'line-through text-stone-400' : 'text-parchment-200'">{{ atk.label }}</div>
+                    <div class="text-sm text-stone-400 text-wrap">{{ atk.raw.split(':').slice(1).join(':').trim() }}</div>
                   </button>
                   <button
                     v-if="atk.damageDie && !atk.disabled && canEdit"
@@ -108,19 +108,19 @@
                     :title="`Roll damage (${atk.damageDie})`"
                     @click="rollDamage(atk)"
                   >
-                    <i class="fa-solid fa-dice text-red-400 text-xs" />
+                    <i class="fa-solid fa-dice text-red-400 text-sm" />
                     <span class="text-red-400 font-mono leading-none" style="font-size:9px">{{ atk.damageDie }}</span>
                   </button>
                   <div v-if="canEdit" class="flex flex-col justify-center gap-1 px-1.5 shrink-0 border-l border-stone-700 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      class="text-stone-500 hover:text-stone-300 transition-colors"
+                      class="text-stone-400 hover:text-stone-300 transition-colors"
                       :title="atk.disabled ? 'Enable' : 'Disable'"
                       @click="characterStore.updateAttack(atk.idx, { disabled: !atk.disabled })"
                     ><i :class="atk.disabled ? 'fa-solid fa-eye fa-xs' : 'fa-solid fa-eye-slash fa-xs'" /></button>
-                    <button class="text-stone-500 hover:text-stone-300 transition-colors" title="Edit" @click="startAtkEdit(atk)">
+                    <button class="text-stone-400 hover:text-stone-300 transition-colors" title="Edit" @click="startAtkEdit(atk)">
                       <i class="fa-solid fa-pencil fa-xs" />
                     </button>
-                    <button class="text-stone-500 hover:text-red-400 transition-colors" title="Delete" @click="characterStore.deleteAttack(atk.idx)">
+                    <button class="text-stone-400 hover:text-red-400 transition-colors" title="Delete" @click="confirm('Delete this attack?', () => characterStore.deleteAttack(atk.idx))">
                       <i class="fa-solid fa-trash fa-xs" />
                     </button>
                   </div>
@@ -130,21 +130,21 @@
                 <div class="p-2 space-y-1.5">
                   <input
                     v-model="editAtkDraft.raw"
-                    class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+                    class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400"
                     placeholder="Name: +bonus to hit…"
                     @keyup.enter="saveAtkEdit(atk.idx)"
                     @keyup.escape="editingAtkIdx = null"
                   />
                   <input
                     v-model="editAtkDraft.damageDie"
-                    class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+                    class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400"
                     placeholder="Damage die, e.g. 1d8+2 (optional)"
                     @keyup.enter="saveAtkEdit(atk.idx)"
                     @keyup.escape="editingAtkIdx = null"
                   />
                   <div class="flex gap-2 justify-end">
-                    <button class="text-xs text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveAtkEdit(atk.idx)">Save</button>
-                    <button class="text-xs text-stone-500 hover:text-stone-300 transition-colors" @click="editingAtkIdx = null">Cancel</button>
+                    <button class="text-sm text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveAtkEdit(atk.idx)">Save</button>
+                    <button class="text-sm text-stone-400 hover:text-stone-300 transition-colors" @click="editingAtkIdx = null">Cancel</button>
                   </div>
                 </div>
               </template>
@@ -153,28 +153,28 @@
         </div>
 
         <div v-if="char.bonuses?.length">
-          <div class="text-xs text-stone-500 uppercase tracking-wider mb-1.5">Talents</div>
+          <div class="text-sm text-stone-400 uppercase tracking-wider mb-1.5">Talents</div>
           <div class="flex flex-col gap-1">
             <div
               v-for="(b, i) in char.bonuses"
               :key="i"
-              class="bg-stone-800 rounded p-2 text-xs"
+              class="bg-stone-800 rounded p-2 text-sm"
             >
               <span class="text-parchment-300">{{ b.bonusName }}</span>
-              <span class="text-stone-600 ml-1">· {{ b.sourceCategory }} ({{ b.sourceName }})</span>
+              <span class="text-stone-500 ml-1">· {{ b.sourceCategory }} ({{ b.sourceName }})</span>
             </div>
           </div>
         </div>
 
         <div v-if="char.spellsKnown && char.spellsKnown !== 'None'">
-          <div class="text-xs text-stone-500 uppercase tracking-wider mb-1.5">Spells</div>
-          <div class="bg-stone-800 rounded p-2 text-xs text-stone-300">{{ char.spellsKnown }}</div>
+          <div class="text-sm text-stone-400 uppercase tracking-wider mb-1.5">Spells</div>
+          <div class="bg-stone-800 rounded p-2 text-sm text-stone-300">{{ char.spellsKnown }}</div>
         </div>
       </div>
 
       <div v-else-if="subTab === 'gear'" class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         <div>
-          <div class="flex justify-between text-xs text-stone-500 mb-1">
+          <div class="flex justify-between text-sm text-stone-400 mb-1">
             <span class="uppercase tracking-wider">Gear Slots</span>
             <span>{{ effectiveGearSlotsUsed }} / {{ char.gearSlotsTotal }}</span>
           </div>
@@ -187,7 +187,7 @@
           </div>
           <button
             v-if="canEdit"
-            class="mt-2 w-full py-1.5 text-xs rounded bg-stone-700 hover:bg-stone-600 text-stone-300 hover:text-stone-100 transition-colors"
+            class="mt-2 w-full py-1.5 text-sm rounded bg-stone-700 hover:bg-stone-600 text-stone-300 hover:text-stone-100 transition-colors"
             @click="showAddGear = !showAddGear"
           >+ Add Gear</button>
         </div>
@@ -195,22 +195,22 @@
         <div v-if="showAddGear && canEdit" class="bg-stone-800 rounded p-2 space-y-1.5">
           <input
             v-model="newGearDraft.name"
-            class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+            class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400"
             placeholder="Item name"
             @keyup.enter="submitAddGear"
           />
           <div class="flex gap-2">
             <label class="flex-1 flex flex-col gap-0.5">
-              <span class="text-stone-500 text-xs">Slots</span>
-              <input v-model.number="newGearDraft.slots" type="number" min="0" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400" />
+              <span class="text-stone-400 text-sm">Slots</span>
+              <input v-model.number="newGearDraft.slots" type="number" min="0" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400" />
             </label>
             <label class="flex-1 flex flex-col gap-0.5">
-              <span class="text-stone-500 text-xs">Qty</span>
-              <input v-model.number="newGearDraft.quantity" type="number" min="1" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400" />
+              <span class="text-stone-400 text-sm">Qty</span>
+              <input v-model.number="newGearDraft.quantity" type="number" min="1" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400" />
             </label>
             <label class="flex-1 flex flex-col gap-0.5">
-              <span class="text-stone-500 text-xs">Type</span>
-              <select v-model="newGearDraft.type" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400">
+              <span class="text-stone-400 text-sm">Type</span>
+              <select v-model="newGearDraft.type" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400">
                 <option value="weapon">Weapon</option>
                 <option value="armor">Armor</option>
                 <option value="sundry">Sundry</option>
@@ -218,16 +218,16 @@
             </label>
           </div>
           <label v-if="newGearDraft.type === 'weapon'" class="flex flex-col gap-0.5">
-            <span class="text-stone-500 text-xs">Damage die</span>
+            <span class="text-stone-400 text-sm">Damage die</span>
             <input
               v-model="newGearDraft.damageDie"
-              class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+              class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400"
               placeholder="e.g. 1d8, 2d6+2 (optional)"
             />
           </label>
           <div class="flex gap-2 justify-end">
-            <button class="text-xs text-parchment-400 hover:text-parchment-200 transition-colors" @click="submitAddGear">Add</button>
-            <button class="text-xs text-stone-500 hover:text-stone-300 transition-colors" @click="showAddGear = false">Cancel</button>
+            <button class="text-sm text-parchment-400 hover:text-parchment-200 transition-colors" @click="submitAddGear">Add</button>
+            <button class="text-sm text-stone-400 hover:text-stone-300 transition-colors" @click="showAddGear = false">Cancel</button>
           </div>
         </div>
 
@@ -241,14 +241,14 @@
             <template v-if="editingGearId !== item.instanceId">
               <div class="flex items-start gap-2 p-2 group">
                 <div class="flex-1 min-w-0">
-                  <div class="text-xs text-parchment-200 truncate" :class="item.disabled ? 'line-through text-stone-500' : ''">{{ item.name }}</div>
-                  <div class="text-xs text-stone-500">
+                  <div class="text-sm text-parchment-200 truncate" :class="item.disabled ? 'line-through text-stone-400' : ''">{{ item.name }}</div>
+                  <div class="text-sm text-stone-400">
                     {{ item.slots }} slot{{ item.slots !== 1 ? 's' : '' }}
                     <span v-if="item.quantity > 1"> · ×{{ item.quantity }}</span>
                   </div>
                 </div>
                 <span
-                  class="shrink-0 text-xs px-1.5 py-0.5 rounded"
+                  class="shrink-0 text-sm px-1.5 py-0.5 rounded"
                   :class="{
                     'bg-red-900/50 text-red-300': item.type === 'weapon',
                     'bg-blue-900/50 text-blue-300': item.type === 'armor',
@@ -257,14 +257,14 @@
                 >{{ item.type }}</span>
                 <div v-if="canEdit" class="flex gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    class="text-stone-500 hover:text-stone-300 transition-colors"
+                    class="text-stone-400 hover:text-stone-300 transition-colors"
                     :title="item.disabled ? 'Enable' : 'Disable'"
                     @click="characterStore.updateGearItem(item.instanceId, { disabled: !item.disabled })"
                   ><i :class="item.disabled ? 'fa-solid fa-eye fa-xs' : 'fa-solid fa-eye-slash fa-xs'" /></button>
-                  <button class="text-stone-500 hover:text-stone-300 transition-colors" title="Edit" @click="startGearEdit(item)">
+                  <button class="text-stone-400 hover:text-stone-300 transition-colors" title="Edit" @click="startGearEdit(item)">
                     <i class="fa-solid fa-pencil fa-xs" />
                   </button>
-                  <button class="text-stone-500 hover:text-red-400 transition-colors" title="Delete" @click="characterStore.deleteGearItem(item.instanceId)">
+                  <button class="text-stone-400 hover:text-red-400 transition-colors" title="Delete" @click="confirm('Delete this item?', () => characterStore.deleteGearItem(item.instanceId))">
                     <i class="fa-solid fa-trash fa-xs" />
                   </button>
                 </div>
@@ -274,21 +274,21 @@
               <div class="p-2 space-y-1.5">
                 <input
                   v-model="editGearDraft.name"
-                  class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400"
+                  class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400"
                   placeholder="Item name"
                 />
                 <div class="flex gap-2">
                   <label class="flex-1 flex flex-col gap-0.5">
-                    <span class="text-stone-500 text-xs">Slots</span>
-                    <input v-model.number="editGearDraft.slots" type="number" min="0" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400" />
+                    <span class="text-stone-400 text-sm">Slots</span>
+                    <input v-model.number="editGearDraft.slots" type="number" min="0" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400" />
                   </label>
                   <label class="flex-1 flex flex-col gap-0.5">
-                    <span class="text-stone-500 text-xs">Qty</span>
-                    <input v-model.number="editGearDraft.quantity" type="number" min="1" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400" />
+                    <span class="text-stone-400 text-sm">Qty</span>
+                    <input v-model.number="editGearDraft.quantity" type="number" min="1" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400" />
                   </label>
                   <label class="flex-1 flex flex-col gap-0.5">
-                    <span class="text-stone-500 text-xs">Type</span>
-                    <select v-model="editGearDraft.type" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-xs focus:outline-none focus:border-parchment-400">
+                    <span class="text-stone-400 text-sm">Type</span>
+                    <select v-model="editGearDraft.type" class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-100 text-sm focus:outline-none focus:border-parchment-400">
                       <option value="weapon">Weapon</option>
                       <option value="armor">Armor</option>
                       <option value="sundry">Sundry</option>
@@ -296,26 +296,26 @@
                   </label>
                 </div>
                 <div class="flex gap-2 justify-end">
-                  <button class="text-xs text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveGearEdit(item.instanceId)">Save</button>
-                  <button class="text-xs text-stone-500 hover:text-stone-300 transition-colors" @click="editingGearId = null">Cancel</button>
+                  <button class="text-sm text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveGearEdit(item.instanceId)">Save</button>
+                  <button class="text-sm text-stone-400 hover:text-stone-300 transition-colors" @click="editingGearId = null">Cancel</button>
                 </div>
               </div>
             </template>
           </div>
           <div v-if="char.treasures?.length">
-            <div class="text-xs text-stone-500 uppercase tracking-wider mt-1 mb-1">Treasures</div>
+            <div class="text-sm text-stone-400 uppercase tracking-wider mt-1 mb-1">Treasures</div>
             <div
               v-for="(t, i) in char.treasures"
               :key="i"
-              class="bg-stone-800 rounded p-2 text-xs text-parchment-200"
+              class="bg-stone-800 rounded p-2 text-sm text-parchment-200"
             >{{ t }}</div>
           </div>
           <div v-if="char.magicItems?.length">
-            <div class="text-xs text-stone-500 uppercase tracking-wider mt-1 mb-1">Magic Items</div>
+            <div class="text-sm text-stone-400 uppercase tracking-wider mt-1 mb-1">Magic Items</div>
             <div
               v-for="(m, i) in char.magicItems"
               :key="i"
-              class="bg-stone-800 rounded p-2 text-xs text-parchment-200"
+              class="bg-stone-800 rounded p-2 text-sm text-parchment-200"
             >{{ m }}</div>
           </div>
         </div>
@@ -328,11 +328,11 @@
             :key="coin.key"
             class="bg-stone-800 rounded p-2 flex items-center gap-3"
           >
-            <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0" :class="coin.bg">
+            <div class="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0" :class="coin.bg">
               {{ coin.symbol }}
             </div>
             <div class="flex-1">
-              <div class="text-xs text-stone-500">{{ coin.label }}</div>
+              <div class="text-sm text-stone-400">{{ coin.label }}</div>
               <div class="text-lg font-bold text-parchment-200">{{ char[coin.key] ?? 0 }}</div>
             </div>
             <div v-if="canEdit" class="flex gap-1">
@@ -343,12 +343,12 @@
         </div>
 
         <div v-if="char.ledger?.length">
-          <div class="text-xs text-stone-500 uppercase tracking-wider mb-1.5">Ledger</div>
+          <div class="text-sm text-stone-400 uppercase tracking-wider mb-1.5">Ledger</div>
           <div class="flex flex-col gap-1">
             <div
               v-for="(entry, i) in char.ledger"
               :key="i"
-              class="bg-stone-800 rounded px-2 py-1.5 flex items-center gap-2 text-xs"
+              class="bg-stone-800 rounded px-2 py-1.5 flex items-center gap-2 text-sm"
             >
               <span class="flex-1 text-stone-400 truncate">{{ entry.desc }}</span>
               <span
@@ -382,9 +382,11 @@
 import { ref, computed } from 'vue'
 import { useCharacterStore, statMod, parseAttack, parseDamageDie } from '@/stores/characterStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 
 const characterStore = useCharacterStore()
 const diceStore = useDiceStore()
+const { confirm } = useConfirmDialog()
 
 const canEdit = computed(() => characterStore.canEditActiveCharacter)
 

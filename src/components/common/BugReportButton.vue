@@ -1,12 +1,12 @@
 <template>
   <div v-if="isStaging" class="relative" ref="containerEl">
     <button
-      class="flex items-center gap-1.5 text-xs px-2 py-1 rounded transition-colors text-red-500 hover:text-red-400 hover:bg-stone-800"
+      class="flex items-center gap-1.5 text-sm px-2 py-1 rounded transition-colors text-red-500 hover:text-red-400 hover:bg-stone-800"
       title="Report a bug (staging only)"
       @click="open = !open"
     >
       <i class="fa-solid fa-bug" />
-      <span class="hidden sm:inline text-[11px]">Bug</span>
+      <span class="hidden sm:inline text-sm">Bug</span>
     </button>
     <Transition name="bug-dropdown">
       <div
@@ -14,7 +14,7 @@
         class="absolute top-full right-0 mt-1.5 w-80 bg-stone-900 border border-stone-700 rounded-lg shadow-2xl shadow-black/70 z-[200] overflow-hidden"
       >
         <div class="px-4 py-2.5 border-b border-stone-700 flex items-center gap-2">
-          <i class="fa-solid fa-bug text-red-500 text-xs" />
+          <i class="fa-solid fa-bug text-red-500 text-sm" />
           <span class="text-stone-200 text-sm font-display">Report a Bug</span>
           <button
             class="ml-auto text-stone-500 hover:text-stone-300 text-lg leading-none transition-colors"
@@ -47,7 +47,7 @@
               placeholder="Describe the problem..."
               rows="4"
               maxlength="2000"
-              class="w-full bg-stone-800 border border-stone-700 rounded px-2.5 py-2 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-parchment-400 resize-none"
+              class="w-full bg-stone-800 border border-stone-700 rounded px-2.5 py-2 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-parchment-400 resize-none"
             />
           </div>
           <div>
@@ -59,7 +59,7 @@
               :class="previewUrl ? 'border-stone-600' : 'border-stone-700 hover:border-stone-500'"
             >
               <img v-if="previewUrl" :src="previewUrl" class="w-full max-h-32 object-cover" />
-              <div v-else class="flex items-center justify-center gap-2 text-stone-600 text-xs py-3 cursor-pointer">
+              <div v-else class="flex items-center justify-center gap-2 text-stone-600 text-sm py-3 cursor-pointer">
                 <i class="fa-solid fa-image" />
                 <span>Click to attach image (NOT of a PENIS)</span>
               </div>
@@ -71,7 +71,7 @@
               />
               <button
                 v-if="previewUrl"
-                class="absolute top-1 right-1 bg-stone-900/80 rounded text-stone-400 hover:text-stone-200 text-xs px-1.5 py-0.5 transition-colors"
+                class="absolute top-1 right-1 bg-stone-900/80 rounded text-stone-400 hover:text-stone-200 text-sm px-1.5 py-0.5 transition-colors"
                 @click.prevent="clearFile"
               >✕</button>
             </div>
@@ -89,10 +89,10 @@
             {{ submitting ? 'Submitting...' : 'Submit Bug Report' }}
           </button>
 
-          <p v-if="submitted" class="text-green-400 text-xs text-center">
+          <p v-if="submitted" class="text-green-400 text-sm text-center">
             <i class="fa-solid fa-check mr-1" />Thanks! Report submitted.
           </p>
-          <p v-if="submitError" class="text-red-400 text-xs text-center">{{ submitError }}</p>
+          <p v-if="submitError" class="text-red-400 text-sm text-center">{{ submitError }}</p>
         </div>
       </div>
     </Transition>

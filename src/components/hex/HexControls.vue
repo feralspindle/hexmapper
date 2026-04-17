@@ -14,7 +14,7 @@
     <button
       v-if="activeMarker"
       title="Exit marker mode"
-      class="w-6 h-6 rounded-full border-2 border-stone-500 bg-stone-800 text-stone-400 flex items-center justify-center text-xs hover:border-stone-300 hover:text-stone-200 transition-all"
+      class="w-6 h-6 rounded-full border-2 border-stone-500 bg-stone-800 text-stone-400 flex items-center justify-center text-sm hover:border-stone-300 hover:text-stone-200 transition-all"
       @click="selectMarker(null)"
     >✕</button>
 
@@ -25,31 +25,31 @@
       <button
         title="Fog brush — click hexes to reveal / hide"
         :class="[
-          'w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs transition-all',
+          'w-7 h-7 rounded-full border-2 flex items-center justify-center text-sm transition-all',
           fogMode
             ? 'border-sky-400 bg-sky-900/60 text-sky-300 scale-110'
             : 'border-stone-500 bg-stone-800 text-stone-400 hover:border-stone-400 hover:text-stone-200',
         ]"
         @click="emit('update:fogMode', !fogMode)"
       >
-        <i class="fa-solid fa-cloud text-xs" />
+        <i class="fa-solid fa-cloud text-sm" />
       </button>
 
       <button
         title="Reveal all hexes to players"
-        class="w-7 h-7 rounded-full border-2 border-stone-500 bg-stone-800 flex items-center justify-center text-xs text-stone-400 hover:border-stone-400 hover:text-stone-200 transition-colors"
+        class="w-7 h-7 rounded-full border-2 border-stone-500 bg-stone-800 flex items-center justify-center text-sm text-stone-400 hover:border-stone-400 hover:text-stone-200 transition-colors"
         @click="hexStore.revealAll()"
       >
-        <i class="fa-solid fa-eye text-xs" />
+        <i class="fa-solid fa-eye text-sm" />
       </button>
 
 
       <button
         title="Hide all hexes (full fog)"
-        class="w-7 h-7 rounded-full border-2 border-stone-500 bg-stone-800 flex items-center justify-center text-xs text-stone-400 hover:border-stone-400 hover:text-stone-200 transition-colors"
+        class="w-7 h-7 rounded-full border-2 border-stone-500 bg-stone-800 flex items-center justify-center text-sm text-stone-400 hover:border-stone-400 hover:text-stone-200 transition-colors"
         @click="hexStore.hideAll()"
       >
-        <i class="fa-solid fa-eye-slash text-xs" />
+        <i class="fa-solid fa-eye-slash text-sm" />
       </button>
     </template>
   </div>

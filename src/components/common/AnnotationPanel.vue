@@ -15,7 +15,7 @@
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
   
         <div>
-          <label class="block text-stone-300 text-xs mb-1 uppercase tracking-wider">Location Name</label>
+          <label class="block text-stone-300 text-sm mb-1 uppercase tracking-wider">Location Name</label>
           <input
             v-model="hexLabel"
             type="text"
@@ -27,7 +27,7 @@
 
 
         <div>
-          <label class="block text-stone-300 text-xs mb-2 uppercase tracking-wider">Terrain</label>
+          <label class="block text-stone-300 text-sm mb-2 uppercase tracking-wider">Terrain</label>
 
           <select
             v-if="isImageMap"
@@ -56,7 +56,7 @@
         </div>
 
         <div>
-          <label class="block text-stone-300 text-xs mb-2 uppercase tracking-wider">Marker</label>
+          <label class="block text-stone-300 text-sm mb-2 uppercase tracking-wider">Marker</label>
           <div class="flex flex-wrap items-center gap-2">
             <button
               v-for="m in MARKER_COLORS"
@@ -72,7 +72,7 @@
             <button
               v-if="hexMarkerColor"
               title="Clear marker"
-              class="w-6 h-6 rounded-full border-2 border-stone-500 bg-stone-800 text-stone-400 flex items-center justify-center text-xs hover:border-stone-300 hover:text-stone-200 transition-all"
+              class="w-6 h-6 rounded-full border-2 border-stone-500 bg-stone-800 text-stone-400 flex items-center justify-center text-sm hover:border-stone-300 hover:text-stone-200 transition-all"
               @click="setMarkerColor(null)"
             >✕</button>
           </div>
@@ -88,7 +88,7 @@
         </div>
 
         <div>
-          <label class="block text-stone-300 text-xs mb-1 uppercase tracking-wider">Notes</label>
+          <label class="block text-stone-300 text-sm mb-1 uppercase tracking-wider">Notes</label>
 
           <div
             ref="hexNotesEl"
@@ -116,11 +116,11 @@
                     <button
                       class="opacity-0 group-hover:opacity-100 text-stone-600 hover:text-red-400 transition-all"
                       title="Delete note"
-                      @click="notesStore.deleteNote(note.id)"
+                      @click="confirm('Delete this note?', () => notesStore.deleteNote(note.id))"
                     ><i class="fa-solid fa-trash fa-xs" /></button>
                   </template>
-                  <span class="text-xs text-stone-500">{{ timeAgo(note.created_at) }}</span>
-                  <span v-if="note.updated_at && note.updated_at !== note.created_at" class="text-xs text-stone-600 italic">(edited)</span>
+                  <span class="text-sm text-stone-500">{{ timeAgo(note.created_at) }}</span>
+                  <span v-if="note.updated_at && note.updated_at !== note.created_at" class="text-sm text-stone-600 italic">(edited)</span>
                 </div>
               </div>
 
@@ -133,8 +133,8 @@
                   @keydown.escape="editingNoteId = null"
                 />
                 <div class="flex gap-3 mt-1">
-                  <button class="text-xs text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveEditNote">Save</button>
-                  <button class="text-xs text-stone-500 hover:text-stone-300 transition-colors" @click="editingNoteId = null">Cancel</button>
+                  <button class="text-sm text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveEditNote">Save</button>
+                  <button class="text-sm text-stone-500 hover:text-stone-300 transition-colors" @click="editingNoteId = null">Cancel</button>
                 </div>
               </template>
               <p v-else class="text-stone-200 text-sm font-body leading-relaxed whitespace-pre-wrap">{{ note.body }}</p>
@@ -159,19 +159,19 @@
 
 
         <div class="border-t border-stone-700 pt-4 space-y-2">
-          <label class="block text-stone-400 text-xs uppercase tracking-wider">Dungeons</label>
+          <label class="block text-stone-400 text-sm uppercase tracking-wider">Dungeons</label>
 
-          <div v-if="hexStore.dungeonsLoading" class="text-stone-500 text-xs">Loading...</div>
+          <div v-if="hexStore.dungeonsLoading" class="text-stone-500 text-sm">Loading...</div>
           <div v-else class="space-y-1.5">
             <div
               v-for="dungeon in hexStore.hexDungeons"
               :key="dungeon.id"
               class="flex items-center gap-2 bg-stone-800 rounded px-3 py-2"
             >
-              <span class="text-purple-400 text-xs shrink-0">D</span>
+              <span class="text-purple-400 text-sm shrink-0">D</span>
               <span class="text-stone-200 text-sm flex-1 truncate font-body">{{ dungeon.name }}</span>
               <button
-                class="text-xs text-parchment-400 hover:text-parchment-200 shrink-0 transition-colors"
+                class="text-sm text-parchment-400 hover:text-parchment-200 shrink-0 transition-colors"
                 @click="hexStore.navigateToDungeon(dungeon.id)"
               >
                 Enter <i class="fa-solid fa-arrow-right fa-xs" />
@@ -222,7 +222,7 @@
     <template v-else-if="props.context === 'dungeon' && dungeonStore.selectedElement">
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
         <div>
-          <label class="block text-stone-300 text-xs mb-1 uppercase tracking-wider">Label</label>
+          <label class="block text-stone-300 text-sm mb-1 uppercase tracking-wider">Label</label>
           <input
             v-model="dungeonLabel"
             type="text"
@@ -233,7 +233,7 @@
         </div>
 
         <div>
-          <label class="block text-stone-300 text-xs mb-1 uppercase tracking-wider">Notes</label>
+          <label class="block text-stone-300 text-sm mb-1 uppercase tracking-wider">Notes</label>
 
           <div
             ref="dungeonNotesEl"
@@ -261,11 +261,11 @@
                     <button
                       class="opacity-0 group-hover:opacity-100 text-stone-600 hover:text-red-400 transition-all"
                       title="Delete note"
-                      @click="notesStore.deleteNote(note.id)"
+                      @click="confirm('Delete this note?', () => notesStore.deleteNote(note.id))"
                     ><i class="fa-solid fa-trash fa-xs" /></button>
                   </template>
-                  <span class="text-xs text-stone-500">{{ timeAgo(note.created_at) }}</span>
-                  <span v-if="note.updated_at && note.updated_at !== note.created_at" class="text-xs text-stone-600 italic">(edited)</span>
+                  <span class="text-sm text-stone-500">{{ timeAgo(note.created_at) }}</span>
+                  <span v-if="note.updated_at && note.updated_at !== note.created_at" class="text-sm text-stone-600 italic">(edited)</span>
                 </div>
               </div>
 
@@ -278,8 +278,8 @@
                   @keydown.escape="editingNoteId = null"
                 />
                 <div class="flex gap-3 mt-1">
-                  <button class="text-xs text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveEditNote">Save</button>
-                  <button class="text-xs text-stone-500 hover:text-stone-300 transition-colors" @click="editingNoteId = null">Cancel</button>
+                  <button class="text-sm text-parchment-400 hover:text-parchment-200 transition-colors" @click="saveEditNote">Save</button>
+                  <button class="text-sm text-stone-500 hover:text-stone-300 transition-colors" @click="editingNoteId = null">Cancel</button>
                 </div>
               </template>
               <p v-else class="text-stone-200 text-sm font-body leading-relaxed whitespace-pre-wrap">{{ note.body }}</p>
@@ -303,7 +303,7 @@
         </div>
 
         <div v-if="dungeonStore.selectedElement.type === 'room'">
-          <label class="block text-stone-300 text-xs mb-2 uppercase tracking-wider">Contents</label>
+          <label class="block text-stone-300 text-sm mb-2 uppercase tracking-wider">Contents</label>
           <div v-if="selectedRoomItems.length" class="space-y-2">
             <div
               v-for="item in selectedRoomItems"
@@ -330,13 +330,13 @@
                   >{{ item.label ?? item.type }}</button>
                   <button
                     v-if="item.label"
-                    class="text-stone-600 hover:text-stone-400 text-xs transition-colors shrink-0"
+                    class="text-stone-600 hover:text-stone-400 text-sm transition-colors shrink-0"
                     title="Reset to default name"
                     @click="resetItemLabel(item.id)"
                   ><i class="fa-solid fa-rotate-left fa-xs" /></button>
                 </template>
                 <button
-                  class="w-5 h-5 rounded bg-stone-700 hover:bg-red-900/60 text-stone-400 hover:text-red-400 text-xs flex items-center justify-center transition-colors shrink-0"
+                  class="w-5 h-5 rounded bg-stone-700 hover:bg-red-900/60 text-stone-400 hover:text-red-400 text-sm flex items-center justify-center transition-colors shrink-0"
                   title="Remove"
                   @click="removeItem(item.id)"
                 ><i class="fa-solid fa-xmark fa-xs" /></button>
@@ -359,6 +359,7 @@
 
 <script setup>
 import { ref, watch, computed, nextTick, onUnmounted } from 'vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { useHexStore, TERRAIN_TYPES, MARKER_COLORS } from '@/stores/hexStore.js'
 import { useD } from '@/stores/dungeonStore.js'
 import { useNotesStore } from '@/stores/notesStore.js'
@@ -376,6 +377,7 @@ const hexStore = useHexStore()
 const dungeonStore = useD()
 const notesStore = useNotesStore()
 const authStore = useAuthStore()
+const { confirm } = useConfirmDialog()
 const sessionStore = useSessionStore()
 const mapStore = useMapStore()
 
@@ -494,8 +496,10 @@ function saveMarker() {
 
 function clearHex() {
   if (!hexStore.selectedHex) return
-  hexStore.deleteHex(hexStore.selectedHex.q, hexStore.selectedHex.r)
-  emit('close')
+  confirm('Clear all data on this hex? This cannot be undone.', () => {
+    hexStore.deleteHex(hexStore.selectedHex.q, hexStore.selectedHex.r)
+    emit('close')
+  })
 }
 
 async function startAddingDungeon() {
@@ -574,7 +578,7 @@ const selectedRoomItems = computed(() => {
 function removeItem(itemId) {
   const el = dungeonStore.selectedElement
   if (el?.type !== 'room') return
-  dungeonStore.removeRoomItem(el.id, itemId)
+  confirm('Remove this item?', () => dungeonStore.removeRoomItem(el.id, itemId))
 }
 
 const editingLabelId = ref(null)

@@ -7,7 +7,7 @@
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        class="bg-stone-900/90 border border-stone-600 rounded-lg px-3 py-1.5 backdrop-blur flex items-center gap-2 text-xs max-w-xs pointer-events-auto"
+        class="bg-stone-900/90 border border-stone-600 rounded-lg px-3 py-1.5 backdrop-blur flex items-center gap-2 text-sm max-w-xs pointer-events-auto"
       >
         <i class="fa-solid fa-shield-halved text-parchment-500 shrink-0 text-[10px]" />
         <span class="text-stone-200">Hail and well met, <span class="font-display text-parchment-300">{{ toast.display_name }}</span>!</span>

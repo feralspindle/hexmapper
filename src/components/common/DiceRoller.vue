@@ -16,10 +16,10 @@
         >
           <i v-if="dieIcon(die)" :class="[dieIcon(die), 'text-base leading-none']" />
           <span v-else class="text-sm font-bold leading-none font-mono">{{ die === 'd100' ? 'd%' : die }}</span>
-          <span class="text-xs font-mono mt-0.5 leading-none">{{ die }}</span>
+          <span class="text-sm font-mono mt-0.5 leading-none">{{ die }}</span>
           <span
             v-if="pending[die] > 0"
-            class="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full bg-parchment-500 text-stone-900 text-[9px] font-bold flex items-center justify-center px-0.5 leading-none"
+            class="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full bg-parchment-500 text-stone-900 text-[14px] font-bold flex items-center justify-center px-0.5 leading-none"
           >{{ pending[die] }}</span>
         </button>
       </div>
@@ -28,21 +28,21 @@
     <div class="px-3 pb-3 shrink-0 bg-stone-950/40 space-y-2">
 
       <div
-        class="rounded bg-stone-800 border border-stone-700 px-2 py-1.5 text-xs font-mono min-h-[32px] flex items-center"
+        class="rounded bg-stone-800 border border-stone-700 px-2 py-1.5 text-sm font-mono min-h-[32px] flex items-center"
         :class="hasDice ? 'text-parchment-200' : 'text-stone-600 italic'"
       >
         {{ formula || 'tap dice to add...' }}
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-stone-500 text-xs uppercase tracking-wider shrink-0">Mod</span>
+        <span class="text-stone-500 text-sm uppercase tracking-wider shrink-0">Mod</span>
         <div class="flex items-center gap-1">
           <button
             class="w-7 h-7 rounded bg-stone-800 border border-stone-700 text-stone-300 hover:bg-stone-700 hover:text-parchment-200 transition-colors text-sm font-bold flex items-center justify-center select-none"
             @click="modifier--"
           >−</button>
           <span
-            class="w-10 text-center text-xs font-mono select-none"
+            class="w-10 text-center text-sm font-mono select-none"
             :class="modifier !== 0 ? 'text-parchment-300' : 'text-stone-500'"
           >{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
           <button
@@ -53,7 +53,7 @@
         <div class="ml-auto flex gap-2">
           <button
             v-if="hasAnything"
-            class="text-stone-500 hover:text-stone-300 text-xs transition-colors select-none"
+            class="text-stone-500 hover:text-stone-300 text-sm transition-colors select-none"
             @click="clear"
           >Clear</button>
           <button
@@ -69,7 +69,7 @@
     </div>
     <div class="flex-1 overflow-y-auto min-h-0 border-t-2 border-stone-600 bg-stone-950/40">
       <div class="px-2 py-1.5 flex items-center justify-between shrink-0 sticky top-0 bg-stone-900 z-10 border-b border-stone-800">
-        <span class="text-stone-400 text-xs uppercase tracking-widest">History</span>
+        <span class="text-stone-400 text-sm uppercase tracking-widest">History</span>
       </div>
 
       <div v-if="!diceStore.rolls.length" class="px-3 py-4 text-stone-400 text-sm italic text-center">
@@ -82,21 +82,21 @@
         class="mx-2 my-1.5 group"
       >
         <div
-          class="rounded border text-xs overflow-hidden relative transition-shadow duration-700"
+          class="rounded border text-sm overflow-hidden relative transition-shadow duration-700"
           :class="[
             i === 0 ? 'border-parchment-400 bg-stone-800/80' : i === 1 ? 'border-parchment-400/30 bg-stone-800/60' : 'border-stone-700 bg-stone-800/40',
             entry.id === glowId ? 'shadow-[0_0_10px_rgba(212,167,75,0.35)]' : '',
           ]"
         >
           <div class="absolute top-1.5 right-2">
-            <span class="text-xs text-right truncate max-w-[6rem] block"
+            <span class="text-sm text-right truncate max-w-[6rem] block"
               :class="entry.user_id === authStore.user?.id ? 'text-parchment-400' : 'text-stone-400'">
               {{ gmName(entry.user_id, entry.display_name) }}
             </span>
-            <span class="block text-stone-400 text-right text-xs max-w-[6rem]">{{ timeAgo(entry.created_at) }}</span>
+            <span class="block text-stone-400 text-right text-sm max-w-[6rem]">{{ timeAgo(entry.created_at) }}</span>
           </div>
           <div class="px-2 pt-1.5 pb-0.5 pr-28 min-h-[3rem]">
-            <div v-if="entry.label" class="text-parchment-400/70 text-xs italic mb-0.5" style="font-family: 'Crimson Text', serif">{{ entry.label }}</div>
+            <div v-if="entry.label" class="text-parchment-400/70 text-sm italic mb-0.5" style="font-family: 'Crimson Text', serif">{{ entry.label }}</div>
             <span class="font-mono text-stone-200 text-sm">{{ formatExpression(entry) }}</span>
           </div>
 
@@ -105,10 +105,10 @@
               <span
                 v-for="(r, ri) in entry.results"
                 :key="ri"
-                class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-0.5 rounded font-mono text-xs"
+                class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-0.5 rounded font-mono text-sm"
                 :class="r.die === 'd20' && r.value === 20 ? 'bg-amber-900/60 text-amber-300 font-bold' : r.die === 'd20' && r.value === 1 ? 'bg-red-900/60 text-red-400 font-bold' : 'bg-stone-700 text-stone-200'"
               >{{ r.value }}</span>
-              <span v-if="entry.modifier !== 0" class="text-stone-300 font-mono text-xs self-center">
+              <span v-if="entry.modifier !== 0" class="text-stone-300 font-mono text-sm self-center">
                 {{ entry.modifier > 0 ? '+' : '' }}{{ entry.modifier }}
               </span>
               <button
@@ -119,8 +119,8 @@
               ><i class="fa-solid fa-pencil text-[10px]" /></button>
             </div>
             <div class="flex items-center gap-2 shrink-0 ml-2">
-              <span v-if="isCrit(entry)" class="text-amber-300 text-xs font-bold tracking-wide">CRIT!</span>
-              <span v-else-if="isFumble(entry)" class="text-red-400 text-xs font-bold tracking-wide">FAIL</span>
+              <span v-if="isCrit(entry)" class="text-amber-300 text-sm font-bold tracking-wide">CRIT!</span>
+              <span v-else-if="isFumble(entry)" class="text-red-400 text-sm font-bold tracking-wide">FAIL</span>
               <span class="font-bold text-2xl" :class="isCrit(entry) ? 'text-amber-300' : isFumble(entry) ? 'text-red-400' : entry.user_id === authStore.user?.id ? 'text-parchment-300' : 'text-stone-300'">
                 {{ entry.total }}
               </span>
@@ -135,7 +135,7 @@
           <div
             v-for="ann in diceStore.annotations[entry.id] ?? []"
             :key="ann.id"
-            class="flex items-baseline gap-1.5 text-xs leading-snug"
+            class="flex items-baseline gap-1.5 text-sm leading-snug"
             :class="ann.id?.toString().startsWith('pending-') ? 'opacity-50' : ''"
           >
             <span class="text-stone-600 shrink-0">↳</span>
@@ -152,12 +152,12 @@
               type="text"
               placeholder="Add note… (Enter)"
               maxlength="200"
-              class="flex-1 min-w-0 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-parchment-400"
+              class="flex-1 min-w-0 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-parchment-400"
               @keydown.enter.prevent="submitAnnotation(entry.id)"
               @keydown.escape="cancelAnnotation"
             />
             <button
-              class="text-parchment-400 hover:text-parchment-200 text-xs transition-colors px-1 shrink-0"
+              class="text-parchment-400 hover:text-parchment-200 text-sm transition-colors px-1 shrink-0"
               @click="submitAnnotation(entry.id)"
             ><i class="fa-solid fa-check" /></button>
             <button

@@ -12,7 +12,7 @@
         </RouterLink>
         <div>
           <h1 class="text-2xl font-display text-parchment-200">{{ sessionName || '…' }}</h1>
-          <p class="text-stone-500 text-xs mt-0.5">Hex notes</p>
+          <p class="text-stone-500 text-sm mt-0.5">Hex notes</p>
         </div>
       </div>
 
@@ -44,12 +44,12 @@
                 <span class="text-parchment-200 text-sm font-display">
                   {{ cell.label || `Hex (${cell.q}, ${cell.r})` }}
                 </span>
-                <span v-if="cell.label" class="text-stone-600 text-xs font-mono">
+                <span v-if="cell.label" class="text-stone-600 text-sm font-mono">
                   ({{ cell.q }}, {{ cell.r }})
                 </span>
                 <span
                   v-if="cell.terrain_type"
-                  class="ml-auto text-xs text-stone-500 capitalize"
+                  class="ml-auto text-sm text-stone-500 capitalize"
                 >{{ cell.terrain_type }}</span>
               </div>
               <p class="text-stone-300 text-sm leading-relaxed whitespace-pre-wrap">{{ cell.notes }}</p>

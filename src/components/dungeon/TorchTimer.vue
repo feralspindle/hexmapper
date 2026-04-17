@@ -2,7 +2,7 @@
   <div class="flex items-center gap-2">
     <button
       :class="[
-        'flex items-center gap-1.5 px-2 py-1 rounded transition-colors font-mono text-xs',
+        'flex items-center gap-1.5 px-2 py-1 rounded transition-colors font-mono text-sm',
         expired
           ? 'bg-red-950/70 text-red-400 animate-pulse'
           : running

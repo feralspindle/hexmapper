@@ -13,7 +13,7 @@
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs text-stone-400">Map name</label>
+          <label class="text-sm text-stone-400">Map name</label>
           <input
             ref="nameInputEl"
             v-model="name"
@@ -25,11 +25,11 @@
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs text-stone-400">Map type</label>
+          <label class="text-sm text-stone-400">Map type</label>
           <div class="flex gap-2">
             <button
               :class="[
-                'flex-1 py-2 text-xs rounded transition-colors flex items-center justify-center gap-1.5',
+                'flex-1 py-2 text-sm rounded transition-colors flex items-center justify-center gap-1.5',
                 mapType === 'hex'
                   ? 'bg-parchment-500 text-stone-900 font-semibold'
                   : 'bg-stone-700 text-stone-400 hover:text-stone-200',
@@ -40,7 +40,7 @@
             </button>
             <button
               :class="[
-                'flex-1 py-2 text-xs rounded transition-colors flex items-center justify-center gap-1.5',
+                'flex-1 py-2 text-sm rounded transition-colors flex items-center justify-center gap-1.5',
                 mapType === 'image'
                   ? 'bg-parchment-500 text-stone-900 font-semibold'
                   : 'bg-stone-700 text-stone-400 hover:text-stone-200',
@@ -50,7 +50,7 @@
               <i class="fa-solid fa-image" />Custom Image
             </button>
           </div>
-          <p class="text-xs text-stone-600">
+          <p class="text-sm text-stone-600">
             {{ mapType === 'image'
               ? 'Upload a custom map image and overlay a hex grid on top.'
               : 'A blank hex grid with terrain painting and fog of war.' }}
@@ -74,7 +74,7 @@
               ]"
             />
           </div>
-          <span class="text-xs text-stone-300">
+          <span class="text-sm text-stone-300">
             {{ isFirst || isOnly ? 'Set as active map (required)' : 'Set as active map' }}
           </span>
           <input
@@ -88,14 +88,14 @@
         <div class="flex gap-2 mt-1">
           <button
             v-if="!isFirst"
-            class="flex-1 py-2 text-xs rounded bg-stone-700 hover:bg-stone-600 text-stone-300 transition-colors"
+            class="flex-1 py-2 text-sm rounded bg-stone-700 hover:bg-stone-600 text-stone-300 transition-colors"
             @click="close"
           >
             Cancel
           </button>
           <button
             :disabled="!name.trim() || saving"
-            class="flex-1 py-2 text-xs rounded font-semibold transition-colors disabled:opacity-40 disabled:cursor-default"
+            class="flex-1 py-2 text-sm rounded font-semibold transition-colors disabled:opacity-40 disabled:cursor-default"
             :class="name.trim() && !saving
               ? 'bg-parchment-500 hover:bg-parchment-400 text-stone-900'
               : 'bg-stone-700 text-stone-500'"
