@@ -75,28 +75,44 @@
           <div class="text-sm text-stone-500">Hex size</div>
 
           <div>
-            <div class="flex justify-between text-sm mb-1">
-              <span class="text-stone-400">Width</span>
-              <span class="text-stone-300 font-mono">{{ hexWidthDraft }}&thinsp;px</span>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm text-stone-400">Width</span>
+              <div class="relative">
+                <input
+                  v-model.number="hexWidthDraft"
+                  type="number" min="20" max="300" step="1"
+                  class="w-20 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-sm text-stone-200 text-center focus:outline-none focus:border-parchment-400 [appearance:textfield] pr-7"
+                  @change="saveHexSizeDebounced"
+                />
+                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stone-500 pointer-events-none">px</span>
+              </div>
             </div>
             <input
               v-model.number="hexWidthDraft"
-              type="range" min="20" max="300" step="2"
+              type="range" min="20" max="300" step="1"
               class="w-full accent-parchment-400"
-              @mouseup="saveHexSize" @touchend="saveHexSize"
+              @input="saveHexSizeDebounced"
             />
           </div>
 
           <div>
-            <div class="flex justify-between text-sm mb-1">
-              <span class="text-stone-400">Height</span>
-              <span class="text-stone-300 font-mono">{{ displayHeight }}&thinsp;px<span v-if="hexHeightDraft === null" class="text-stone-500 ml-1">(auto)</span></span>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm text-stone-400">Height</span>
+              <div class="relative">
+                <input
+                  v-model.number="hexHeightDraftInput"
+                  type="number" min="20" max="300" step="1"
+                  class="w-20 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-sm text-stone-200 text-center focus:outline-none focus:border-parchment-400 [appearance:textfield] pr-7"
+                  @change="saveHexSizeDebounced"
+                />
+                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stone-500 pointer-events-none">px</span>
+              </div>
             </div>
             <input
               v-model.number="hexHeightDraftInput"
-              type="range" min="20" max="300" step="2"
+              type="range" min="20" max="300" step="1"
               class="w-full accent-parchment-400"
-              @mouseup="saveHexSize" @touchend="saveHexSize"
+              @input="saveHexSizeDebounced"
             />
             <button
               class="mt-1 text-sm text-stone-500 hover:text-stone-300 transition-colors"
@@ -249,28 +265,55 @@ async function handleUpload(event) {
 
 function _clampDeg(v) { return Math.max(0, Math.min(359, v || 0)) }
 
+let _imageRotTimer = null
+let _gridRotTimer  = null
+
+function _scheduleImageRotSave() {
+  mapStore.applyLocalPatch({ mapImageRotation: imageRotationDraft.value })
+  clearTimeout(_imageRotTimer)
+  _imageRotTimer = setTimeout(() => {
+    mapStore.updateActiveMap({ mapImageRotation: imageRotationDraft.value })
+  }, 250)
+}
+function _scheduleGridRotSave() {
+  mapStore.applyLocalPatch({ mapGridRotation: gridRotationDraft.value })
+  clearTimeout(_gridRotTimer)
+  _gridRotTimer = setTimeout(() => {
+    mapStore.updateActiveMap({ mapGridRotation: gridRotationDraft.value })
+  }, 250)
+}
+
 async function rotateImageBy(delta) {
   imageRotationDraft.value = ((imageRotationDraft.value + delta) % 360 + 360) % 360
+  mapStore.applyLocalPatch({ mapImageRotation: imageRotationDraft.value })
   await mapStore.updateActiveMap({ mapImageRotation: imageRotationDraft.value })
 }
-async function saveImageRotation() {
+function saveImageRotation() {
   imageRotationDraft.value = _clampDeg(imageRotationDraft.value)
-  await mapStore.updateActiveMap({ mapImageRotation: imageRotationDraft.value })
+  _scheduleImageRotSave()
 }
 async function rotateGridBy(delta) {
   gridRotationDraft.value = ((gridRotationDraft.value + delta) % 360 + 360) % 360
+  mapStore.applyLocalPatch({ mapGridRotation: gridRotationDraft.value })
   await mapStore.updateActiveMap({ mapGridRotation: gridRotationDraft.value })
 }
-async function saveGridRotation() {
+function saveGridRotation() {
   gridRotationDraft.value = _clampDeg(gridRotationDraft.value)
-  await mapStore.updateActiveMap({ mapGridRotation: gridRotationDraft.value })
+  _scheduleGridRotSave()
 }
 
-async function saveHexSize() {
-  await mapStore.updateActiveMap({
-    mapHexWidth:  hexWidthDraft.value,
-    mapHexHeight: hexHeightDraft.value,
-  })
+let _hexSizeTimer = null
+function saveHexSizeDebounced() {
+  if (hexWidthDraft.value != null)
+    hexWidthDraft.value = Math.max(20, Math.min(300, hexWidthDraft.value || 20))
+  mapStore.applyLocalPatch({ mapHexWidth: hexWidthDraft.value, mapHexHeight: hexHeightDraft.value })
+  clearTimeout(_hexSizeTimer)
+  _hexSizeTimer = setTimeout(() => {
+    mapStore.updateActiveMap({
+      mapHexWidth:  hexWidthDraft.value,
+      mapHexHeight: hexHeightDraft.value,
+    })
+  }, 250)
 }
 async function resetHeight() {
   hexHeightDraft.value = null

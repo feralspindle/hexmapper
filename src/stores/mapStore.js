@@ -22,6 +22,7 @@ export const useMapStore = defineStore('map', () => {
 
   let mapChannel = null
   let _currentSessionId = null
+  const _localOverrides = {} // mapId -> { db_field: latestLocalValue }
 
   const activeMap = computed(() => {
     const sessionStore = useSessionStore()
@@ -120,7 +121,8 @@ export const useMapStore = defineStore('map', () => {
             maps.value = maps.value.map(m => {
               if (m.id !== row.id) return m
               const draft = _draftsByMapId.value[row.id] ?? {}
-              return { ...row, ...draft }
+              const local = _localOverrides[row.id] ?? {}
+              return { ...row, ...draft, ...local }
             })
           } else if (eventType === 'DELETE') {
             maps.value = maps.value.filter(m => m.id !== old.id)
@@ -141,6 +143,7 @@ export const useMapStore = defineStore('map', () => {
     gmMode.value  = 'edit'
     _draftsByMapId.value = {}
     _currentSessionId = null
+    Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
   }
 
   async function createMap({ name = 'New Map', mapType = 'hex' } = {}) {
@@ -210,6 +213,18 @@ export const useMapStore = defineStore('map', () => {
     return data
   }
 
+  function applyLocalPatch(patch) {
+    const map = gmMap.value
+    if (!map) return
+    const dbPatch = {}
+    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation = patch.mapImageRotation
+    if (patch.mapGridRotation  !== undefined) dbPatch.map_grid_rotation  = patch.mapGridRotation
+    if (patch.mapHexWidth      !== undefined) dbPatch.map_hex_width      = patch.mapHexWidth
+    if (patch.mapHexHeight     !== undefined) dbPatch.map_hex_height     = patch.mapHexHeight
+    _localOverrides[map.id] = { ...(_localOverrides[map.id] ?? {}), ...dbPatch }
+    maps.value = maps.value.map(m => (m.id === map.id ? { ...m, ...dbPatch } : m))
+  }
+
   async function updateActiveMap(patch) {
     const map = gmMap.value
     if (!map) return false
@@ -246,7 +261,21 @@ export const useMapStore = defineStore('map', () => {
     const { error } = await supabase.from('maps').update(dbPatch).eq('id', map.id)
     if (error) { console.error('updateActiveMap:', error.message); return false }
 
-    maps.value = maps.value.map(m => (m.id === map.id ? { ...m, ...dbPatch } : m))
+    // Clear overrides only for fields where the DB-confirmed value still matches
+    // the override — if the user has moved on, the override stays to protect newer edits.
+    const overrides = _localOverrides[map.id]
+    if (overrides) {
+      for (const [field, val] of Object.entries(dbPatch)) {
+        if (overrides[field] === val) delete overrides[field]
+      }
+      if (Object.keys(overrides).length === 0) delete _localOverrides[map.id]
+    }
+
+    maps.value = maps.value.map(m => {
+      if (m.id !== map.id) return m
+      const remaining = _localOverrides[map.id] ?? {}
+      return { ...m, ...dbPatch, ...remaining }
+    })
     return true
   }
 
@@ -332,6 +361,7 @@ export const useMapStore = defineStore('map', () => {
     init,
     cleanup,
     createMap,
+    applyLocalPatch,
     renameMap,
     deleteMap,
     setActiveMap,

@@ -135,10 +135,11 @@ async function submit() {
   const trimmed = name.value.trim()
   if (!trimmed || saving.value) return
   saving.value = true
+  const shouldSetActive = setActive.value || isFirst.value
   try {
     const map = await mapStore.createMap({ name: trimmed, mapType: mapType.value })
     if (map) {
-      if (setActive.value || isFirst.value) {
+      if (shouldSetActive) {
         await mapStore.setActiveMap(map.id)
       } else {
         mapStore.selectGmMap(map.id)
