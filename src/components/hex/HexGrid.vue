@@ -146,7 +146,7 @@ const gridCols = computed(() => {
   if (props.imageMode && imageNaturalWidth.value > 0 && hexSize.value > 0) {
     return Math.ceil(imageNaturalWidth.value / (hexSize.value * 1.5)) + 4
   }
-  return 30
+  return 60
 })
 
 const gridRows = computed(() => {
@@ -154,14 +154,21 @@ const gridRows = computed(() => {
   if (props.imageMode && imageNaturalHeight.value > 0 && h > 0) {
     return Math.ceil(imageNaturalHeight.value / h) + 4
   }
-  return 20
+  return 40
 })
 
 const visibleCoords = computed(() => {
+  const cols = gridCols.value
+  const rows = gridRows.value
+  const imageLoaded = props.imageMode && imageNaturalWidth.value > 0
+  // Image starts near the SVG origin, so only a small negative buffer is needed there.
+  // In free mode, extend equally in all directions from the origin.
+  const qStart   = imageLoaded ? -4 : -Math.floor(cols / 2)
+  const rBuffer  = imageLoaded ? 4  : Math.floor(rows / 2)
   const coords = []
-  for (let q = -2; q < gridCols.value; q++) {
+  for (let q = qStart; q < cols; q++) {
     const qOffset = Math.floor(q / 2)
-    for (let r = -qOffset - 2; r < gridRows.value - qOffset + 2; r++) {
+    for (let r = -rBuffer - qOffset; r < rows - rBuffer - qOffset; r++) {
       coords.push({ q, r })
     }
   }
