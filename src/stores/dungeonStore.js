@@ -297,6 +297,26 @@ export const useD = defineStore('dungeon', () => {
     if (error) console.error('updateTorch error:', error.message)
   }
 
+  async function torchStart() {
+    if (!dungeon.value?.id) return
+    dungeon.value = { ...dungeon.value, torch_running: true }
+    const { error } = await supabase.rpc('torch_start', { p_dungeon_id: dungeon.value.id })
+    if (error) console.error('torchStart error:', error.message)
+  }
+
+  async function torchPause() {
+    if (!dungeon.value?.id) return
+    const { error } = await supabase.rpc('torch_pause', { p_dungeon_id: dungeon.value.id })
+    if (error) console.error('torchPause error:', error.message)
+  }
+
+  async function torchReset() {
+    if (!dungeon.value?.id) return
+    dungeon.value = { ...dungeon.value, torch_elapsed_ms: 0 }
+    const { error } = await supabase.rpc('torch_reset', { p_dungeon_id: dungeon.value.id })
+    if (error) console.error('torchReset error:', error.message)
+  }
+
   function cleanup() {
     if (dungeonChannel) supabase.removeChannel(dungeonChannel)
     if (roomChannel) supabase.removeChannel(roomChannel)
@@ -341,6 +361,9 @@ export const useD = defineStore('dungeon', () => {
     beginRoomEdit,
     endRoomEdit,
     updateTorch,
+    torchStart,
+    torchPause,
+    torchReset,
     cleanup,
   }
 })

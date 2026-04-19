@@ -47,7 +47,7 @@ const expired = computed(() => totalElapsed.value >= DURATION)
 const remaining = computed(() => Math.max(0, DURATION - totalElapsed.value))
 
 const displayTime = computed(() => {
-  const totalSec = Math.ceil(remaining.value / 1000)
+  const totalSec = Math.floor(remaining.value / 1000)
   const m = Math.floor(totalSec / 60).toString().padStart(2, '0')
   const s = (totalSec % 60).toString().padStart(2, '0')
   return `${m}:${s}`
@@ -73,31 +73,16 @@ watch(() => dungeonStore.dungeon, () => {
 
 async function toggleRunning() {
   if (expired.value || !dungeonStore.dungeon) return
-  const d = dungeonStore.dungeon
-  if (d.torch_running) {
-    const accumulated = Math.min(DURATION, (d.torch_elapsed_ms ?? 0) + (Date.now() - new Date(d.torch_started_at).getTime()))
-    await dungeonStore.updateTorch({
-      torch_running: false,
-      torch_elapsed_ms: accumulated,
-      torch_started_at: null,
-    })
+  if (dungeonStore.dungeon.torch_running) {
+    await dungeonStore.torchPause()
   } else {
-    await dungeonStore.updateTorch({
-      torch_running: true,
-      torch_started_at: new Date().toISOString(),
-      torch_elapsed_ms: d.torch_elapsed_ms ?? 0,
-    })
+    await dungeonStore.torchStart()
   }
 }
 
 async function reset() {
   if (!dungeonStore.dungeon) return
-  const d = dungeonStore.dungeon
-  await dungeonStore.updateTorch({
-    torch_running: d.torch_running,
-    torch_elapsed_ms: 0,
-    torch_started_at: d.torch_running ? new Date().toISOString() : null,
-  })
+  await dungeonStore.torchReset()
 }
 
 onMounted(() => {

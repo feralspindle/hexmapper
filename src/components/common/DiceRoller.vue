@@ -67,9 +67,19 @@
         </div>
       </div>
     </div>
-    <div class="flex-1 overflow-y-auto min-h-0 border-t-2 border-stone-600 bg-stone-950/40">
-      <div class="px-2 py-1.5 flex items-center justify-between shrink-0 sticky top-0 bg-stone-900 z-10 border-b border-stone-800">
-        <span class="text-stone-400 text-sm uppercase tracking-widest">History</span>
+    <div ref="scrollContainer" class="flex-1 overflow-y-auto min-h-0 border-t-2 border-stone-600 bg-stone-950/40" @scroll="onScroll">
+      <div class="sticky top-0 z-10">
+        <div class="px-2 py-1.5 flex items-center justify-between bg-stone-900 border-b border-stone-800">
+          <span class="text-stone-400 text-sm uppercase tracking-widest">History</span>
+        </div>
+        <button
+          v-if="hasUnseenRolls"
+          class="w-full flex items-center justify-center gap-1.5 py-1 bg-amber-500/90 hover:bg-amber-400/90 text-stone-900 text-xs font-semibold uppercase tracking-wider transition-colors"
+          @click="scrollToTop"
+        >
+          <i class="fa-solid fa-arrow-up text-[10px]" />
+          New rolls
+        </button>
       </div>
 
       <div v-if="!diceStore.rolls.length" class="px-3 py-4 text-stone-400 text-sm italic text-center">
@@ -265,11 +275,26 @@ async function submitAnnotation(rollId) {
 const glowId = ref(null)
 let glowTimer = null
 
+const scrollContainer = ref(null)
+const isAtTop = ref(true)
+const hasUnseenRolls = ref(false)
+
+function onScroll() {
+  isAtTop.value = scrollContainer.value.scrollTop < 80
+  if (isAtTop.value) hasUnseenRolls.value = false
+}
+
+function scrollToTop() {
+  scrollContainer.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  hasUnseenRolls.value = false
+}
+
 watch(() => diceStore.rolls[0], (newRoll) => {
   if (!newRoll) return
   clearTimeout(glowTimer)
   glowId.value = newRoll.id
   glowTimer = setTimeout(() => { glowId.value = null }, 5000)
+  if (!isAtTop.value) hasUnseenRolls.value = true
 })
 
 
