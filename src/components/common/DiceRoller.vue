@@ -6,11 +6,11 @@
         <button
           v-for="die in DICE"
           :key="die"
+          v-tooltip="`Left-click to add a ${die}, right-click to remove one`"
           class="relative flex flex-col items-center justify-center py-2 rounded border transition-all select-none active:scale-95"
           :class="pending[die] > 0
             ? 'border-parchment-400 bg-parchment-500/20 text-parchment-200'
             : 'border-stone-700 bg-stone-800 text-stone-400 hover:border-stone-500 hover:text-stone-200'"
-          :title="`Left-click to add ${die}, right-click to remove`"
           @click="addDie(die)"
           @contextmenu.prevent="removeDie(die)"
         >
@@ -38,14 +38,17 @@
         <span class="text-stone-500 text-sm uppercase tracking-wider shrink-0">Mod</span>
         <div class="flex items-center gap-1">
           <button
+            v-tooltip.left="'Decrease roll modifier'"
             class="w-7 h-7 rounded bg-stone-800 border border-stone-700 text-stone-300 hover:bg-stone-700 hover:text-parchment-200 transition-colors text-sm font-bold flex items-center justify-center select-none"
             @click="modifier--"
           >−</button>
           <span
+            v-tooltip="'Flat bonus or penalty added to every die roll'"
             class="w-10 text-center text-sm font-mono select-none"
             :class="modifier !== 0 ? 'text-parchment-300' : 'text-stone-500'"
           >{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
           <button
+            v-tooltip.right="'Increase roll modifier'"
             class="w-7 h-7 rounded bg-stone-800 border border-stone-700 text-stone-300 hover:bg-stone-700 hover:text-parchment-200 transition-colors text-sm font-bold flex items-center justify-center select-none"
             @click="modifier++"
           >+</button>
@@ -53,10 +56,12 @@
         <div class="ml-auto flex gap-2">
           <button
             v-if="hasAnything"
+            v-tooltip="'Clear all selected dice and the modifier'"
             class="text-stone-500 hover:text-stone-300 text-sm transition-colors select-none"
             @click="clear"
           >Clear</button>
           <button
+            v-tooltip="hasDice ? 'Roll the selected dice and broadcast to the table' : 'Select at least one die to roll'"
             class="px-4 h-8 rounded font-display text-sm transition-all select-none"
             :class="hasDice
               ? 'bg-parchment-500 hover:bg-parchment-400 text-stone-950 active:scale-95'

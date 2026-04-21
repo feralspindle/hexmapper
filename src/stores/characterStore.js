@@ -149,6 +149,18 @@ export const useCharacterStore = defineStore('character', () => {
     updateField('currentHp', next)
   }
 
+  function adjustStat(key, delta) {
+    if (!character.value?.stats) return
+    updateField('stats', { ...character.value.stats, [key]: Math.max(1, (character.value.stats[key] ?? 10) + delta) })
+  }
+
+  function adjustMaxHp(delta) {
+    if (!character.value) return
+    const newMax = Math.max(1, (character.value.maxHitPoints ?? 0) + delta)
+    updateField('maxHitPoints', newMax)
+    if ((character.value.currentHp ?? 0) > newMax) updateField('currentHp', newMax)
+  }
+
   function adjustMoney(type, delta) {
     if (!character.value) return
     const next = Math.max(0, (character.value[type] ?? 0) + delta)
@@ -234,7 +246,7 @@ export const useCharacterStore = defineStore('character', () => {
     currentSessionId, canEditActiveCharacter, myCharacters, otherCharacters,
     loading, saving,
     loadAll, setActive, importCharacter, deleteCharacter,
-    updateField, adjustHp, adjustMoney,
+    updateField, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
     addGearItem, updateGearItem, deleteGearItem, updateAttack, deleteAttack,
     cleanup,
   }

@@ -1,6 +1,7 @@
 <template>
   <div class="flex items-center gap-2">
     <button
+      v-tooltip.bottom="expired ? 'The torch has gone out — light a new one' : running ? 'Pause the torch timer' : 'Start the torch timer'"
       :class="[
         'flex items-center gap-1.5 px-2 py-1 rounded transition-colors font-mono text-sm',
         expired
@@ -9,7 +10,6 @@
             ? 'text-amber-400 hover:bg-stone-800'
             : 'text-stone-500 hover:bg-stone-800 hover:text-parchment-400',
       ]"
-      :title="expired ? 'Torch has gone out! Light a new one.' : running ? 'Pause torch' : 'Start torch'"
       :disabled="!dungeonStore.dungeon"
       @click="toggleRunning"
     >
@@ -20,8 +20,8 @@
     </button>
 
     <button
+      v-tooltip.bottom="'Light a new torch — resets the timer to 60 minutes'"
       class="text-stone-500 hover:text-parchment-400 transition-colors"
-      title="Light a new torch (reset 60 min)"
       :disabled="!dungeonStore.dungeon"
       @click="reset"
     >
