@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
+import { useActivityStore } from '@/stores/activityStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
 
@@ -146,6 +147,7 @@ export const useD = defineStore('dungeon', () => {
     rooms.value.delete(tempId)
     if (error) { console.error('addRoom error:', error.message); return }
     rooms.value.set(data.id, data)
+    useActivityStore().record('added room', data.name ?? 'Unnamed Room')
   }
 
   async function updateRoom(id, patch) {
@@ -173,6 +175,8 @@ export const useD = defineStore('dungeon', () => {
     if (error) {
       if (backup) rooms.value.set(id, backup)
       console.error('deleteRoom error:', error.message)
+    } else {
+      useActivityStore().record('deleted room', backup?.name ?? 'Unnamed Room')
     }
   }
 
@@ -190,6 +194,7 @@ export const useD = defineStore('dungeon', () => {
     corridors.value.delete(tempId)
     if (error) { console.error('addCorridor error:', error.message); return }
     corridors.value.set(data.id, data)
+    useActivityStore().record('added corridor', '')
   }
 
   async function updateCorridor(id, patch) {
@@ -217,6 +222,8 @@ export const useD = defineStore('dungeon', () => {
     if (error) {
       if (backup) corridors.value.set(id, backup)
       console.error('deleteCorridor error:', error.message)
+    } else {
+      useActivityStore().record('deleted corridor', '')
     }
   }
 
@@ -225,6 +232,20 @@ export const useD = defineStore('dungeon', () => {
     if (!room) return
     const doors = [...(room.doors ?? []), { id: crypto.randomUUID(), ...doorData }]
     updateRoom(roomId, { doors })
+    useActivityStore().record('added door to', room.name ?? 'Unnamed Room')
+  }
+
+  function moveDoor(fromRoomId, doorId, toRoomId, newDoorData) {
+    if (fromRoomId === toRoomId) {
+      const room = rooms.value.get(fromRoomId)
+      if (!room) return
+      updateRoom(fromRoomId, { doors: (room.doors ?? []).map(d => d.id === doorId ? { ...newDoorData } : d) })
+    } else {
+      const from = rooms.value.get(fromRoomId)
+      if (from) updateRoom(fromRoomId, { doors: (from.doors ?? []).filter(d => d.id !== doorId) })
+      const to = rooms.value.get(toRoomId)
+      if (to) updateRoom(toRoomId, { doors: [...(to.doors ?? []), { ...newDoorData }] })
+    }
   }
 
   function removeDoor(roomId, doorId) {
@@ -232,6 +253,7 @@ export const useD = defineStore('dungeon', () => {
     if (!room) return
     const doors = (room.doors ?? []).filter(d => d.id !== doorId)
     updateRoom(roomId, { doors })
+    useActivityStore().record('removed door from', room.name ?? 'Unnamed Room')
   }
 
   function addRoomItem(roomId, type, x, y) {
@@ -352,6 +374,7 @@ export const useD = defineStore('dungeon', () => {
     updateCorridor,
     deleteCorridor,
     addDoor,
+    moveDoor,
     removeDoor,
     addRoomItem,
     removeRoomItem,

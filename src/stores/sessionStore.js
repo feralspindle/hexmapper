@@ -4,9 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
 import router from '@/router/index.js'
 
-const CLIENT_ID = crypto.randomUUID()
-
 export const useSessionStore = defineStore('session', () => {
+  const CLIENT_ID = crypto.randomUUID()
   const sessionId      = ref(null)
   const sessionName    = ref('Untitled Campaign')
   const sessionOwnerId = ref(null)
@@ -112,27 +111,14 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function joinSession(id) {
-    const authStore = useAuthStore()
     loading.value = true
     error.value = null
     try {
-      const { data, error: err } = await supabase
-        .from('sessions')
-        .select()
-        .eq('id', id)
-        .single()
+      // Uses the join_session RPC (security definer) so sessions don't need to be
+      // publicly enumerable — the UUID is the access credential.
+      const { data, error: err } = await supabase.rpc('join_session', { p_session_id: id })
       if (err) throw err
       _applySessionRow(data)
-
-      if (authStore.user?.id) {
-        await supabase
-          .from('session_members')
-          .upsert(
-            { session_id: id, user_id: authStore.user.id, last_seen_at: new Date().toISOString() },
-            { onConflict: 'session_id,user_id' },
-          )
-      }
-
       _subscribeToSession(id)
     } catch (e) {
       error.value = 'Session not found. Check the ID and try again.'

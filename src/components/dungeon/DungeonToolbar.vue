@@ -47,19 +47,6 @@
       <i class="fa-solid fa-trash text-sm" />
     </button>
 
-    <div v-if="dungeonStore.selectedElement?.type === 'room'" class="flex flex-col gap-1">
-      <div class="border-t border-stone-700 my-0.5 self-stretch" />
-      <p class="text-stone-400 text-sm text-center uppercase tracking-widest">Fill</p>
-      <div class="grid grid-cols-2 gap-1">
-        <button
-          v-for="color in roomColors"
-          :key="color"
-          class="w-4 h-4 rounded border border-stone-600 hover:scale-110 transition-transform"
-          :style="{ backgroundColor: color }"
-          @click="setRoomColor(color)"
-        />
-      </div>
-    </div>
   </div>
 </template>
 
@@ -83,17 +70,6 @@ const tools = [
   { mode: 'polygon',  icon: 'fa-solid fa-draw-polygon',           label: 'Draw Polygon Room (W)' },
 ]
 
-const roomColors = [
-  '#ffffff',
-  '#dddddd',
-  '#bbbbbb',
-  '#999999',
-  '#ccddcc',
-  '#ccccdd',
-  '#ddcccc',
-  '#ddddcc',
-]
-
 function deleteSelected() {
   if (!dungeonStore.selectedElement) return
   const { type, id } = dungeonStore.selectedElement
@@ -104,8 +80,5 @@ function deleteSelected() {
   }
 }
 
-function setRoomColor(color) {
-  if (dungeonStore.selectedElement?.type !== 'room') return
-  dungeonStore.updateRoom(dungeonStore.selectedElement.id, { color })
-}
+
 </script>

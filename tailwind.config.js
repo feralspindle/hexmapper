@@ -14,7 +14,7 @@ export default {
         },
       },
       fontFamily: {
-        display: ['"Uncial Antiqua"', 'serif'],
+        display: ['"IM Fell English"', 'Georgia', 'serif'],
         body: ['"IM Fell English"', 'Georgia', 'serif'],
         mono: ['"Courier New"', 'monospace'],
       },

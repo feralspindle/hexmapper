@@ -1,98 +1,69 @@
 <template>
-  <div v-if="isStaging" class="relative" ref="containerEl">
+  <div v-if="isStaging" class="relative" ref="containerEl" style="align-self:stretch;display:flex;align-items:center">
     <button
-      class="flex items-center gap-1.5 text-sm px-2 py-1 rounded transition-colors text-red-500 hover:text-red-400 hover:bg-stone-800"
+      class="ds-tb-btn"
+      :class="{ active: open }"
+      style="color: #f87171"
       title="Report a bug (staging only)"
       @click="open = !open"
     >
-      <i class="fa-solid fa-bug" />
-      <span class="hidden sm:inline text-sm">Bug</span>
+      <i class="fa-solid fa-bug" style="font-size:13px" />
     </button>
     <Transition name="bug-dropdown">
-      <div
-        v-if="open"
-        class="absolute top-full right-0 mt-1.5 w-80 bg-stone-900 border border-stone-700 rounded-lg shadow-2xl shadow-black/70 z-[200] overflow-hidden"
-      >
-        <div class="px-4 py-2.5 border-b border-stone-700 flex items-center gap-2">
-          <i class="fa-solid fa-bug text-red-500 text-sm" />
-          <span class="text-stone-200 text-sm font-display">Report a Bug</span>
-          <button
-            class="ml-auto text-stone-500 hover:text-stone-300 text-lg leading-none transition-colors"
-            @click="open = false"
-          >&times;</button>
+      <div v-if="open" class="br-menu">
+        <div class="br-header">
+          <i class="fa-solid fa-bug" style="font-size:12px;color:#c0392b" />
+          <span class="br-title">Report a Bug</span>
+          <button class="br-close" @click="open = false">&times;</button>
         </div>
 
-        <div class="p-4 space-y-3">
-          <div class="text-[12px] text-stone-500 bg-stone-800/60 rounded px-2.5 py-2 space-y-0.5 border border-stone-700/50">
-            <div><span class="text-stone-600">Area:</span> {{ collectedMeta.area }}</div>
-            <div v-if="collectedMeta.session_name">
-              <span class="text-stone-600">Session:</span> {{ collectedMeta.session_name }}
-            </div>
-            <div v-if="collectedMeta.viewer_count != null">
-              <span class="text-stone-600">Users in session:</span> {{ collectedMeta.viewer_count }}
-            </div>
-            <div>
-              <span class="text-stone-600">Viewport:</span>
-              {{ collectedMeta.viewport_width }}×{{ collectedMeta.viewport_height }}
-            </div>
-            <div>
-              <span class="text-stone-600">Browser:</span> {{ collectedMeta.browser_summary }}
-            </div>
+        <div class="br-body">
+          <div class="br-meta">
+            <div><span class="br-meta-key">Area:</span> {{ collectedMeta.area }}</div>
+            <div v-if="collectedMeta.session_name"><span class="br-meta-key">Session:</span> {{ collectedMeta.session_name }}</div>
+            <div v-if="collectedMeta.viewer_count != null"><span class="br-meta-key">Users:</span> {{ collectedMeta.viewer_count }}</div>
+            <div><span class="br-meta-key">Viewport:</span> {{ collectedMeta.viewport_width }}×{{ collectedMeta.viewport_height }}</div>
+            <div><span class="br-meta-key">Browser:</span> {{ collectedMeta.browser_summary }}</div>
           </div>
 
           <div>
-            <label class="block text-sm text-stone-400 mb-1">What dun broke?</label>
+            <label class="br-label">What dun broke?</label>
             <textarea
               v-model="description"
               placeholder="Describe the problem..."
               rows="4"
               maxlength="2000"
-              class="w-full bg-stone-800 border border-stone-700 rounded px-2.5 py-2 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-parchment-400 resize-none"
+              class="br-textarea"
             />
           </div>
+
           <div>
-            <label class="block text-sm text-stone-400 mb-1">
-              Screenshot of the broke shit <span class="text-stone-500">(optional but super helpful usually. please dont send me a penis)</span>
+            <label class="br-label">
+              Screenshot <span class="br-label-note">(optional but helpful. no penises please)</span>
             </label>
-            <div
-              class="relative border border-dashed rounded overflow-hidden transition-colors"
-              :class="previewUrl ? 'border-stone-600' : 'border-stone-700 hover:border-stone-500'"
-            >
-              <img v-if="previewUrl" :src="previewUrl" class="w-full max-h-32 object-cover" />
-              <div v-else class="flex items-center justify-center gap-2 text-stone-600 text-sm py-3 cursor-pointer">
+            <div class="br-drop" :class="{ 'br-drop--filled': previewUrl }">
+              <img v-if="previewUrl" :src="previewUrl" style="width:100%;max-height:120px;object-fit:cover;display:block" />
+              <div v-else class="br-drop-prompt">
                 <i class="fa-solid fa-image" />
-                <span>Click to attach image (NOT of a PENIS)</span>
+                <span>Click to attach image</span>
               </div>
-              <input
-                type="file"
-                accept="image/*"
-                class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                @change="onFile"
-              />
-              <button
-                v-if="previewUrl"
-                class="absolute top-1 right-1 bg-stone-900/80 rounded text-stone-400 hover:text-stone-200 text-sm px-1.5 py-0.5 transition-colors"
-                @click.prevent="clearFile"
-              >✕</button>
+              <input type="file" accept="image/*" class="br-file-input" @change="onFile" />
+              <button v-if="previewUrl" class="br-clear" @click.prevent="clearFile">✕</button>
             </div>
           </div>
 
           <button
+            class="br-submit"
+            :class="{ 'br-submit--disabled': !description.trim() || submitting }"
             :disabled="!description.trim() || submitting"
-            class="w-full py-2 rounded font-display text-sm transition-colors"
-            :class="description.trim() && !submitting
-              ? 'bg-red-800 hover:bg-red-700 text-white'
-              : 'bg-stone-800 text-stone-600 cursor-not-allowed border border-stone-700'"
             @click="submit"
           >
-            <i v-if="submitting" class="fa-solid fa-spinner fa-spin mr-1.5" />
-            {{ submitting ? 'Submitting...' : 'Submit Bug Report' }}
+            <i v-if="submitting" class="fa-solid fa-spinner fa-spin" style="margin-right:4px" />
+            {{ submitting ? 'Submitting…' : 'Submit Bug Report' }}
           </button>
 
-          <p v-if="submitted" class="text-green-400 text-sm text-center">
-            <i class="fa-solid fa-check mr-1" />Thanks! Report submitted.
-          </p>
-          <p v-if="submitError" class="text-red-400 text-sm text-center">{{ submitError }}</p>
+          <p v-if="submitted" class="br-success"><i class="fa-solid fa-check" style="margin-right:4px" />Thanks! Report submitted.</p>
+          <p v-if="submitError" class="br-error">{{ submitError }}</p>
         </div>
       </div>
     </Transition>
@@ -100,11 +71,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { supabase } from '@/lib/supabase.js'
+import { activeNavDropdown } from '@/composables/useNavDropdown.js'
 
 const isStaging = import.meta.env.VITE_APP_ENV === 'staging'
 
@@ -184,11 +156,16 @@ async function submit() {
     let screenshotPath = null
 
     if (screenshotFile.value) {
-      const ext  = screenshotFile.value.name.split('.').pop()
-      const path = `${Date.now()}-${crypto.randomUUID()}.${ext}`
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+      const EXT_MAP = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
+      const mimeType = screenshotFile.value.type
+      if (!ALLOWED_TYPES.includes(mimeType)) throw new Error('Only image files are allowed')
+      const ext  = EXT_MAP[mimeType] ?? 'jpg'
+      // Upload into per-user folder so storage policy can enforce ownership
+      const path = `${authStore.user?.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`
       const { error: uploadErr } = await supabase.storage
         .from('bug-screenshots')
-        .upload(path, screenshotFile.value)
+        .upload(path, screenshotFile.value, { contentType: mimeType })
       if (!uploadErr) screenshotPath = path
     }
 
@@ -212,6 +189,14 @@ async function submit() {
   }
 }
 
+watch(open, (val) => {
+  if (val) activeNavDropdown.value = 'bug-report'
+  else if (activeNavDropdown.value === 'bug-report') activeNavDropdown.value = null
+})
+watch(activeNavDropdown, (val) => {
+  if (val !== null && val !== 'bug-report') open.value = false
+})
+
 function onClickOutside(e) {
   if (containerEl.value && !containerEl.value.contains(e.target)) open.value = false
 }
@@ -225,4 +210,135 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 .bug-dropdown-leave-active { transition: all 0.1s ease-in; }
 .bug-dropdown-enter-from   { opacity: 0; transform: translateY(-6px); }
 .bug-dropdown-leave-to     { opacity: 0; transform: translateY(-6px); }
+
+.br-menu {
+  position: absolute;
+  top: 100%; right: 0;
+  margin-top: 0;
+  width: 320px;
+  z-index: 200;
+  background: var(--paper, #ede1c7);
+  border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
+  box-shadow: 0 8px 24px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.14);
+  font-family: var(--font-body, "Cormorant Garamond", Georgia, serif);
+  overflow: hidden;
+}
+.br-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--rule-strong, rgba(26,20,16,.42));
+}
+.br-title {
+  flex: 1;
+  font-family: var(--font-zine, "Special Elite", monospace);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-mute, #8a7a68);
+}
+.br-close {
+  background: transparent;
+  border: none;
+  color: var(--ink-mute, #8a7a68);
+  font-size: 16px;
+  line-height: 1;
+  cursor: default;
+  transition: color .1s;
+  padding: 0 2px;
+}
+.br-close:hover { color: var(--ink, #1a1410); }
+.br-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.br-meta {
+  background: var(--paper-2, #e3d4b3);
+  border: 1px solid var(--rule, rgba(26,20,16,.18));
+  padding: 7px 9px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--ink-2, #3a2e22);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.br-meta-key { color: var(--ink-mute, #8a7a68); }
+.br-label {
+  display: block;
+  font-family: var(--font-zine, "Special Elite", monospace);
+  font-size: 9.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-mute, #8a7a68);
+  margin-bottom: 5px;
+}
+.br-label-note { font-family: var(--font-body, Georgia, serif); text-transform: none; letter-spacing: 0; font-size: 10px; }
+.br-textarea {
+  width: 100%;
+  background: var(--paper-2, #e3d4b3);
+  border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
+  padding: 6px 8px;
+  font-family: var(--font-body, Georgia, serif);
+  font-size: 13px;
+  color: var(--ink, #1a1410);
+  resize: none;
+  outline: none;
+  transition: border-color .15s;
+}
+.br-textarea:focus { border-color: var(--accent, #8a1c1c); }
+.br-textarea::placeholder { color: var(--ink-mute, #8a7a68); font-style: italic; }
+.br-drop {
+  position: relative;
+  border: 1px dashed var(--rule-strong, rgba(26,20,16,.42));
+  overflow: hidden;
+  transition: border-color .15s;
+  cursor: pointer;
+}
+.br-drop:hover:not(.br-drop--filled) { border-color: var(--ink-mute, #8a7a68); }
+.br-drop--filled { border-style: solid; }
+.br-drop-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  font-size: 12px;
+  color: var(--ink-mute, #8a7a68);
+}
+.br-file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.br-clear {
+  position: absolute;
+  top: 4px; right: 4px;
+  background: rgba(26,20,16,.7);
+  border: none;
+  color: var(--paper, #ede1c7);
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: default;
+  transition: background .1s;
+}
+.br-clear:hover { background: rgba(26,20,16,.9); }
+.br-submit {
+  width: 100%;
+  padding: 7px;
+  background: #8a1c1c;
+  color: #ede1c7;
+  border: none;
+  font-family: var(--font-zine, "Special Elite", monospace);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: default;
+  transition: background .12s;
+}
+.br-submit:hover:not(:disabled) { background: #a52020; }
+.br-submit--disabled { background: var(--paper-2, #e3d4b3); color: var(--ink-mute, #8a7a68); cursor: not-allowed; }
+.br-success { font-size: 12px; color: #3a6b3a; text-align: center; margin: 0; }
+.br-error   { font-size: 12px; color: var(--accent, #8a1c1c); text-align: center; margin: 0; }
 </style>

@@ -1,11 +1,12 @@
 <template>
   <div class="relative">
     <button
-      class="flex items-center gap-1.5 text-sm px-2 py-1 rounded transition-colors text-parchment-400 hover:text-parchment-200 hover:bg-stone-800"
+      class="ds-tb-btn"
+      :title="copied ? 'Copied!' : 'Copy session link'"
       @click="copyLink"
     >
-      <i :class="copied ? 'fa-solid fa-check' : 'fa-solid fa-link'" class="mr-1" />
-      {{ copied ? 'Copied Session ID!' : 'Share Session ID' }}
+      <i :class="copied ? 'fa-solid fa-check' : 'fa-solid fa-link'" style="font-size:12px" />
+      <span style="font-size:12px">{{ copied ? 'Copied!' : 'Share' }}</span>
     </button>
   </div>
 </template>

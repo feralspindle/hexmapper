@@ -1,25 +1,16 @@
 <template>
-  <div
-    class="absolute left-1/2 -translate-x-1/2 z-20 flex flex-col-reverse gap-1.5 pointer-events-none select-none items-center"
-    :class="bottomClass"
-  >
+  <div class="ds-chat-toasts" :class="bottomClass">
     <TransitionGroup name="chat-toast">
-      <div
-        v-for="toast in toasts"
-        :key="toast.id"
-        class="bg-stone-900/90 border border-stone-600 rounded-lg px-3 py-1.5 backdrop-blur flex items-center gap-2 text-sm max-w-xs pointer-events-auto"
-      >
-        <i class="fa-solid fa-comment text-stone-500 shrink-0 text-[10px]" />
-        <span
-          class="font-display shrink-0"
-          :class="toast.msg.user_id === authStore.user?.id ? 'text-parchment-400' : 'text-stone-300'"
-        >{{ gmName(toast.msg.user_id, toast.msg.display_name) }}</span>
-        <span class="text-stone-500 shrink-0">·</span>
-        <span class="text-stone-200 truncate">{{ toast.msg.body }}</span>
-        <button
-          class="ml-1 text-parchment-400 hover:text-parchment-200 transition-colors shrink-0 leading-none text-sm"
-          @click="toasts = toasts.filter(t => t.id !== toast.id)"
-        >&times;</button>
+      <div v-for="toast in toasts" :key="toast.id" class="ds-chat-toast">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex:0 0 auto;margin-top:1px">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+        </svg>
+        <span class="ds-ct-who" :style="{ color: playerColorFor(toast.msg.user_id) }">
+          {{ gmName(toast.msg.user_id, toast.msg.display_name) }}
+        </span>
+        <span class="ds-ct-sep">·</span>
+        <span class="ds-ct-body">{{ toast.msg.body }}</span>
+        <button class="ds-ct-close" @click="toasts = toasts.filter(t => t.id !== toast.id)">×</button>
       </div>
     </TransitionGroup>
   </div>
@@ -27,42 +18,94 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-
-const props = defineProps({
-  bottomClass: { type: String, default: 'bottom-16' },
-})
 import { useChatStore } from '@/stores/chatStore.js'
-import { useAuthStore } from '@/stores/authStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
+import { playerColorFor } from '@/composables/usePlayerColor.js'
+
+defineProps({ bottomClass: { type: String, default: 'bottom-16' } })
 
 const chatStore = useChatStore()
-const authStore = useAuthStore()
 const { gmName } = useGMLabel()
-
 const toasts = ref([])
 
-watch(
-  () => chatStore.latestMessage,
-  (msg) => {
-    if (!msg) return
-
-    const id = msg.id ?? `${msg.user_id}-${msg.created_at}`
-    if (toasts.value.some(t => t.id === id)) return
-
-    toasts.value.push({ id, msg })
-    if (toasts.value.length > 4) toasts.value.shift()
-
-    setTimeout(() => {
-      toasts.value = toasts.value.filter(t => t.id !== id)
-    }, 4000)
-  },
-)
+watch(() => chatStore.latestMessage, (msg) => {
+  if (!msg) return
+  const id = msg.id ?? `${msg.user_id}-${msg.created_at}`
+  if (toasts.value.some(t => t.id === id)) return
+  toasts.value.push({ id, msg })
+  if (toasts.value.length > 4) toasts.value.shift()
+  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 4000)
+})
 </script>
 
 <style scoped>
+.ds-chat-toasts {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  pointer-events: none;
+  user-select: none;
+  align-items: center;
+}
+
+.ds-chat-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--ink, #1a1410);
+  border: 1px solid rgba(237,225,199,.18);
+  border-radius: 3px;
+  padding: 7px 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.6), 0 0 0 1px rgba(237,225,199,.05) inset;
+  max-width: 280px;
+  pointer-events: auto;
+}
+
+.ds-ct-who {
+  font-family: var(--font-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.ds-ct-sep {
+  color: rgba(237,225,199,.3);
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+
+.ds-ct-body {
+  font-family: var(--font-body, serif);
+  font-size: 13px;
+  color: rgba(237,225,199,.85);
+  line-height: 1.35;
+  word-break: break-word;
+  flex: 1;
+  min-width: 0;
+}
+
+.ds-ct-close {
+  background: transparent;
+  border: 0;
+  color: rgba(237,225,199,.3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0 0 4px;
+  flex: 0 0 auto;
+  transition: color .12s;
+}
+.ds-ct-close:hover { color: rgba(237,225,199,.7); }
+
 .chat-toast-enter-active { transition: all 0.15s ease-out; }
 .chat-toast-leave-active { transition: all 0.4s ease-in; }
-.chat-toast-enter-from   { opacity: 0; transform: translateY(8px); }
-.chat-toast-leave-to     { opacity: 0; transform: translateY(8px); }
+.chat-toast-enter-from   { opacity: 0; transform: translateY(6px); }
+.chat-toast-leave-to     { opacity: 0; transform: translateY(6px); }
 .chat-toast-move         { transition: transform 0.2s ease; }
 </style>

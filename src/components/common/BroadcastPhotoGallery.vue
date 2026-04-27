@@ -32,8 +32,6 @@
         </button>
       </div>
     </div>
-
-    <!-- Lightbox -->
     <Teleport to="body">
       <div
         v-if="enlarged"

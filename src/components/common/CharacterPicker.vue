@@ -1,14 +1,13 @@
 <template>
-  <div class="relative" ref="wrapperEl">
+  <div class="relative" ref="wrapperEl" style="align-self:stretch;display:flex;align-items:center">
     <button
-      class="flex items-center gap-1.5 text-sm px-2 py-1 rounded transition-colors max-w-36"
-      :class="open
-        ? 'text-stone-900 bg-parchment-400'
-        : 'text-parchment-400 hover:text-parchment-200 hover:bg-stone-800'"
+      class="ds-tb-btn"
+      :class="{ active: open }"
+      style="max-width:160px"
       @click="open = !open"
     >
-      <i class="fa-solid fa-chevron-down text-sm shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" />
-      <span class="truncate">{{ characterStore.character?.name ?? 'Characters' }}</span>
+      <i class="fa-solid fa-chevron-down shrink-0 transition-transform" style="font-size:11px" :class="open ? 'rotate-180' : ''" />
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">{{ characterStore.character?.name ?? 'Characters' }}</span>
     </button>
 
     <Transition
@@ -19,129 +18,77 @@
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 -translate-y-1"
     >
-      <div
-        v-if="open"
-        class="absolute top-full right-0 mt-1.5 w-56 bg-stone-800 border border-stone-600 rounded-lg shadow-2xl z-50 overflow-hidden"
-        @click.stop
-      >
+      <div v-if="open" class="cp-menu" @click.stop>
 
-       
         <template v-if="!importMode">
-          <div v-if="characterStore.loading" class="px-3 py-3 text-sm text-stone-500">
-            Loading…
-          </div>
+          <div v-if="characterStore.loading" class="cp-empty">Loading…</div>
 
           <template v-else>
-         
-            <div
-              v-if="sessionStore.isGM && characterStore.myCharacters.length"
-              class="px-3 pt-2 pb-1 text-xs text-stone-500 uppercase tracking-wider font-display"
-            >
+            <div v-if="sessionStore.isGM && characterStore.myCharacters.length" class="cp-section-head">
               Your Characters
             </div>
             <button
               v-for="char in characterStore.myCharacters"
               :key="char.id"
-              class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-left group"
+              class="cp-row cp-row-group"
               @click="selectChar(char.id)"
             >
-              <i
-                class="fa-solid fa-check text-parchment-400 text-sm w-3 shrink-0"
-                :class="char.id === characterStore.activeId ? 'opacity-100' : 'opacity-0'"
-              />
-              <span class="flex-1 text-sm text-stone-200 truncate">{{ char.data?.name ?? 'Unnamed' }}</span>
-              <button
-                class="opacity-0 group-hover:opacity-100 text-stone-600 hover:text-red-400 transition-colors shrink-0"
-                title="Delete character"
-                @click.stop="confirmDelete(char)"
-              >
-                <i class="fa-solid fa-trash text-sm" />
+              <i class="fa-solid fa-check cp-check" :style="char.id === characterStore.activeId ? 'opacity:1' : 'opacity:0'" />
+              <span class="cp-name">{{ char.data?.name ?? 'Unnamed' }}</span>
+              <button class="cp-del" title="Delete character" @click.stop="confirmDelete(char)">
+                <i class="fa-solid fa-trash" />
               </button>
             </button>
 
             <template v-if="sessionStore.isGM && characterStore.otherCharacters.length">
-              <div class="px-3 pt-2 pb-1 text-xs text-stone-500 uppercase tracking-wider font-display border-t border-stone-700 mt-1">
-                Players' Characters
-              </div>
+              <div class="cp-section-head cp-section-head--ruled">Players' Characters</div>
               <button
                 v-for="char in characterStore.otherCharacters"
                 :key="char.id"
-                class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-left"
+                class="cp-row"
                 @click="selectChar(char.id)"
               >
-                <i
-                  class="fa-solid fa-check text-parchment-400 text-sm w-3 shrink-0"
-                  :class="char.id === characterStore.activeId ? 'opacity-100' : 'opacity-0'"
-                />
-                <i class="fa-solid fa-user text-stone-500 text-sm shrink-0" />
-                <span class="flex-1 text-sm text-stone-300 truncate">{{ char.data?.name ?? 'Unnamed' }}</span>
+                <i class="fa-solid fa-check cp-check" :style="char.id === characterStore.activeId ? 'opacity:1' : 'opacity:0'" />
+                <i class="fa-solid fa-user cp-other-icon" />
+                <span class="cp-name">{{ char.data?.name ?? 'Unnamed' }}</span>
               </button>
             </template>
 
-            <template v-if="!sessionStore.isGM">
-              <div v-if="!characterStore.myCharacters.length" class="px-3 py-3 text-sm text-stone-500 italic">
-                No characters yet
-              </div>
-            </template>
-
-            <div
-              v-if="sessionStore.isGM && !characterStore.characters.length"
-              class="px-3 py-3 text-sm text-stone-500 italic"
-            >
+            <div v-if="!sessionStore.isGM && !characterStore.myCharacters.length" class="cp-empty">
+              No characters yet
+            </div>
+            <div v-if="sessionStore.isGM && !characterStore.characters.length" class="cp-empty">
               No trashbags in this campaign yet
             </div>
           </template>
 
-          <div class="border-t border-stone-700" />
+          <div class="cp-divider" />
 
-          <button
-            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-sm text-stone-400 hover:text-stone-200"
-            @click="newCharOpen = true; open = false"
-          >
-            <i class="fa-solid fa-user-plus text-sm" />
+          <button class="cp-row cp-row--muted" @click="newCharOpen = true; open = false">
+            <i class="fa-solid fa-user-plus" />
             New trashbag
           </button>
-
-          <button
-            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-sm text-stone-400 hover:text-stone-200"
-            @click="importMode = true"
-          >
-            <i class="fa-solid fa-file-import text-sm" />
+          <button class="cp-row cp-row--muted" @click="importMode = true">
+            <i class="fa-solid fa-file-import" />
             Import trashbag
           </button>
         </template>
 
         <template v-else>
-          <div class="p-3">
-            <div class="flex items-center gap-2 mb-2.5">
-              <button
-                class="text-stone-500 hover:text-stone-300 transition-colors"
-                @click="importMode = false; importError = ''"
-              >
-                <i class="fa-solid fa-arrow-left text-sm" />
+          <div class="cp-import">
+            <div class="cp-import-head">
+              <button class="cp-back" @click="importMode = false; importError = ''">
+                <i class="fa-solid fa-arrow-left" />
               </button>
-              <span class="text-xs text-stone-400 font-display">Import trashbag</span>
+              <span class="cp-import-title">Import trashbag</span>
             </div>
-
-            <textarea
-              v-model="pasteText"
-              rows="6"
-              placeholder="Paste trashbag JSON here"
-              class="w-full text-sm bg-stone-950/40 border border-stone-600 rounded p-2 resize-none focus:outline-none focus:border-parchment-500 font-mono text-stone-300 placeholder-stone-500"
-            />
-
-            <p v-if="importError" class="text-red-400 text-sm mt-1.5">{{ importError }}</p>
-
-            <div class="flex gap-2 mt-2">
-              <button
-                class="flex-1 py-1.5 rounded text-sm bg-stone-600 hover:bg-stone-500 transition-colors text-stone-200"
-                @click="handlePaste"
-              >
-                Import JSON
-              </button>
-              <label class="flex-1 py-1.5 rounded text-sm bg-stone-600 hover:bg-stone-500 transition-colors text-center cursor-pointer text-stone-200">
+            <textarea v-model="pasteText" rows="6" placeholder="Paste trashbag JSON here" class="cp-textarea" />
+            <p v-if="importError" class="cp-error">{{ importError }}</p>
+            <div class="cp-import-btns">
+              <button class="ds-btn tiny" style="flex:1" @click="handlePaste">Import JSON</button>
+              <label class="ds-btn tiny" style="flex:1;text-align:center;cursor:pointer">
                 Upload file
-                <input type="file" accept=".json,application/json" class="hidden" @change="handleFile" />
+                <input type="file" accept=".json,application/json" style="display:none" @change="handleFile" />
               </label>
             </div>
           </div>
@@ -159,6 +106,7 @@ import { ref, watch, nextTick, onUnmounted } from 'vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
+import { activeNavDropdown } from '@/composables/useNavDropdown.js'
 import NewCharacterModal from './NewCharacterModal.vue'
 
 const characterStore = useCharacterStore()
@@ -176,8 +124,16 @@ function onOutsideClick(e) {
   if (!wrapperEl.value?.contains(e.target)) open.value = false
 }
 watch(open, (val) => {
-  if (val) nextTick(() => document.addEventListener('click', onOutsideClick))
-  else document.removeEventListener('click', onOutsideClick)
+  if (val) {
+    activeNavDropdown.value = 'char-picker'
+    nextTick(() => document.addEventListener('click', onOutsideClick))
+  } else {
+    if (activeNavDropdown.value === 'char-picker') activeNavDropdown.value = null
+    document.removeEventListener('click', onOutsideClick)
+  }
+})
+watch(activeNavDropdown, (val) => {
+  if (val !== null && val !== 'char-picker') open.value = false
 })
 onUnmounted(() => document.removeEventListener('click', onOutsideClick))
 
@@ -221,3 +177,107 @@ async function handleFile(event) {
   event.target.value = ''
 }
 </script>
+
+<style scoped>
+.cp-menu {
+  position: absolute;
+  top: 100%; right: 0;
+  margin-top: 0;
+  width: 224px;
+  z-index: 50;
+  background: var(--paper, #ede1c7);
+  border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
+  box-shadow: 0 8px 24px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.14);
+  font-family: var(--font-body, "Cormorant Garamond", Georgia, serif);
+  overflow: hidden;
+}
+.cp-section-head {
+  padding: 6px 12px 4px;
+  font-family: var(--font-zine, "Special Elite", monospace);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-mute, #8a7a68);
+}
+.cp-section-head--ruled {
+  border-top: 1px solid var(--rule, rgba(26,20,16,.18));
+  margin-top: 2px;
+  padding-top: 8px;
+}
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  font-family: var(--font-body, "Cormorant Garamond", Georgia, serif);
+  font-size: 13px;
+  color: var(--ink, #1a1410);
+  cursor: default;
+  transition: background .1s;
+}
+.cp-row:hover { background: var(--paper-2, #e3d4b3); }
+.cp-row--muted { color: var(--ink-mute, #8a7a68); font-size: 12px; }
+.cp-row--muted:hover { color: var(--ink, #1a1410); }
+.cp-check { font-size: 11px; width: 12px; flex-shrink: 0; color: var(--accent, #8a1c1c); transition: opacity .1s; }
+.cp-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-other-icon { font-size: 11px; color: var(--ink-mute, #8a7a68); flex-shrink: 0; }
+.cp-del {
+  opacity: 0;
+  background: transparent;
+  border: none;
+  color: var(--ink-mute, #8a7a68);
+  font-size: 11px;
+  cursor: default;
+  padding: 2px 4px;
+  transition: color .1s, opacity .1s;
+  flex-shrink: 0;
+}
+.cp-row-group:hover .cp-del { opacity: 1; }
+.cp-del:hover { color: var(--accent, #8a1c1c); }
+.cp-divider { border-top: 1px solid var(--rule, rgba(26,20,16,.18)); margin: 2px 0; }
+.cp-empty {
+  padding: 10px 12px;
+  font-style: italic;
+  font-size: 12px;
+  color: var(--ink-mute, #8a7a68);
+}
+.cp-import { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.cp-import-head { display: flex; align-items: center; gap: 8px; }
+.cp-back {
+  background: transparent;
+  border: none;
+  color: var(--ink-mute, #8a7a68);
+  cursor: default;
+  font-size: 12px;
+  padding: 2px;
+  transition: color .1s;
+}
+.cp-back:hover { color: var(--ink, #1a1410); }
+.cp-import-title {
+  font-family: var(--font-zine, "Special Elite", monospace);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-mute, #8a7a68);
+}
+.cp-textarea {
+  width: 100%;
+  background: var(--paper-2, #e3d4b3);
+  border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
+  padding: 6px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--ink, #1a1410);
+  resize: none;
+  outline: none;
+  transition: border-color .15s;
+}
+.cp-textarea:focus { border-color: var(--accent, #8a1c1c); }
+.cp-textarea::placeholder { color: var(--ink-mute, #8a7a68); }
+.cp-error { font-size: 11px; color: var(--accent, #8a1c1c); margin: 0; }
+.cp-import-btns { display: flex; gap: 6px; }
+</style>

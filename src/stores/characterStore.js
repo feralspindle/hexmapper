@@ -3,8 +3,6 @@ import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
 
-let _saveTimer = null
-
 export function statMod(value) {
   return Math.floor((value - 10) / 2)
 }
@@ -29,11 +27,17 @@ export function parseAttack(str) {
 }
 
 export const useCharacterStore = defineStore('character', () => {
+  // Keyed save timers so editing char A then switching to char B doesn't cancel A's save
+  const _saveTimers = new Map()
+  let _realtimeChannel = null
+
   const characters = ref([])
   const activeId = ref(null)
   const loading = ref(false)
   const saving = ref(false)
   const currentSessionId = ref(null)
+  // user_id → active_character_id, loaded from session_members
+  const memberSelections = ref([])
 
   const activeCharacter = computed(() =>
     characters.value.find(c => c.id === activeId.value) ?? null
@@ -79,6 +83,14 @@ export const useCharacterStore = defineStore('character', () => {
     if (error) { console.error('characterStore.loadAll:', error.message); return }
     characters.value = data ?? []
 
+    _subscribeRealtime(sessionId)
+
+    const { data: members } = await supabase
+      .from('session_members')
+      .select('user_id, active_character_id')
+      .eq('session_id', sessionId)
+    if (members) memberSelections.value = members
+
     const storageKey = `char_active_${authStore.user.id}_${sessionId}`
     const savedId = localStorage.getItem(storageKey)
     if (savedId && characters.value.find(c => c.id === savedId)) {
@@ -96,6 +108,16 @@ export const useCharacterStore = defineStore('character', () => {
       const key = `char_active_${authStore.user.id}_${currentSessionId.value}`
       if (id) localStorage.setItem(key, id)
       else localStorage.removeItem(key)
+      // Update memberSelections locally so party panel reflects instantly
+      const userId = authStore.user.id
+      const existing = memberSelections.value.find(m => m.user_id === userId)
+      if (existing) existing.active_character_id = id ?? null
+      else memberSelections.value = [...memberSelections.value, { user_id: userId, active_character_id: id ?? null }]
+      // Persist to DB so other players see this user's selection
+      supabase.from('session_members').upsert(
+        { session_id: currentSessionId.value, user_id: userId, active_character_id: id ?? null },
+        { onConflict: 'session_id,user_id' },
+      ).then(({ error }) => { if (error) console.warn('setActive upsert:', error.message) })
     }
   }
 
@@ -139,7 +161,7 @@ export const useCharacterStore = defineStore('character', () => {
     characters.value = characters.value.map(c =>
       c.id === activeId.value ? { ...c, data: { ...c.data, [field]: value } } : c
     )
-    _scheduleSave()
+    _scheduleSave(activeId.value)
   }
 
   function adjustHp(delta) {
@@ -218,32 +240,57 @@ export const useCharacterStore = defineStore('character', () => {
     updateField('attacks', character.value.attacks.filter((_, i) => i !== idx))
   }
 
-  async function _save() {
-    if (!activeCharacter.value) return
+  function _subscribeRealtime(sessionId) {
+    if (_realtimeChannel) supabase.removeChannel(_realtimeChannel)
+    _realtimeChannel = supabase
+      .channel(`characters:${sessionId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'characters',
+        filter: `session_id=eq.${sessionId}`,
+      }, (payload) => {
+        const updated = payload.new
+        if (updated.id === activeId.value) return  // we're the source of truth for our own
+        characters.value = characters.value.map(c =>
+          c.id === updated.id ? { ...c, data: _augment(updated.data) } : c
+        )
+      })
+      .subscribe()
+  }
+
+  async function _saveCharacter(charId) {
+    const char = characters.value.find(c => c.id === charId)
+    if (!char) return
     saving.value = true
     const { error } = await supabase
       .from('characters')
-      .update({ data: activeCharacter.value.data })
-      .eq('id', activeCharacter.value.id)
+      .update({ data: char.data })
+      .eq('id', charId)
     saving.value = false
     if (error) console.error('characterStore._save:', error.message)
+    _saveTimers.delete(charId)
   }
 
-  function _scheduleSave() {
-    if (_saveTimer) clearTimeout(_saveTimer)
-    _saveTimer = setTimeout(_save, 800)
+  function _scheduleSave(charId) {
+    if (_saveTimers.has(charId)) clearTimeout(_saveTimers.get(charId))
+    _saveTimers.set(charId, setTimeout(() => _saveCharacter(charId), 800))
   }
 
   function cleanup() {
-    if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null }
+    for (const timer of _saveTimers.values()) clearTimeout(timer)
+    _saveTimers.clear()
+    if (_realtimeChannel) { supabase.removeChannel(_realtimeChannel); _realtimeChannel = null }
     characters.value = []
     activeId.value = null
     currentSessionId.value = null
+    memberSelections.value = []
   }
 
   return {
     characters, activeId, activeCharacter, character,
     currentSessionId, canEditActiveCharacter, myCharacters, otherCharacters,
+    memberSelections,
     loading, saving,
     loadAll, setActive, importCharacter, deleteCharacter,
     updateField, adjustHp, adjustMoney, adjustStat, adjustMaxHp,

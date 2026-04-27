@@ -141,7 +141,7 @@
           <p class="text-sm text-stone-600 mt-1">Select Image or Grid, then drag on the canvas to reposition it.</p>
         </div>
 
-      </div><!-- end alignment controls -->
+      </div>
 
       <div class="border-t border-stone-700 pt-3">
 

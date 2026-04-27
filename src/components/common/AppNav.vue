@@ -25,7 +25,6 @@
       {{ sessionStore.sessionName }}
     </button>
 
-    <!-- Active players -->
     <div v-if="onlineOthers.length" class="flex items-center gap-1.5">
       <div
         v-for="viewer in onlineOthers"

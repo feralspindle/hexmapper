@@ -28,16 +28,27 @@ function pointInPolygon(px, py, points) {
   return inside
 }
 
+export function corridorSegments(c) {
+  if (c.points?.length >= 2) {
+    const segs = []
+    for (let i = 0; i < c.points.length - 1; i++) {
+      segs.push({ x1: c.points[i].x, y1: c.points[i].y, x2: c.points[i+1].x, y2: c.points[i+1].y })
+    }
+    return segs
+  }
+  return [{ x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 }]
+}
+
 export function useDungeonDraw(viewport) {
   const drawState = ref('idle')
   const ghost = ref(null)
 
   const roomStart = ref(null)
-  const corridorStart = ref(null)
+  const corridorPoints = ref([])  // [{gx, gy}, ...]
   const polygonPoints = ref([])
 
   function onMouseDown(event, mode, canvasRect) {
-    if (mode !== 'room' && mode !== 'circle' && mode !== 'corridor') return
+    if (mode !== 'room' && mode !== 'circle') return
     const { gx, gy } = pixelToGrid(
       event.clientX - canvasRect.left,
       event.clientY - canvasRect.top,
@@ -48,12 +59,6 @@ export function useDungeonDraw(viewport) {
       drawState.value = 'drawing_room'
       roomStart.value = { gx, gy }
       ghost.value = { type: mode === 'circle' ? 'circle' : 'room', x: gx, y: gy, w: 0, h: 0 }
-    } else if (mode === 'corridor') {
-      if (drawState.value !== 'corridor_start') {
-        drawState.value = 'corridor_start'
-        corridorStart.value = { gx, gy }
-        ghost.value = { type: 'corridor', x1: gx, y1: gy, x2: gx, y2: gy }
-      }
     }
   }
 
@@ -75,8 +80,8 @@ export function useDungeonDraw(viewport) {
         w: Math.abs(w),
         h: Math.abs(h),
       }
-    } else if (drawState.value === 'corridor_start') {
-      ghost.value = { ...ghost.value, x2: gx, y2: gy }
+    } else if (drawState.value === 'corridor_drawing') {
+      ghost.value = { ...ghost.value, mouseX: gx, mouseY: gy }
     } else if (drawState.value === 'drawing_polygon') {
       ghost.value = { ...ghost.value, mouseX: gx, mouseY: gy }
     }
@@ -115,22 +120,36 @@ export function useDungeonDraw(viewport) {
       viewport.value,
     )
 
-    if (drawState.value !== 'corridor_start') {
-      drawState.value = 'corridor_start'
-      corridorStart.value = { gx, gy }
-      ghost.value = { type: 'corridor', x1: gx, y1: gy, x2: gx, y2: gy }
+    if (drawState.value !== 'corridor_drawing') {
+      drawState.value = 'corridor_drawing'
+      corridorPoints.value = [{ gx, gy }]
+      ghost.value = { type: 'corridor', points: [{ x: gx, y: gy }], mouseX: gx, mouseY: gy }
       return null
-    } else {
-      const corridor = {
-        x1: corridorStart.value.gx,
-        y1: corridorStart.value.gy,
-        x2: gx,
-        y2: gy,
-      }
-      ghost.value = null
-      drawState.value = 'idle'
-      corridorStart.value = null
-      return { type: 'corridor', ...corridor }
+    }
+
+    // Add waypoint
+    corridorPoints.value = [...corridorPoints.value, { gx, gy }]
+    ghost.value = {
+      ...ghost.value,
+      points: corridorPoints.value.map(p => ({ x: p.gx, y: p.gy })),
+      mouseX: gx,
+      mouseY: gy,
+    }
+    return null
+  }
+
+  function commitCorridor() {
+    if (drawState.value !== 'corridor_drawing' || corridorPoints.value.length < 2) return null
+    const pts = corridorPoints.value.map(p => ({ x: p.gx, y: p.gy }))
+    const first = pts[0], last = pts[pts.length - 1]
+    ghost.value = null
+    drawState.value = 'idle'
+    corridorPoints.value = []
+    return {
+      type: 'corridor',
+      points: pts,
+      x1: first.x, y1: first.y,
+      x2: last.x,  y2: last.y,
     }
   }
 
@@ -179,7 +198,7 @@ export function useDungeonDraw(viewport) {
     drawState.value = 'idle'
     ghost.value = null
     roomStart.value = null
-    corridorStart.value = null
+    corridorPoints.value = []
     polygonPoints.value = []
   }
 
@@ -207,8 +226,9 @@ export function useDungeonDraw(viewport) {
 
   function hitTestCorridor(gx, gy, corridors, threshold = 0.8) {
     for (const [id, c] of corridors) {
-      const dist = pointToSegmentDist(gx, gy, c.x1, c.y1, c.x2, c.y2)
-      if (dist <= threshold) return id
+      for (const seg of corridorSegments(c)) {
+        if (pointToSegmentDist(gx, gy, seg.x1, seg.y1, seg.x2, seg.y2) <= threshold) return id
+      }
     }
     return null
   }
@@ -223,6 +243,7 @@ export function useDungeonDraw(viewport) {
     onMouseMove,
     onMouseUp,
     onCanvasClick,
+    commitCorridor,
     onPolygonClick,
     cancel,
     hitTestRoom,

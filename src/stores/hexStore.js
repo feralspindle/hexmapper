@@ -4,8 +4,6 @@ import { supabase } from '@/lib/supabase'
 import router from '@/router/index.js'
 import { useMapStore } from '@/stores/mapStore.js'
 
-const CLIENT_ID = crypto.randomUUID()
-
 export const MARKER_COLORS = [
   { id: 'red',    color: '#ef4444', label: 'Red'    },
   { id: 'orange', color: '#f97316', label: 'Orange' },
@@ -35,6 +33,7 @@ function cellKey(q, r) {
 }
 
 export const useHexStore = defineStore('hex', () => {
+  const CLIENT_ID = crypto.randomUUID()
   const hexCells = ref(new Map())
   const selectedHex = ref(null)
   const hexDungeons = ref([])

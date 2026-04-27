@@ -1,41 +1,28 @@
 <template>
-  <div
-    class="absolute bottom-16 left-4 z-20 flex flex-col-reverse gap-2 pointer-events-none select-none"
-    style="max-width: 230px"
-  >
+  <div class="ds-roll-toasts">
     <TransitionGroup name="roll-toast">
-      <div
-        v-for="toast in toasts"
-        :key="toast.id"
-        class="bg-stone-900/90 border border-stone-600 rounded-lg px-3 py-2 backdrop-blur flex items-start gap-2.5"
-      >
-        <div class="shrink-0 mt-0.5 w-7 h-7 rounded bg-stone-800 border border-stone-600 flex items-center justify-center">
-          <i :class="[dieIconClass(toast.roll), 'text-amber-400 text-base']" />
+      <div v-for="toast in toasts" :key="toast.id" class="ds-roll-toast">
+        <div class="ds-rt-die">
+          <i :class="[dieIconClass(toast.roll), 'ds-rt-die-icon']" />
         </div>
 
-        <div class="min-w-0 flex-1">
-          <div v-if="toast.roll.label" class="text-parchment-400/80 text-sm uppercase tracking-wider mb-0.5" style="font-family: 'Crimson Text', serif">
-            {{ toast.roll.label }}
+        <div class="ds-rt-body">
+          <div v-if="toast.roll.label" class="ds-rt-label">{{ toast.roll.label }}</div>
+
+          <div class="ds-rt-total-row">
+            <span class="ds-rt-total">{{ toast.roll.total }}</span>
+            <span class="ds-rt-formula">{{ rollLabel(toast.roll) }}</span>
+            <span v-if="isCrit(toast.roll)" class="ds-rt-crit">CRIT!</span>
+            <span v-else-if="isFumble(toast.roll)" class="ds-rt-fumble">FAIL</span>
           </div>
 
-          <div class="flex items-baseline gap-1.5">
-            <span class="font-mono font-bold leading-none text-2xl text-parchment-200">{{ toast.roll.total }}</span>
-            <span class="text-stone-300 text-sm font-mono">{{ rollLabel(toast.roll) }}</span>
-            <span v-if="isCrit(toast.roll)" class="text-amber-300 text-sm font-bold ml-auto">CRIT!</span>
-            <span v-else-if="isFumble(toast.roll)" class="text-red-400 text-sm font-bold ml-auto">FAIL</span>
+          <div v-if="toast.roll.results?.length" class="ds-rt-breakdown">
+            [<template v-for="(r, i) in toast.roll.results" :key="i"
+              ><span :class="r.value === 20 && r.die === 'd20' ? 'ds-rt-crit' : r.value === 1 && r.die === 'd20' ? 'ds-rt-fumble' : ''">{{ r.value }}</span><span v-if="i < toast.roll.results.length - 1" class="ds-rt-sep">, </span
+            ></template>]
           </div>
 
-          <div v-if="toast.roll.results?.length" class="text-stone-300 text-sm mt-0.5 font-mono leading-snug">
-            [<template v-for="(r, i) in toast.roll.results" :key="i">
-              <span
-                :class="r.value === 20 && r.die === 'd20' ? 'text-amber-300 font-bold' : r.value === 1 && r.die === 'd20' ? 'text-red-400 font-bold' : 'text-stone-300'"
-              >{{ r.value }}</span><span v-if="i < toast.roll.results.length - 1" class="text-stone-500">, </span>
-            </template>]
-          </div>
-
-          <div class="text-parchment-400/80 text-sm mt-1 truncate" style="font-family: 'Crimson Text', serif; font-style: italic">
-            — {{ gmName(toast.roll.user_id, toast.roll.display_name ?? 'Adventurer') }}
-          </div>
+          <div class="ds-rt-who">— {{ gmName(toast.roll.user_id, toast.roll.display_name ?? 'Adventurer') }}</div>
         </div>
       </div>
     </TransitionGroup>
@@ -124,25 +111,123 @@ function rollLabel(roll) {
   if (mod < 0) return `${label}${mod}`
   return label
 }
-
 </script>
 
 <style scoped>
-.roll-toast-enter-active {
-  transition: all 0.18s ease-out;
+.ds-roll-toasts {
+  position: absolute;
+  bottom: 72px;
+  left: 16px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  max-width: 220px;
+  pointer-events: none;
+  user-select: none;
 }
-.roll-toast-leave-active {
-  transition: all 0.5s ease-in;
+
+.ds-roll-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--ink, #1a1410);
+  border: 1px solid rgba(237,225,199,.18);
+  border-radius: 4px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.65), 0 0 0 1px rgba(237,225,199,.05) inset;
 }
-.roll-toast-enter-from {
-  opacity: 0;
-  transform: translateX(-10px);
+
+.ds-rt-die {
+  flex: 0 0 auto;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: rgba(237,225,199,.07);
+  border: 1px solid rgba(237,225,199,.16);
+  border-radius: 3px;
+  margin-top: 2px;
 }
-.roll-toast-leave-to {
-  opacity: 0;
-  transform: translateX(-10px);
+
+.ds-rt-die-icon {
+  color: var(--accent, #c8a86b);
+  font-size: 14px;
 }
-.roll-toast-move {
-  transition: transform 0.2s ease;
+
+.ds-rt-body {
+  flex: 1;
+  min-width: 0;
 }
+
+.ds-rt-label {
+  font-family: var(--font-zine, 'Special Elite', serif);
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(237,225,199,.45);
+  margin-bottom: 2px;
+}
+
+.ds-rt-total-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ds-rt-total {
+  font-family: var(--font-zine, 'Special Elite', serif);
+  font-size: 28px;
+  color: var(--paper, #ede1c7);
+  line-height: 1;
+}
+
+.ds-rt-formula {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  color: rgba(237,225,199,.4);
+  margin-left: auto;
+}
+
+.ds-rt-crit {
+  font-family: var(--font-zine, 'Special Elite', serif);
+  font-size: 10px;
+  letter-spacing: .1em;
+  color: var(--accent, #c8a86b);
+  font-weight: bold;
+}
+
+.ds-rt-fumble {
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: #b84040;
+  font-weight: bold;
+}
+
+.ds-rt-breakdown {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  color: rgba(237,225,199,.38);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.ds-rt-sep {
+  color: rgba(237,225,199,.22);
+}
+
+.ds-rt-who {
+  font-family: var(--font-display, 'IM Fell English', serif);
+  font-style: italic;
+  font-size: 11px;
+  color: rgba(237,225,199,.42);
+  margin-top: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.roll-toast-enter-active { transition: all 0.18s ease-out; }
+.roll-toast-leave-active { transition: all 0.5s ease-in; }
+.roll-toast-enter-from   { opacity: 0; transform: translateX(-10px); }
+.roll-toast-leave-to     { opacity: 0; transform: translateX(-10px); }
+.roll-toast-move         { transition: transform 0.2s ease; }
 </style>

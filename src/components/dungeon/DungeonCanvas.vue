@@ -6,6 +6,7 @@
       class="absolute inset-0 cursor-crosshair"
       :style="{ cursor: cursorStyle }"
       @mousedown="onMouseDown"
+      @mousedown.middle.prevent
       @mousemove="onMouseMove"
       @mouseup="onMouseUp"
       @click="onClick"
@@ -25,13 +26,18 @@
           <feGaussianBlur stdDeviation="4" result="blur" />
           <feComposite in="SourceGraphic" in2="blur" operator="over" />
         </filter>
+        <filter id="cursor-shadow" x="-20%" y="-20%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,.4)" />
+        </filter>
         <clipPath v-for="[id, room] in dungeonStore.rooms" :key="`clip-${id}`" :id="`room-clip-${id}`">
-          <ellipse
+          <rect
             v-if="room.shape === 'circle'"
-            :cx="(room.origin_x + room.width / 2) * cellPx - viewport.offsetX"
-            :cy="(room.origin_y + room.height / 2) * cellPx - viewport.offsetY"
-            :rx="room.width * cellPx / 2 - 1"
-            :ry="room.height * cellPx / 2 - 1"
+            :x="room.origin_x * cellPx - viewport.offsetX + 1"
+            :y="room.origin_y * cellPx - viewport.offsetY + 1"
+            :width="room.width * cellPx - 2"
+            :height="room.height * cellPx - 2"
+            :rx="Math.min(room.width * cellPx, room.height * cellPx) / 2 - 1"
+            :ry="Math.min(room.width * cellPx, room.height * cellPx) / 2 - 1"
           />
           <polygon
             v-else-if="room.shape === 'polygon' && room.points?.length"
@@ -55,37 +61,50 @@
               :y="r.origin_y * cellPx - viewport.offsetY + (r.height * cellPx) / 2 + 4"
               text-anchor="middle"
               class="dungeon-label pointer-events-auto cursor-pointer"
-              fill="#333"
-              font-size="12"
-              font-family="'Crimson Text', serif"
+              :fill="labelStyle.name.fill"
+              :font-size="labelStyle.name.size"
+              :font-family="labelStyle.name.family"
+              :font-style="labelStyle.name.italic ? 'italic' : 'normal'"
+              :font-weight="labelStyle.name.weight"
+              :letter-spacing="labelStyle.name.letterSpacing"
               @dblclick.stop="openAnnotation('room', id)"
-            >{{ room.label }}</text>
+            >{{ labelStyle.name.uppercase ? room.label.toUpperCase() : room.label }}</text>
             <text
               :x="r.origin_x * cellPx - viewport.offsetX + (r.width * cellPx) / 2"
-              :y="r.origin_y * cellPx - viewport.offsetY + (r.height * cellPx) / 2 + (room.label ? 17 : 4)"
+              :y="r.origin_y * cellPx - viewport.offsetY + (r.height * cellPx) / 2 + (room.label ? labelStyle.name.size + 10 : 4)"
               text-anchor="middle"
-              fill="#7a7060"
-              font-size="9"
-              font-family="sans-serif"
+              :fill="labelStyle.dims.fill"
+              font-size="10"
+              :font-family="labelStyle.dims.family"
+              :letter-spacing="labelStyle.dims.letterSpacing"
             >{{ r.width * 5 }} × {{ r.height * 5 }} ft</text>
             <g :clip-path="`url(#room-clip-${id})`">
-              <foreignObject
-                v-for="item in (room.items ?? [])"
-                :key="item.id"
-                :x="Math.max(r.origin_x * cellPx - viewport.offsetX, Math.min((r.origin_x + r.width) * cellPx - viewport.offsetX - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostX : item.x) * cellPx - viewport.offsetX - editorAvatarSize / 2))"
-                :y="Math.max(r.origin_y * cellPx - viewport.offsetY, Math.min((r.origin_y + r.height) * cellPx - viewport.offsetY - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostY : item.y) * cellPx - viewport.offsetY - editorAvatarSize / 2))"
-                :width="editorAvatarSize"
-                :height="editorAvatarSize"
-                class="pointer-events-auto"
-                :style="{ cursor: 'grab' }"
-                @mousedown.stop="onItemMouseDown($event, id, item)"
-              >
-                <i
-                  xmlns="http://www.w3.org/1999/xhtml"
-                  :class="faClassForType(item.type)"
-                  :style="{ fontSize: Math.max(10, Math.round(editorAvatarSize * 0.65)) + 'px', color: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', pointerEvents: 'none' }"
+              <template v-for="item in (room.items ?? [])" :key="item.id">
+                <circle
+                  :cx="Math.max(r.origin_x * cellPx - viewport.offsetX, Math.min((r.origin_x + r.width) * cellPx - viewport.offsetX - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostX : item.x) * cellPx - viewport.offsetX - editorAvatarSize / 2)) + editorAvatarSize / 2"
+                  :cy="Math.max(r.origin_y * cellPx - viewport.offsetY, Math.min((r.origin_y + r.height) * cellPx - viewport.offsetY - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostY : item.y) * cellPx - viewport.offsetY - editorAvatarSize / 2)) + editorAvatarSize / 2"
+                  :r="editorAvatarSize / 2"
+                  :fill="stampBg(item.type)"
+                  :stroke="stampBorder(item.type)"
+                  stroke-width="1.5"
+                  style="pointer-events:none"
                 />
-              </foreignObject>
+                <foreignObject
+                  :x="Math.max(r.origin_x * cellPx - viewport.offsetX, Math.min((r.origin_x + r.width) * cellPx - viewport.offsetX - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostX : item.x) * cellPx - viewport.offsetX - editorAvatarSize / 2))"
+                  :y="Math.max(r.origin_y * cellPx - viewport.offsetY, Math.min((r.origin_y + r.height) * cellPx - viewport.offsetY - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostY : item.y) * cellPx - viewport.offsetY - editorAvatarSize / 2))"
+                  :width="editorAvatarSize"
+                  :height="editorAvatarSize"
+                  class="pointer-events-auto"
+                  :style="{ cursor: 'grab' }"
+                  @mousedown.stop="onItemMouseDown($event, id, item)"
+                >
+                  <i
+                    xmlns="http://www.w3.org/1999/xhtml"
+                    :class="faClassForType(item.type)"
+                    :style="{ fontSize: Math.max(10, Math.round(editorAvatarSize * 0.65)) + 'px', color: stampFg(item.type), display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', pointerEvents: 'none' }"
+                  />
+                </foreignObject>
+              </template>
             </g>
           </template>
         </template>
@@ -94,20 +113,20 @@
       <text
         v-if="(draw.ghost.value?.type === 'room' || draw.ghost.value?.type === 'circle') && draw.ghost.value.w > 0 && draw.ghost.value.h > 0"
         :x="draw.ghost.value.x * cellPx - viewport.offsetX + (draw.ghost.value.w * cellPx) / 2"
-        :y="draw.ghost.value.y * cellPx - viewport.offsetY + (draw.ghost.value.h * cellPx) / 2 + 4"
+        :y="draw.ghost.value.y * cellPx - viewport.offsetY + (draw.ghost.value.h * cellPx) / 2 + 28"
         text-anchor="middle"
-        fill="#a09080"
-        font-size="10"
-        font-family="sans-serif"
-      >
-        {{ draw.ghost.value.w * 5 }} × {{ draw.ghost.value.h * 5 }} ft
-      </text>
+        fill="#ede1c7"
+        font-size="11"
+        font-family="'JetBrains Mono', monospace"
+        letter-spacing=".04em"
+        style="filter:drop-shadow(0 1px 3px rgba(0,0,0,.9))"
+      >{{ draw.ghost.value.w * 5 }} × {{ draw.ghost.value.h * 5 }} ft</text>
 
       <g v-for="[id, corridor] in dungeonStore.corridors" :key="id">
         <text
           v-if="corridor.label"
-          :x="((corridor.x1 + corridor.x2) / 2) * cellPx - viewport.offsetX"
-          :y="((corridor.y1 + corridor.y2) / 2) * cellPx - viewport.offsetY - 4"
+          :x="corridorMidpoint(corridor).x * cellPx - viewport.offsetX"
+          :y="corridorMidpoint(corridor).y * cellPx - viewport.offsetY - 4"
           text-anchor="middle"
           fill="#b0a898"
           font-size="9"
@@ -115,112 +134,178 @@
         >
           {{ corridor.label }}
         </text>
-      </g>
 
+        <template v-if="dungeonStore.selectedElement?.id === id && corridor.points?.length >= 2">
+          <circle
+            v-for="(pt, i) in corridor.points"
+            :key="i"
+            :cx="pt.x * cellPx - viewport.offsetX"
+            :cy="pt.y * cellPx - viewport.offsetY"
+            :r="i === 0 || i === corridor.points.length - 1 ? 5 : 4"
+            :fill="i === 0 || i === corridor.points.length - 1 ? styleColors.selectedColor : '#ede1c7'"
+            :stroke="styleColors.selectedColor"
+            stroke-width="1.5"
+            style="pointer-events:none"
+          />
+        </template>
+      </g>
+      <g v-if="prefs.showCursors">
+        <g v-for="[userId, cursor] in remoteCursors" :key="userId" style="pointer-events:none">
+          
+          <path
+            :d="`M${cursorTip(cursor).x + 3} ${cursorTip(cursor).y + 2} l5 14 2-6 6-2z`"
+            :fill="cursor.color"
+            stroke="#1a1410"
+            stroke-width=".8"
+            filter="url(#cursor-shadow)"
+          />
+
+          <rect
+            :x="cursorTip(cursor).x + 14"
+            :y="cursorTip(cursor).y + 14"
+            :width="cursorLabelWidth(cursor.name)"
+            height="17"
+            rx="3"
+            :fill="cursor.color"
+          />
+          <text
+            :x="cursorTip(cursor).x + 14 + 7"
+            :y="cursorTip(cursor).y + 14 + 11.5"
+            font-size="11"
+            font-family="var(--font-ui, sans-serif)"
+            font-weight="600"
+            fill="#fff5e8"
+            letter-spacing=".02em"
+            dominant-baseline="auto"
+            style="pointer-events:none"
+          >{{ cursor.name }}</text>
+        </g>
+      </g>
 
       <g v-for="[roomId, editors] in editingViewers" :key="`editors-${roomId}`">
         <template v-for="r in [dungeonStore.rooms.get(roomId)]" :key="'eg'">
           <template v-if="r">
-        
-            <ellipse
+
+            <rect
               v-if="r.shape === 'circle'"
-              :cx="(r.origin_x + r.width / 2) * cellPx - viewport.offsetX"
-              :cy="(r.origin_y + r.height / 2) * cellPx - viewport.offsetY"
-              :rx="r.width * cellPx / 2 + 2"
-              :ry="r.height * cellPx / 2 + 2"
+              :x="r.origin_x * cellPx - viewport.offsetX - 3"
+              :y="r.origin_y * cellPx - viewport.offsetY - 3"
+              :width="r.width * cellPx + 6"
+              :height="r.height * cellPx + 6"
+              :rx="Math.min(r.width * cellPx, r.height * cellPx) / 2 + 3"
+              :ry="Math.min(r.width * cellPx, r.height * cellPx) / 2 + 3"
               fill="none"
-              stroke="#94a3b8"
+              :stroke="editorColor(editors[0]?.user_id)"
               stroke-width="2"
+              stroke-dasharray="5 3"
               filter="url(#editor-glow)"
-              opacity="0.7"
             />
             <polygon
               v-else-if="r.shape === 'polygon' && r.points?.length"
-              :points="r.points.map(p => `${p.x * cellPx - viewport.offsetX},${p.y * cellPx - viewport.offsetY}`).join(' ')"
+              :points="polygonOutsetPoints(r, 3)"
               fill="none"
-              stroke="#94a3b8"
+              :stroke="editorColor(editors[0]?.user_id)"
               stroke-width="2"
+              stroke-dasharray="5 3"
               filter="url(#editor-glow)"
-              opacity="0.7"
             />
             <rect
               v-else
-              :x="r.origin_x * cellPx - viewport.offsetX - 2"
-              :y="r.origin_y * cellPx - viewport.offsetY - 2"
-              :width="r.width * cellPx + 4"
-              :height="r.height * cellPx + 4"
-              rx="2"
+              :x="r.origin_x * cellPx - viewport.offsetX - 3"
+              :y="r.origin_y * cellPx - viewport.offsetY - 3"
+              :width="r.width * cellPx + 6"
+              :height="r.height * cellPx + 6"
               fill="none"
-              stroke="#94a3b8"
+              :stroke="editorColor(editors[0]?.user_id)"
               stroke-width="2"
+              stroke-dasharray="5 3"
               filter="url(#editor-glow)"
-              opacity="0.7"
             />
 
-
-            <foreignObject
-              v-for="(editor, i) in editors"
-              :key="editor.user_id"
-              :x="roomTopRight(r).x - editorAvatarSize / 2 - i * editorAvatarSize * 0.8"
-              :y="roomTopRight(r).y - editorAvatarSize / 2"
-              :width="editorAvatarSize"
-              :height="editorAvatarSize"
-              overflow="visible"
-              style="pointer-events: auto; overflow: visible;"
-            >
-              <div
-                xmlns="http://www.w3.org/1999/xhtml"
-                class="group relative"
-                :style="{ width: editorAvatarSize + 'px', height: editorAvatarSize + 'px' }"
-              >
-                <div
-                  :style="{ width: editorAvatarSize + 'px', height: editorAvatarSize + 'px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #1c1917', boxShadow: '0 0 4px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.max(9, editorAvatarSize * 0.4) + 'px', fontWeight: 'bold', color: '#fff', background: editor.avatar_url ? 'transparent' : editorColor(editor.user_id) }"
-                >
-                  <img
-                    v-if="editor.avatar_url"
-                    :src="editor.avatar_url"
-                    style="width:100%;height:100%;object-fit:cover;"
-                  />
-                  <span v-else>{{ editor.display_name?.charAt(0)?.toUpperCase() }}</span>
-                </div>
-                <div
-                  class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded text-sm whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
-                  style="background:#1c1917;border:1px solid #44403c;color:#e7e5e4;z-index:50;"
-                >
-                  {{ editor.display_name }}
-                </div>
-              </div>
-            </foreignObject>
+            <g v-if="editors[0]">
+              <rect
+                :x="r.origin_x * cellPx - viewport.offsetX"
+                :y="r.origin_y * cellPx - viewport.offsetY - 21"
+                :width="editorLabelWidth(editors[0].display_name)"
+                height="17"
+                rx="2"
+                :fill="editorColor(editors[0].user_id)"
+              />
+              <text
+                :x="r.origin_x * cellPx - viewport.offsetX + 5"
+                :y="r.origin_y * cellPx - viewport.offsetY - 8"
+                fill="#fff5e8"
+                font-family="var(--font-ui, sans-serif)"
+                font-size="10.5"
+                font-weight="600"
+                letter-spacing=".02em"
+                dominant-baseline="auto"
+                style="pointer-events:none"
+              >{{ editors[0].display_name }} editing…</text>
+            </g>
           </template>
         </template>
       </g>
     </svg>
 
-    <div class="absolute bottom-4 left-4 flex items-end gap-4 pointer-events-none select-none">
-
-      <div class="flex flex-col items-start gap-1">
-        <div class="flex items-center">
-          <div class="border-l border-t border-b border-stone-400" style="width: 1px; height: 6px" />
-          <div class="border-t border-stone-400" :style="{ width: `${cellPx * 2}px` }" />
-          <div class="border-r border-t border-b border-stone-400" style="width: 1px; height: 6px" />
-        </div>
-        <span class="text-stone-400" style="font-size: 10px">10 ft</span>
+    <div class="absolute bottom-4 left-4 flex items-end gap-3 pointer-events-none select-none" style="z-index:14">
+      <div style="display:flex;align-items:center;padding:4px 8px;background:rgba(13,10,7,.88);border:1px solid rgba(237,225,199,.2);border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.5)">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(237,225,199,.75);letter-spacing:.04em">{{ Math.round(viewport.zoom * 100) }}%</span>
       </div>
 
-  
-      <div class="flex flex-col items-center" style="width: 44px; height: 44px; position: relative;">
-        <svg width="44" height="44" viewBox="0 0 44 44">
-        
-          <circle cx="22" cy="22" r="20" fill="none" stroke="#57534e" stroke-width="1" />
-        
-          <polygon points="22,4 19,22 22,20 25,22" fill="#c8a86b" />
-          <polygon points="22,40 19,22 22,24 25,22" fill="#57534e" />
-          <text x="22" y="3" text-anchor="middle" fill="#c8a86b" font-size="7" font-family="sans-serif" font-weight="bold">N</text>
-          <text x="22" y="43" text-anchor="middle" fill="#78716c" font-size="6" font-family="sans-serif">S</text>
-          <text x="42" y="23" text-anchor="middle" fill="#78716c" font-size="6" font-family="sans-serif">E</text>
-          <text x="2" y="23" text-anchor="middle" fill="#78716c" font-size="6" font-family="sans-serif">W</text>
+      <div style="display:flex;flex-direction:column;align-items:center;padding:6px 10px;background:rgba(13,10,7,.88);border:1px solid rgba(237,225,199,.2);border-radius:4px;gap:4px;box-shadow:0 2px 8px rgba(0,0,0,.5)">
+        <div style="position:relative;height:4px;" :style="{ width: Math.min(Math.round(cellPx * 2), 100) + 'px', border:'1px solid rgba(237,225,199,.65)' }">
+          <div style="position:absolute;left:50%;top:-3px;width:1px;height:10px;background:rgba(237,225,199,.65)" />
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(237,225,199,.75);letter-spacing:.04em">10 ft</span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:center;padding:5px;background:rgba(13,10,7,.88);border:1px solid rgba(237,225,199,.2);border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.5)">
+        <svg width="38" height="38" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="22" fill="none" stroke="rgba(237,225,199,.25)" stroke-width="1"/>
+          <circle cx="24" cy="24" r="17" fill="none" stroke="rgba(237,225,199,.15)" stroke-width=".5" stroke-dasharray="1 3"/>
+          <path d="M24 6 L27 24 L24 22 L21 24 Z" fill="#8a1c1c" stroke="rgba(237,225,199,.3)" stroke-width=".5"/>
+          <path d="M24 42 L21 24 L24 26 L27 24 Z" fill="rgba(237,225,199,.35)" stroke="rgba(237,225,199,.3)" stroke-width=".5"/>
+          <text x="24" y="10" text-anchor="middle" font-family="'IM Fell English',serif" font-size="7" fill="rgba(237,225,199,.75)">N</text>
         </svg>
       </div>
+    </div>
+
+    <Transition name="ds-banner">
+      <div v-if="statusBanner" class="ds-status-banner">
+        <span class="ds-accent-dot" />
+        <template v-for="(part, i) in statusBanner" :key="i">
+          <kbd v-if="part.type === 'kbd'">{{ part.text }}</kbd>
+          <span v-else>{{ part.text }}</span>
+        </template>
+      </div>
+    </Transition>
+
+    <div
+      v-if="dimEntry"
+      class="ds-dim-input"
+      :style="{ left: dimEntry.screenX + 14 + 'px', top: dimEntry.screenY + 14 + 'px' }"
+    >
+      <input
+        v-model="dimW"
+        type="number"
+        min="1"
+        max="999"
+        @keydown.enter="submitDim"
+        @keydown.escape="dimEntry = null"
+      />
+      <span>×</span>
+      <input
+        v-model="dimH"
+        type="number"
+        min="1"
+        max="999"
+        @keydown.enter="submitDim"
+        @keydown.escape="dimEntry = null"
+      />
+      <span>ft</span>
+      <button class="ds-dim-btn" @click="submitDim">Drop</button>
+      <button class="ds-dim-btn ds-dim-ghost" @click="dimEntry = null">Esc</button>
     </div>
 
   </div>
@@ -230,19 +315,118 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
-import { useDungeonDraw, CELL_SIZE, pixelToGrid } from '@/composables/useDungeonDraw.js'
+import { useDungeonDraw, CELL_SIZE, pixelToGrid, corridorSegments } from '@/composables/useDungeonDraw.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
+import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
+import { supabase } from '@/lib/supabase.js'
+import { playerColorFor } from '@/composables/usePlayerColor.js'
 
 const FLOOR = '#ffffff'
 const WALL  = '#000000'
 const ROCK  = '#000000'
+
+const prefs = useUserPrefsStore()
+const mapStyle = computed(() => prefs.mapStyle ?? 'classic')
+const styleColors = computed(() => {
+  switch (mapStyle.value) {
+    case 'parchment':
+      return { bg: '#1a0f06', grid: 'rgba(58,46,34,.10)', gridStrong: 'rgba(58,46,34,.22)', floor: '#f4e8cc', wall: '#2a1810', wallW: 2, selectedColor: '#8a1c1c' }
+    case 'blueprint':
+      return { bg: '#0c2438', grid: 'rgba(255,255,255,.05)', gridStrong: 'rgba(255,255,255,.10)', floor: '#1d4868', wall: '#b8e0f0', wallW: 1.5, selectedColor: '#ffaa55' }
+    default: // classic
+      return { bg: '#1a1a1a', grid: 'rgba(255,255,255,.04)', gridStrong: 'rgba(255,255,255,.08)', floor: '#ffffff', wall: '#000000', wallW: 2.5, selectedColor: '#d00000' }
+  }
+})
+
+const labelStyle = computed(() => {
+  switch (mapStyle.value) {
+    case 'blueprint':
+      return {
+        name: { family: '"JetBrains Mono",monospace', size: 11, fill: '#f0f6fa', italic: false, weight: '600', uppercase: true, letterSpacing: '.12em' },
+        dims: { family: '"JetBrains Mono",monospace', fill: '#8eb6c8', letterSpacing: '.08em' },
+      }
+    case 'parchment':
+      return {
+        name: { family: '"IM Fell English",serif', size: 14, fill: '#2a1810', italic: true, weight: '400', uppercase: false, letterSpacing: '.01em' },
+        dims: { family: '"JetBrains Mono",monospace', fill: 'rgba(58,46,34,.6)', letterSpacing: '.06em' },
+      }
+    default: // classic
+      return {
+        name: { family: '"Special Elite",monospace', size: 12, fill: '#000000', italic: false, weight: '400', uppercase: true, letterSpacing: '.04em' },
+        dims: { family: '"JetBrains Mono",monospace', fill: 'rgba(0,0,0,.55)', letterSpacing: '.04em' },
+      }
+  }
+})
+
+// Structured hint segments: { type: 'text' | 'kbd', text: string }[]
+// Using structured data instead of v-html to avoid XSS risk if strings ever
+// become dynamic.
+const TOOL_HINTS = {
+  room:     [{ type: 'text', text: 'Click and drag to draw a room. ' }, { type: 'kbd', text: 'Double-click' }, { type: 'text', text: ' for exact dimensions.' }],
+  circle:   [{ type: 'text', text: 'Click and drag to draw a round chamber. ' }, { type: 'kbd', text: 'Double-click' }, { type: 'text', text: ' for exact dimensions.' }],
+  polygon:  [{ type: 'text', text: 'Click to place vertices. Double-click or ' }, { type: 'kbd', text: 'Enter' }, { type: 'text', text: ' to close. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
+  corridor: [{ type: 'text', text: 'Click to place points along the corridor. Double-click to finish. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
+  door:     [{ type: 'text', text: 'Click a wall to place a door. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
+}
+const statusBanner = computed(() => TOOL_HINTS[dungeonStore.drawMode] ?? null)
 
 const props = defineProps({ dungeonId: String })
 
 const dungeonStore = useD()
 const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
+
+const remoteCursors = ref(new Map()) // userId → { x, y, name, color }
+
+const dimEntry = ref(null)  // { gx, gy, screenX, screenY } when popup is open
+const dimW = ref('30')
+const dimH = ref('20')
+
+let doorDrag = null       // { roomId, doorId } while dragging a door
+const doorDragGhost = ref(null)  // { roomId, doorData } ghost position
+let doorDragMoved = false
+let skipNextDoorClick = false
+
+let cursorChannel = null
+let cursorRafQueued = false
+let pendingCursor = null
+
+function cursorColorFor(userId) {
+  return playerColorFor(userId)
+}
+
+function initCursorChannel(dungeonId) {
+  if (cursorChannel) supabase.removeChannel(cursorChannel)
+  cursorChannel = supabase
+    .channel(`dungeon:${dungeonId}:cursors`)
+    .on('broadcast', { event: 'cursor' }, ({ payload }) => {
+      if (!payload?.userId || payload.userId === authStore.user?.id) return
+      remoteCursors.value = new Map(remoteCursors.value).set(payload.userId, {
+        x: payload.x, y: payload.y,
+        name: payload.name,
+        color: cursorColorFor(payload.userId),
+      })
+    })
+    .subscribe()
+}
+
+function broadcastCursor(canvasX, canvasY) {
+  if (!cursorChannel || !authStore.user?.id) return
+  const gx = (canvasX + viewport.value.offsetX) / (CELL_SIZE * viewport.value.zoom)
+  const gy = (canvasY + viewport.value.offsetY) / (CELL_SIZE * viewport.value.zoom)
+  pendingCursor = { userId: authStore.user.id, name: authStore.displayName ?? 'Adventurer', x: gx, y: gy }
+  if (!cursorRafQueued) {
+    cursorRafQueued = true
+    requestAnimationFrame(() => {
+      if (pendingCursor && cursorChannel) {
+        cursorChannel.send({ type: 'broadcast', event: 'cursor', payload: pendingCursor })
+      }
+      pendingCursor = null
+      cursorRafQueued = false
+    })
+  }
+}
 
 
 const editingViewers = computed(() => {
@@ -260,10 +444,80 @@ const editingViewers = computed(() => {
 
 const editorAvatarSize = computed(() => Math.max(16, Math.min(36, Math.round(cellPx.value))))
 
-const EDITOR_COLORS = ['#4f46e5', '#7c3aed', '#be185d', '#b45309', '#0f766e', '#0369a1', '#15803d', '#db2777']
+const STAMP_KIND_COLORS = {
+  monster:  { bg: '#f5e4d4', border: '#1a1410', fg: '#6b3a2a' },
+  treasure: { bg: '#f5ecc4', border: '#b89c2a', fg: '#b89c2a' },
+  trap:     { bg: '#f5d4d4', border: '#8a1c1c', fg: '#8a1c1c' },
+  feature:  { bg: '#e4ecd4', border: '#5a6b3a', fg: '#5a6b3a' },
+  npc:      { bg: '#dce8f0', border: '#2c5266', fg: '#2c5266' },
+  secret:   { bg: '#ecdce8', border: '#6b3a5a', fg: '#6b3a5a' },
+  body:     { bg: '#e8e0d4', border: '#1a1410', fg: '#3a2e22' },
+  key:      { bg: '#f5ecc4', border: '#b89c2a', fg: '#8a6a10' },
+}
+function stampBg(type)     { return STAMP_KIND_COLORS[type]?.bg     ?? '#ede1c7' }
+function stampBorder(type) { return STAMP_KIND_COLORS[type]?.border ?? '#1a1410' }
+function stampFg(type)     { return STAMP_KIND_COLORS[type]?.fg     ?? '#1a1410' }
+
+function corridorMidpoint(c) {
+  const pts = c.points?.length >= 2 ? c.points : [{ x: c.x1, y: c.y1 }, { x: c.x2, y: c.y2 }]
+  let totalLen = 0
+  const segLens = []
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y)
+    segLens.push(d)
+    totalLen += d
+  }
+  let remaining = totalLen / 2
+  for (let i = 0; i < segLens.length; i++) {
+    if (remaining <= segLens[i]) {
+      const t = remaining / segLens[i]
+      return { x: pts[i].x + t * (pts[i+1].x - pts[i].x), y: pts[i].y + t * (pts[i+1].y - pts[i].y) }
+    }
+    remaining -= segLens[i]
+  }
+  return pts[Math.floor(pts.length / 2)]
+}
+
 function editorColor(userId) {
-  const hash = (userId ?? '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-  return EDITOR_COLORS[hash % EDITOR_COLORS.length]
+  return playerColorFor(userId)
+}
+
+function editorLabelWidth(displayName) {
+  const text = (displayName ?? '') + ' editing…'
+  return text.length * 6.3 + 10
+}
+
+function polygonOutsetPoints(room, offset) {
+  const cs = cellPx.value
+  const pts = room.points
+  if (!pts?.length) return ''
+  // outset each point along the averaged normal of its two adjacent edges
+  const n = pts.length
+  return pts.map((p, i) => {
+    const prev = pts[(i + n - 1) % n]
+    const next = pts[(i + 1) % n]
+    const ax = p.x - prev.x, ay = p.y - prev.y
+    const bx = next.x - p.x, by = next.y - p.y
+    const la = Math.hypot(ax, ay) || 1
+    const lb = Math.hypot(bx, by) || 1
+    const nx = (-ay / la + -by / lb) / 2
+    const ny = (ax / la + bx / lb) / 2
+    const nl = Math.hypot(nx, ny) || 1
+    const ox = (nx / nl) * offset / cs
+    const oy = (ny / nl) * offset / cs
+    return `${(p.x + ox) * cs - viewport.value.offsetX},${(p.y + oy) * cs - viewport.value.offsetY}`
+  }).join(' ')
+}
+
+function cursorTip(cursor) {
+  return {
+    x: cursor.x * cellPx.value - viewport.value.offsetX,
+    y: cursor.y * cellPx.value - viewport.value.offsetY,
+  }
+}
+
+function cursorLabelWidth(name) {
+  return (name ?? '').length * 6.5 + 14
 }
 
 function roomTopRight(room) {
@@ -635,30 +889,62 @@ function renderFrame() {
 }
 
 function drawBackground(W, H) {
-  ctx.fillStyle = ROCK
-  ctx.fillRect(0, 0, W, H)
+  switch (mapStyle.value) {
+    case 'parchment': {
+      ctx.fillStyle = '#1a0f06'
+      ctx.fillRect(0, 0, W, H)
+      const g1 = ctx.createRadialGradient(W * 0.3, H * 0.2, 0, W * 0.3, H * 0.2, Math.max(W, H) * 0.65)
+      g1.addColorStop(0, 'rgba(184,156,106,.45)'); g1.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H)
+      const g2 = ctx.createRadialGradient(W * 0.7, H * 0.8, 0, W * 0.7, H * 0.8, Math.max(W, H) * 0.65)
+      g2.addColorStop(0, 'rgba(60,30,10,.55)'); g2.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H)
+      break
+    }
+    case 'blueprint': {
+      const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.75)
+      grad.addColorStop(0, '#1a4664'); grad.addColorStop(1, '#0d2a3a')
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+      break
+    }
+    default: {
+      ctx.fillStyle = '#1a1a1a'
+      ctx.fillRect(0, 0, W, H)
+      break
+    }
+  }
 }
 
 function drawGrid(W, H) {
   const cs = cellPx.value
-  ctx.strokeStyle = '#333333'
-  ctx.lineWidth = 0.5
-  const startX = -(viewport.value.offsetX % cs)
-  const startY = -(viewport.value.offsetY % cs)
+  const sc = styleColors.value
+  const sx = -(viewport.value.offsetX % cs)
+  const sy = -(viewport.value.offsetY % cs)
+
+  // Minor grid (every cell)
+  ctx.strokeStyle = sc.grid
+  ctx.lineWidth = mapStyle.value === 'blueprint' ? 0.7 : 0.5
   ctx.beginPath()
-  for (let x = startX; x < W; x += cs) {
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, H)
-  }
-  for (let y = startY; y < H; y += cs) {
-    ctx.moveTo(0, y)
-    ctx.lineTo(W, y)
-  }
+  for (let x = sx; x < W; x += cs) { ctx.moveTo(x, 0); ctx.lineTo(x, H) }
+  for (let y = sy; y < H; y += cs) { ctx.moveTo(0, y); ctx.lineTo(W, y) }
+  ctx.stroke()
+
+  // Major grid (every 5 cells = 25 ft)
+  const mcs = cs * 5
+  const msx = -(viewport.value.offsetX % mcs)
+  const msy = -(viewport.value.offsetY % mcs)
+  ctx.strokeStyle = sc.gridStrong
+  ctx.lineWidth = mapStyle.value === 'blueprint' ? 1.0 : 0.8
+  ctx.beginPath()
+  for (let x = msx; x < W; x += mcs) { ctx.moveTo(x, 0); ctx.lineTo(x, H) }
+  for (let y = msy; y < H; y += mcs) { ctx.moveTo(0, y); ctx.lineTo(W, y) }
   ctx.stroke()
 }
 
 function drawRooms() {
   const cs = cellPx.value
+  const sc = styleColors.value
+
   for (const [id, room] of dungeonStore.rooms) {
     const isSelected = dungeonStore.selectedElement?.id === id
     const r = (isResizing && id === resizeRoomId && resizeGhost.value) ? resizeGhost.value
@@ -671,12 +957,12 @@ function drawRooms() {
     const ph = r.height * cs
     const isCircle  = room.shape === 'circle'
     const isPolygon = room.shape === 'polygon'
-    const floorColor = room.color ?? FLOOR
+
 
     const shapePath = () => {
       ctx.beginPath()
       if (isCircle) {
-        ctx.ellipse(px + pw / 2, py + ph / 2, pw / 2, ph / 2, 0, 0, Math.PI * 2)
+        ctx.roundRect(px, py, pw, ph, Math.min(pw, ph) / 2)
       } else if (isPolygon && r.points?.length >= 3) {
         r.points.forEach((p, i) => {
           const ppx = p.x * cs - viewport.value.offsetX
@@ -690,40 +976,83 @@ function drawRooms() {
       }
     }
 
+    // Classic: offset shadow behind room (2px right+down for normal, 3px for selected)
+    if (mapStyle.value === 'classic' && !isPolygon) {
+      const shadowOffset = isSelected ? 3 : 2
+      ctx.fillStyle = isSelected ? '#d00000' : '#000000'
+      if (isCircle) {
+        ctx.beginPath()
+        ctx.roundRect(px + shadowOffset, py + shadowOffset, pw, ph, Math.min(pw, ph) / 2)
+        ctx.fill()
+      } else {
+        ctx.fillRect(px + shadowOffset, py + shadowOffset, pw, ph)
+      }
+    }
+
+    // Clip and fill room
     ctx.save()
     shapePath()
     ctx.clip()
 
-    ctx.fillStyle = floorColor
+    ctx.fillStyle = sc.floor
     ctx.fill()
-    ctx.strokeStyle = 'rgba(0,0,0,0.22)'
-    ctx.lineWidth = Math.max(6, cs * 0.38)
-    shapePath()
-    ctx.stroke()
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)'
-    ctx.lineWidth = 0.5
+    // Parchment radial texture overlay (warm aging effect)
+    if (mapStyle.value === 'parchment' || mapStyle.value === 'classic') {
+      const strength = mapStyle.value === 'parchment' ? 1.0 : 0.5
+      const g1 = ctx.createRadialGradient(px + pw * 0.3, py + ph * 0.2, 0, px + pw * 0.3, py + ph * 0.2, Math.max(pw, ph) * 0.85)
+      g1.addColorStop(0, `rgba(184,156,106,${0.28 * strength})`); g1.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g1; ctx.fill()
+      const g2 = ctx.createRadialGradient(px + pw * 0.8, py + ph * 0.8, 0, px + pw * 0.8, py + ph * 0.8, Math.max(pw, ph) * 0.75)
+      g2.addColorStop(0, `rgba(120,80,40,${0.20 * strength})`); g2.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g2; ctx.fill()
+    }
+
+    // Inner grid lines
+    const gridColor = mapStyle.value === 'blueprint'
+      ? 'rgba(255,255,255,.06)'
+      : mapStyle.value === 'classic'
+        ? 'rgba(0,0,0,.10)'
+        : 'rgba(58,46,34,.10)'
+    ctx.strokeStyle = gridColor
+    ctx.lineWidth = mapStyle.value === 'blueprint' ? 0.7 : 0.5
     ctx.beginPath()
-    for (let x = px; x <= px + pw + 0.5; x += cs) {
-      ctx.moveTo(x, py); ctx.lineTo(x, py + ph)
-    }
-    for (let y = py; y <= py + ph + 0.5; y += cs) {
-      ctx.moveTo(px, y); ctx.lineTo(px + pw, y)
-    }
+    for (let x = px; x <= px + pw + 0.5; x += cs) { ctx.moveTo(x, py); ctx.lineTo(x, py + ph) }
+    for (let y = py; y <= py + ph + 0.5; y += cs) { ctx.moveTo(px, y); ctx.lineTo(px + pw, y) }
     ctx.stroke()
 
     ctx.restore()
 
-    ctx.strokeStyle = isSelected ? '#f5d76e' : '#0e0b07'
-    ctx.lineWidth = isSelected ? 2.5 : 2.5
+    // Room wall/border
+    const borderW = mapStyle.value === 'blueprint' ? 1.5 : mapStyle.value === 'classic' ? 2.5 : 2
+    ctx.strokeStyle = sc.wall
+    ctx.lineWidth = borderW
     shapePath()
     ctx.stroke()
 
-    if (!isSelected) {
-      ctx.strokeStyle = 'rgba(170, 148, 100, 0.38)'
-      ctx.lineWidth = 1
-      shapePath()
-      ctx.stroke()
+    // Selected state: accent outline drawn outside the room
+    if (isSelected) {
+      const outset = 4
+      if (mapStyle.value === 'classic') {
+        // Classic: stroke the room in red with extra thickness
+        ctx.strokeStyle = sc.selectedColor
+        ctx.lineWidth = 3
+        shapePath()
+        ctx.stroke()
+      } else {
+        // Parchment/blueprint: 2px accent outline with gap
+        ctx.strokeStyle = sc.selectedColor
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        if (isCircle) {
+          ctx.ellipse(px + pw / 2, py + ph / 2, pw / 2 + outset, ph / 2 + outset, 0, 0, Math.PI * 2)
+        } else if (!isPolygon) {
+          ctx.rect(px - outset, py - outset, pw + outset * 2, ph + outset * 2)
+        } else {
+          shapePath()
+        }
+        ctx.stroke()
+      }
     }
 
     if (isSelected && dungeonStore.drawMode === 'edit' && !isPolygon) drawResizeHandles(r)
@@ -732,109 +1061,175 @@ function drawRooms() {
 
 function drawResizeHandles(room) {
   const handles = getRoomHandles(room)
+  const fill   = mapStyle.value === 'blueprint' ? '#ffaa55' : mapStyle.value === 'classic' ? '#ffffff' : '#ede1c7'
+  const stroke = mapStyle.value === 'blueprint' ? '#0d2a3a' : '#1a1410'
   for (const pos of Object.values(handles)) {
-    ctx.fillStyle = '#f5d76e'
-    ctx.strokeStyle = '#1a1820'
-    ctx.lineWidth = 1
+    ctx.fillStyle = fill
+    ctx.strokeStyle = stroke
+    ctx.lineWidth = 1.5
     ctx.fillRect(pos.x - HANDLE_DRAW, pos.y - HANDLE_DRAW, HANDLE_DRAW * 2, HANDLE_DRAW * 2)
     ctx.strokeRect(pos.x - HANDLE_DRAW, pos.y - HANDLE_DRAW, HANDLE_DRAW * 2, HANDLE_DRAW * 2)
   }
 }
 
-function drawDoorAt(cx, cy, normalX, normalY, floorColor) {
-  const opening = Math.min(cellPx.value * 0.7, 18)
-  const post = 5
-  const tx = -normalY, ty = normalX
+function drawDoorAt(cx, cy, nx, ny) {
+  // Design spec: perpendicular line clearing the corridor + door frame line + accent knob
+  const scale   = cellPx.value / 25   // proportion to design's GRID_PX=25
+  const bgW     = Math.max(6, 10 * scale)   // paper-colored clearing line
+  const fgW     = Math.max(1.5, 3 * scale)  // ink door frame line
+  const halfLen = Math.max(5, 7 * scale)    // half-length of the perpendicular line
+  const knobR   = Math.max(2, 2.5 * scale)  // door knob radius
+  const tx = -ny, ty = nx  // perpendicular vector
 
-  ctx.fillStyle = floorColor
-  ctx.fillRect(cx - (tx * opening / 2) - normalX * 2, cy - (ty * opening / 2) - normalY * 2,
-               tx * opening + normalX * 4, ty * opening + normalY * 4)
-
-  ctx.strokeStyle = '#c8a86b'
-  ctx.lineWidth = 1.5
+  // Background (erase corridor, reveal opening)
+  const bgColor = mapStyle.value === 'blueprint' ? '#1d4868' : mapStyle.value === 'classic' ? '#ffffff' : '#ede1c7'
+  ctx.strokeStyle = bgColor
+  ctx.lineWidth = bgW
+  ctx.lineCap = 'butt'
   ctx.beginPath()
-  ctx.moveTo(cx + tx * opening / 2 - normalX * post, cy + ty * opening / 2 - normalY * post)
-  ctx.lineTo(cx + tx * opening / 2 + normalX * post, cy + ty * opening / 2 + normalY * post)
-  ctx.moveTo(cx - tx * opening / 2 - normalX * post, cy - ty * opening / 2 - normalY * post)
-  ctx.lineTo(cx - tx * opening / 2 + normalX * post, cy - ty * opening / 2 + normalY * post)
+  ctx.moveTo(cx - tx * halfLen, cy - ty * halfLen)
+  ctx.lineTo(cx + tx * halfLen, cy + ty * halfLen)
+  ctx.stroke()
+
+  // Door frame (ink-colored line)
+  const fgColor = mapStyle.value === 'blueprint' ? '#b8e0f0' : '#1a1410'
+  ctx.strokeStyle = fgColor
+  ctx.lineWidth = fgW
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(cx - tx * halfLen, cy - ty * halfLen)
+  ctx.lineTo(cx + tx * halfLen, cy + ty * halfLen)
+  ctx.stroke()
+
+  // Accent knob (dot at center)
+  const knobFill = mapStyle.value === 'blueprint' ? '#ffaa55' : '#8a1c1c'
+  ctx.beginPath()
+  ctx.arc(cx, cy, knobR, 0, Math.PI * 2)
+  ctx.fillStyle = knobFill
+  ctx.fill()
+  ctx.strokeStyle = fgColor
+  ctx.lineWidth = Math.max(0.5, 0.8 * scale)
+  ctx.lineCap = 'butt'
   ctx.stroke()
 }
 
-function drawDoors() {
+function doorNormal(door, room) {
+  if (door.wall !== undefined) {
+    const horiz = door.wall === 'n' || door.wall === 's'
+    return {
+      nx: horiz ? 0 : (door.wall === 'w' ? -1 : 1),
+      ny: horiz ? (door.wall === 'n' ? -1 : 1) : 0,
+    }
+  }
   const cs = cellPx.value
+  const [cx, cy] = doorPixelPos(door, room)
+  let nx = 0, ny = -1
+  if (room.shape === 'circle') {
+    const ecx = (room.origin_x + room.width / 2) * cs - viewport.value.offsetX
+    const ecy = (room.origin_y + room.height / 2) * cs - viewport.value.offsetY
+    const len = Math.hypot(cx - ecx, cy - ecy) || 1
+    nx = (cx - ecx) / len; ny = (cy - ecy) / len
+  } else if (room.shape === 'polygon' && room.points?.length >= 3) {
+    let bestDist = Infinity
+    for (let i = 0; i < room.points.length; i++) {
+      const a = room.points[i], b = room.points[(i + 1) % room.points.length]
+      const ax = a.x * cs - viewport.value.offsetX, ay = a.y * cs - viewport.value.offsetY
+      const bx = b.x * cs - viewport.value.offsetX, by = b.y * cs - viewport.value.offsetY
+      const dx = bx - ax, dy = by - ay
+      const lenSq = dx * dx + dy * dy
+      const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / lenSq))
+      const dist = Math.hypot(cx - (ax + t * dx), cy - (ay + t * dy))
+      if (dist < bestDist) {
+        bestDist = dist
+        const segLen = Math.sqrt(lenSq) || 1
+        nx = -dy / segLen; ny = dx / segLen
+      }
+    }
+  }
+  return { nx, ny }
+}
+
+function drawDoors() {
   for (const [, room] of dungeonStore.rooms) {
     if (!room.doors?.length) continue
-    const floorColor = room.color ?? FLOOR
-
     for (const door of room.doors) {
+      const isDragging = doorDrag && door.id === doorDrag.doorId
       const [cx, cy] = doorPixelPos(door, room)
-
-      if (door.wall !== undefined) {
-        const horiz = door.wall === 'n' || door.wall === 's'
-        const nx = horiz ? 0 : (door.wall === 'w' ? -1 : 1)
-        const ny = horiz ? (door.wall === 'n' ? -1 : 1) : 0
-        drawDoorAt(cx, cy, nx, ny, floorColor)
-      } else if (door.x !== undefined) {
-        let nx = 0, ny = -1
-        if (room.shape === 'circle') {
-          const ecx = (room.origin_x + room.width / 2) * cs - viewport.value.offsetX
-          const ecy = (room.origin_y + room.height / 2) * cs - viewport.value.offsetY
-          const len = Math.hypot(cx - ecx, cy - ecy) || 1
-          nx = (cx - ecx) / len; ny = (cy - ecy) / len
-        } else if (room.shape === 'polygon' && room.points?.length >= 3) {
-          let bestDist = Infinity, bestNx = 0, bestNy = -1
-          const pts = room.points
-          for (let i = 0; i < pts.length; i++) {
-            const a = pts[i], b = pts[(i + 1) % pts.length]
-            const ax = a.x * cs - viewport.value.offsetX, ay = a.y * cs - viewport.value.offsetY
-            const bx = b.x * cs - viewport.value.offsetX, by = b.y * cs - viewport.value.offsetY
-            const dx = bx - ax, dy = by - ay
-            const lenSq = dx * dx + dy * dy
-            const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / lenSq))
-            const dist = Math.hypot(cx - (ax + t * dx), cy - (ay + t * dy))
-            if (dist < bestDist) {
-              bestDist = dist
-              const segLen = Math.sqrt(lenSq) || 1
-              bestNx = -dy / segLen; bestNy = dx / segLen
-            }
-          }
-          nx = bestNx; ny = bestNy
-        }
-        drawDoorAt(cx, cy, nx, ny, floorColor)
-      }
+      const { nx, ny } = doorNormal(door, room)
+      if (isDragging) ctx.globalAlpha = 0.3
+      drawDoorAt(cx, cy, nx, ny)
+      if (isDragging) ctx.globalAlpha = 1
+    }
+  }
+  // Draw ghost door at drag target position
+  if (doorDragGhost.value) {
+    const { roomId, doorData } = doorDragGhost.value
+    const room = dungeonStore.rooms.get(roomId)
+    if (room) {
+      const [cx, cy] = doorPixelPos(doorData, room)
+      const { nx, ny } = doorNormal(doorData, room)
+      drawDoorAt(cx, cy, nx, ny)
     }
   }
 }
 
 function drawCorridors() {
   const cs = cellPx.value
+  const sc = styleColors.value
+  const outerFrac = mapStyle.value === 'classic' ? 0.56 : 0.48
+  const innerFrac = mapStyle.value === 'classic' ? 0.36 : 0.32
+
   for (const [id, c] of dungeonStore.corridors) {
-    const x1 = c.x1 * cs - viewport.value.offsetX
-    const y1 = c.y1 * cs - viewport.value.offsetY
-    const x2 = c.x2 * cs - viewport.value.offsetX
-    const y2 = c.y2 * cs - viewport.value.offsetY
+    const segs = corridorSegments(c)
     const isSelected = dungeonStore.selectedElement?.id === id
-    const cw = (c.width ?? 1) * cs * 2
+    const w = c.width ?? 1
+    const outerW = outerFrac * cs * w
+    const innerW = innerFrac * cs * w
 
     ctx.lineCap = 'square'
+    ctx.lineJoin = 'miter'
 
-    ctx.strokeStyle = isSelected ? '#f5d76e' : WALL
-    ctx.lineWidth = cw + 4
+    // Outer (wall) pass — draw full polyline as one path
+    ctx.strokeStyle = isSelected ? sc.selectedColor : sc.wall
+    ctx.lineWidth = outerW
     ctx.beginPath()
-    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2)
+    segs.forEach((seg, i) => {
+      const x1 = seg.x1 * cs - viewport.value.offsetX
+      const y1 = seg.y1 * cs - viewport.value.offsetY
+      const x2 = seg.x2 * cs - viewport.value.offsetX
+      const y2 = seg.y2 * cs - viewport.value.offsetY
+      if (i === 0) ctx.moveTo(x1, y1)
+      ctx.lineTo(x2, y2)
+    })
     ctx.stroke()
 
-    ctx.strokeStyle = FLOOR
-    ctx.lineWidth = cw
+    // Inner (floor) pass
+    ctx.strokeStyle = sc.floor
+    ctx.lineWidth = innerW
     ctx.beginPath()
-    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2)
+    segs.forEach((seg, i) => {
+      const x1 = seg.x1 * cs - viewport.value.offsetX
+      const y1 = seg.y1 * cs - viewport.value.offsetY
+      const x2 = seg.x2 * cs - viewport.value.offsetX
+      const y2 = seg.y2 * cs - viewport.value.offsetY
+      if (i === 0) ctx.moveTo(x1, y1)
+      ctx.lineTo(x2, y2)
+    })
     ctx.stroke()
 
     if (isSelected) {
-      ctx.strokeStyle = 'rgba(245,215,110,0.35)'
-      ctx.lineWidth = cw
+      const selOverlay = mapStyle.value === 'blueprint' ? 'rgba(255,170,85,0.22)' : 'rgba(138,28,28,0.22)'
+      ctx.strokeStyle = selOverlay
+      ctx.lineWidth = innerW
       ctx.beginPath()
-      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2)
+      segs.forEach((seg, i) => {
+        const x1 = seg.x1 * cs - viewport.value.offsetX
+        const y1 = seg.y1 * cs - viewport.value.offsetY
+        const x2 = seg.x2 * cs - viewport.value.offsetX
+        const y2 = seg.y2 * cs - viewport.value.offsetY
+        if (i === 0) ctx.moveTo(x1, y1)
+        ctx.lineTo(x2, y2)
+      })
       ctx.stroke()
     }
   }
@@ -844,13 +1239,15 @@ function drawGhost() {
   const g = draw.ghost.value
   const cs = cellPx.value
   ctx.globalAlpha = 0.5
+  const ghostFill   = mapStyle.value === 'blueprint' ? 'rgba(184,224,240,.15)' : 'rgba(138,28,28,.10)'
+  const ghostStroke = mapStyle.value === 'blueprint' ? '#b8e0f0' : mapStyle.value === 'classic' ? '#000000' : '#8a1c1c'
   if (g.type === 'room' || g.type === 'circle') {
     const px = g.x * cs - viewport.value.offsetX
     const py = g.y * cs - viewport.value.offsetY
     const pw = g.w * cs
     const ph = g.h * cs
-    ctx.fillStyle = FLOOR
-    ctx.strokeStyle = WALL
+    ctx.fillStyle = ghostFill
+    ctx.strokeStyle = ghostStroke
     ctx.lineWidth = 2
     ctx.setLineDash([4, 4])
     ctx.beginPath()
@@ -867,7 +1264,7 @@ function drawGhost() {
     const pts = g.points
     if (!pts.length) { ctx.globalAlpha = 1; return }
 
-    ctx.strokeStyle = '#ffffff'
+    ctx.strokeStyle = ghostStroke
     ctx.lineWidth = 2
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -882,7 +1279,7 @@ function drawGhost() {
 
     if (g.mouseX !== undefined) {
       const last = pts[pts.length - 1]
-      ctx.strokeStyle = '#aaaaaa'
+      ctx.strokeStyle = ghostStroke
       ctx.lineWidth = 1.5
       ctx.setLineDash([4, 4])
       ctx.beginPath()
@@ -910,22 +1307,43 @@ function drawGhost() {
       ctx.stroke()
     }
   } else if (g.type === 'corridor') {
-    const x1 = g.x1 * cs - viewport.value.offsetX
-    const y1 = g.y1 * cs - viewport.value.offsetY
-    const x2 = g.x2 * cs - viewport.value.offsetX
-    const y2 = g.y2 * cs - viewport.value.offsetY
+    const pts = g.points ?? []
+    if (!pts.length) return
     ctx.strokeStyle = '#c8a86b'
     ctx.lineWidth = 2
+    ctx.lineJoin = 'round'
     ctx.setLineDash([4, 4])
+
+    // Committed segments
     ctx.beginPath()
-    ctx.moveTo(x1, y1)
-    ctx.lineTo(x2, y2)
+    pts.forEach((p, i) => {
+      const px = p.x * cs - viewport.value.offsetX
+      const py = p.y * cs - viewport.value.offsetY
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    })
     ctx.stroke()
+
+    // Preview segment from last point to cursor
+    if (g.mouseX !== undefined) {
+      const last = pts[pts.length - 1]
+      ctx.strokeStyle = 'rgba(200,168,107,.55)'
+      ctx.beginPath()
+      ctx.moveTo(last.x * cs - viewport.value.offsetX, last.y * cs - viewport.value.offsetY)
+      ctx.lineTo(g.mouseX * cs - viewport.value.offsetX, g.mouseY * cs - viewport.value.offsetY)
+      ctx.stroke()
+    }
     ctx.setLineDash([])
-    ctx.fillStyle = '#f5d76e'
-    ctx.beginPath()
-    ctx.arc(x1, y1, 4, 0, Math.PI * 2)
-    ctx.fill()
+
+    // Dots at each waypoint
+    pts.forEach((p, i) => {
+      const px = p.x * cs - viewport.value.offsetX
+      const py = p.y * cs - viewport.value.offsetY
+      ctx.fillStyle = i === 0 ? '#f5d76e' : '#c8a86b'
+      ctx.beginPath()
+      ctx.arc(px, py, i === 0 ? 5 : 3.5, 0, Math.PI * 2)
+      ctx.fill()
+    })
   }
   ctx.globalAlpha = 1
 }
@@ -940,7 +1358,22 @@ function onMouseDown(e) {
     isPanning = true
     panStart = { x: e.clientX, y: e.clientY }
     panOrigin = { ...viewport.value }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
     return
+  }
+
+  if (e.button === 0 && dungeonStore.drawMode === 'door') {
+    const rect = getRect()
+    const mx = e.clientX - rect.left
+    const my = e.clientY - rect.top
+    const near = findDoorAtClick(mx, my)
+    if (near) {
+      doorDrag = near
+      doorDragMoved = false
+      doorDragGhost.value = null
+      return
+    }
   }
 
   if (e.button === 0 && dungeonStore.drawMode === 'edit' && dungeonStore.selectedElement?.type === 'room') {
@@ -983,11 +1416,29 @@ function onMouseDown(e) {
 }
 
 function onMouseMove(e) {
+  if (prefs.showCursors) {
+    const rect = getRect()
+    broadcastCursor(e.clientX - rect.left, e.clientY - rect.top)
+  }
+
   if (isPanning) {
     viewport.value = {
       offsetX: panOrigin.offsetX - (e.clientX - panStart.x),
       offsetY: panOrigin.offsetY - (e.clientY - panStart.y),
       zoom: panOrigin.zoom,
+    }
+    return
+  }
+
+  if (doorDrag) {
+    const rect = getRect()
+    const mx = e.clientX - rect.left
+    const my = e.clientY - rect.top
+    const wall = findRoomWall(mx, my)
+    if (wall) {
+      doorDragMoved = true
+      const { roomId, ...doorData } = wall
+      doorDragGhost.value = { roomId, doorData: { id: doorDrag.doorId, ...doorData } }
     }
     return
   }
@@ -1026,7 +1477,26 @@ function onMouseMove(e) {
 }
 
 function onMouseUp(e) {
-  if (isPanning) { isPanning = false; return }
+  if (isPanning) {
+    isPanning = false
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
+    return
+  }
+
+  if (doorDrag) {
+    if (doorDragMoved && doorDragGhost.value) {
+      const { roomId, doorData } = doorDragGhost.value
+      dungeonStore.moveDoor(doorDrag.roomId, doorDrag.doorId, roomId, doorData)
+    } else {
+      dungeonStore.removeDoor(doorDrag.roomId, doorDrag.doorId)
+    }
+    doorDrag = null
+    doorDragGhost.value = null
+    doorDragMoved = false
+    skipNextDoorClick = true
+    return
+  }
 
   if (isResizing) {
     if (didResize && resizeGhost.value) {
@@ -1077,13 +1547,11 @@ function onClick(e) {
   if (didMove)   { didMove   = false; return }
 
   if (dungeonStore.drawMode === 'door') {
+    if (skipNextDoorClick) { skipNextDoorClick = false; return }
     const rect = getRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
-    const existing = findDoorAtClick(mx, my)
-    if (existing) {
-      dungeonStore.removeDoor(existing.roomId, existing.doorId)
-    } else {
+    if (!findDoorAtClick(mx, my)) {
       const hit = findRoomWall(mx, my)
       if (hit) {
         const { roomId, ...doorData } = hit
@@ -1131,11 +1599,50 @@ function onClick(e) {
 }
 
 function onDoubleClick(e) {
-  if (dungeonStore.drawMode !== 'select') return
+  if (dungeonStore.drawMode === 'corridor') {
+    const result = draw.commitCorridor()
+    if (result) {
+      const { type: _type, ...corridorData } = result
+      dungeonStore.addCorridor({
+        dungeon_id: props.dungeonId,
+        session_id: dungeonStore.dungeon?.session_id,
+        ...corridorData,
+      })
+    }
+    return
+  }
+
   const rect = getRect()
   const { gx, gy } = pixelToGrid(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
+
+  if (dungeonStore.drawMode === 'room' || dungeonStore.drawMode === 'circle') {
+    draw.cancel()
+    dimEntry.value = { gx, gy, screenX: e.clientX - rect.left, screenY: e.clientY - rect.top }
+    setTimeout(() => document.querySelector('.ds-dim-input input')?.select(), 30)
+    return
+  }
+
+  if (dungeonStore.drawMode !== 'select') return
   const roomId = draw.hitTestRoom(gx, gy, dungeonStore.rooms)
   if (roomId) openAnnotation('room', roomId)
+}
+
+function submitDim() {
+  if (!dimEntry.value) return
+  const w = Math.max(1, Math.round(parseFloat(dimW.value) || 1))
+  const h = Math.max(1, Math.round(parseFloat(dimH.value) || 1))
+  dungeonStore.addRoom({
+    dungeon_id: props.dungeonId,
+    session_id: dungeonStore.dungeon?.session_id,
+    origin_x: dimEntry.value.gx,
+    origin_y: dimEntry.value.gy,
+    width: w,
+    height: h,
+    shape: dungeonStore.drawMode === 'circle' ? 'circle' : 'rect',
+    label: null,
+  })
+  dimEntry.value = null
+  dungeonStore.drawMode = 'select'
 }
 
 function openAnnotation(type, id) {
@@ -1159,8 +1666,17 @@ function onWheel(e) {
 
 function onKeyDown(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-  if (e.key === 'Escape') { draw.cancel(); dungeonStore.deselect(); return }
-  if (e.key === 's' || e.key === 'S') { dungeonStore.drawMode = 'select'; return }
+  if (e.key === 'Escape') { dimEntry.value = null; draw.cancel(); dungeonStore.deselect(); return }
+  if (e.key === 'Enter' && dungeonStore.drawMode === 'corridor') {
+    const result = draw.commitCorridor()
+    if (result) {
+      const { type: _type, ...corridorData } = result
+      dungeonStore.addCorridor({ dungeon_id: props.dungeonId, session_id: dungeonStore.dungeon?.session_id, ...corridorData })
+    }
+    return
+  }
+  if (e.key === 'v' || e.key === 'V') { dungeonStore.drawMode = 'select'; return }
+  if (e.key === 'h' || e.key === 'H') { dungeonStore.drawMode = 'pan'; return }
   if (e.key === 'e' || e.key === 'E') { dungeonStore.drawMode = 'edit'; return }
   if (e.key === 'r' || e.key === 'R') { dungeonStore.drawMode = 'room'; return }
   if (e.key === 'o' || e.key === 'O') { dungeonStore.drawMode = 'circle'; return }
@@ -1200,6 +1716,7 @@ onMounted(() => {
   canvasEl.value.height = canvasHeight.value
   resizeObserver.observe(containerEl.value)
   window.addEventListener('keydown', onKeyDown)
+  if (props.dungeonId) initCursorChannel(props.dungeonId)
   rafId = requestAnimationFrame(renderFrame)
 })
 
@@ -1207,5 +1724,54 @@ onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
   resizeObserver.disconnect()
   window.removeEventListener('keydown', onKeyDown)
+  if (cursorChannel) supabase.removeChannel(cursorChannel)
 })
 </script>
+
+<style scoped>
+.ds-dim-input {
+  position: absolute;
+  background: var(--ink, #1a1410);
+  color: var(--paper, #ede1c7);
+  border: 1px solid var(--accent, #8a1c1c);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+.ds-dim-input input {
+  width: 50px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(237,225,199,.4);
+  color: var(--paper, #ede1c7);
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  text-align: center;
+}
+.ds-dim-input input:focus { border-bottom-color: var(--accent-2, #b8541c); }
+.ds-dim-input span { color: var(--paper-edge, #b89c6a); font-size: 11px; }
+
+.ds-dim-btn {
+  background: var(--ink, #1a1410);
+  color: var(--paper, #ede1c7);
+  border: 1px solid rgba(237,225,199,.3);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-family: var(--font-ui, sans-serif);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.ds-dim-btn:hover { background: var(--accent, #8a1c1c); border-color: var(--accent, #8a1c1c); }
+.ds-dim-ghost { background: transparent; color: rgba(237,225,199,.5); }
+.ds-dim-ghost:hover { background: rgba(237,225,199,.1); border-color: rgba(237,225,199,.3); color: var(--paper, #ede1c7); }
+</style>

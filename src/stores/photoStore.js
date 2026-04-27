@@ -86,16 +86,22 @@ export const usePhotoStore = defineStore('photo', () => {
     if (!authStore.user?.id) return null
 
     if (file.size > MAX_FILE_SIZE) throw new Error('File too large (max 10 MB)')
-    const ext = file.name.split('.').pop().toLowerCase()
-    if (!['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) throw new Error('Unsupported file type')
 
+    // Validate by MIME type (not file extension — trivially spoofable)
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    const EXT_MAP = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
+    const mimeType = file.type
+    if (!ALLOWED_TYPES.includes(mimeType)) throw new Error('Unsupported file type')
+    const ext = EXT_MAP[mimeType] ?? 'jpg'
+
+    // Path: {session_id}/{uuid}.{ext} — storage policy verifies session membership
     const storagePath = `${currentSessionId}/${crypto.randomUUID()}.${ext}`
 
     uploading.value = true
     try {
       const { error: uploadErr } = await supabase.storage
         .from(BUCKET)
-        .upload(storagePath, file, { upsert: false })
+        .upload(storagePath, file, { upsert: false, contentType: mimeType })
       if (uploadErr) throw uploadErr
 
       const { data, error } = await supabase
