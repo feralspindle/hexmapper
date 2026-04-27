@@ -215,7 +215,10 @@ begin
     'hex_notes','dungeon_element_notes','reference_photos','photo_broadcasts',
     'bug_reports'
   ]) loop
-    execute format('revoke truncate on %I from anon, authenticated', t);
+    -- Skip tables that haven't been created yet (e.g. dungeon_fog_cells)
+    if exists (select 1 from pg_tables where schemaname = 'public' and tablename = t) then
+      execute format('revoke truncate on %I from anon, authenticated', t);
+    end if;
   end loop;
 end $$;
 
@@ -239,20 +242,27 @@ alter table characters
   drop constraint if exists character_data_size,
   add  constraint character_data_size check (pg_column_size(data) < 65536);
 
--- active_character_id must belong to the session member who owns it
-alter table session_members
-  drop constraint if exists active_char_belongs_to_user;
+-- active_character_id must belong to the session member who owns it.
+-- CHECK constraints can't use subqueries in Postgres, so this is a trigger.
+create or replace function check_active_char_belongs_to_user()
+returns trigger language plpgsql as $$
+begin
+  if new.active_character_id is not null then
+    if not exists (
+      select 1 from characters
+      where id = new.active_character_id
+        and user_id = new.user_id
+    ) then
+      raise exception 'active_character_id must belong to the session member (user_id mismatch)';
+    end if;
+  end if;
+  return new;
+end $$;
 
-alter table session_members
-  add constraint active_char_belongs_to_user
-    check (
-      active_character_id is null
-      or (
-        select count(*) from characters c
-        where c.id = active_character_id
-          and c.user_id = session_members.user_id
-      ) > 0
-    );
+drop trigger if exists trg_check_active_char on session_members;
+create trigger trg_check_active_char
+  before insert or update on session_members
+  for each row execute function check_active_char_belongs_to_user();
 
 -- =============================================================================
 -- RLS POLICY OVERHAUL
@@ -427,32 +437,8 @@ create policy "dungeon_corridors_gm_write" on dungeon_corridors
     )
   );
 
--- ---------------------------------------------------------------------------
--- dungeon_fog_cells: members can read fog state; only GM can write it
--- ---------------------------------------------------------------------------
-
-drop policy if exists "dungeon_fog_cells_auth" on dungeon_fog_cells;
-
-create policy "dungeon_fog_cells_member_select" on dungeon_fog_cells
-  as permissive for select to authenticated
-  using (
-    exists (
-      select 1 from dungeons d where d.id = dungeon_fog_cells.dungeon_id and is_session_member(d.session_id)
-    )
-  );
-
-create policy "dungeon_fog_cells_gm_write" on dungeon_fog_cells
-  as permissive for all to authenticated
-  using (
-    exists (
-      select 1 from dungeons d where d.id = dungeon_fog_cells.dungeon_id and is_session_gm(d.session_id)
-    )
-  )
-  with check (
-    exists (
-      select 1 from dungeons d where d.id = dungeon_fog_cells.dungeon_id and is_session_gm(d.session_id)
-    )
-  );
+-- dungeon_fog_cells policies are created in 20260429000003_dungeon_fog_cells.sql
+-- which also creates the table itself.
 
 -- ---------------------------------------------------------------------------
 -- dice_rolls: scope SELECT to session members (was using (true) globally)

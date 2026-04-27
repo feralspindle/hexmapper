@@ -63,12 +63,12 @@
           <button
             v-tooltip="hasDice ? 'Roll the selected dice and broadcast to the table' : 'Select at least one die to roll'"
             class="px-4 h-8 rounded font-display text-sm transition-all select-none"
-            :class="hasDice
+            :class="hasDice && !diceStore.pendingRoll
               ? 'bg-parchment-500 hover:bg-parchment-400 text-stone-950 active:scale-95'
               : 'bg-stone-800 text-stone-600 cursor-not-allowed border border-stone-700'"
-            :disabled="!hasDice"
+            :disabled="!hasDice || !!diceStore.pendingRoll"
             @click="roll"
-          >Roll!</button>
+          >{{ diceStore.pendingRoll ? 'Rolling…' : 'Roll!' }}</button>
         </div>
       </div>
     </div>
@@ -87,7 +87,24 @@
         </button>
       </div>
 
-      <div v-if="!diceStore.rolls.length" class="px-3 py-4 text-stone-400 text-sm italic text-center">
+      <!-- Pending roll: shown while the server RPC is in flight -->
+      <div v-if="diceStore.pendingRoll" class="mx-2 my-1.5">
+        <div class="rounded border border-parchment-400 bg-stone-800/80 text-sm overflow-hidden">
+          <div class="px-2 pt-1.5 pb-0.5 min-h-[3rem]">
+            <div v-if="diceStore.pendingRoll.label" class="text-parchment-400/70 text-sm italic mb-0.5" style="font-family:'Crimson Text',serif">{{ diceStore.pendingRoll.label }}</div>
+            <span class="font-mono text-stone-200 text-sm">{{ formatExpression(diceStore.pendingRoll) }}</span>
+          </div>
+          <div class="flex items-center justify-between px-2 pb-1.5">
+            <div class="flex items-center gap-1.5 text-stone-500 text-xs">
+              <i class="fa-solid fa-spinner fa-spin" />
+              <span>Rolling…</span>
+            </div>
+            <span class="font-bold text-2xl text-stone-600">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!diceStore.rolls.length && !diceStore.pendingRoll" class="px-3 py-4 text-stone-400 text-sm italic text-center">
         No rolls yet
       </div>
 

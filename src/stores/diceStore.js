@@ -9,6 +9,7 @@ const HISTORY_LIMIT = 60
 export const useDiceStore = defineStore('dice', () => {
   const rolls       = ref([])
   const annotations = ref({})
+  const pendingRoll = ref(null)   // in-flight RPC: shown in UI while server rolls
   let channel = null
   let currentSessionId = null
 
@@ -73,58 +74,31 @@ export const useDiceStore = defineStore('dice', () => {
   }
 
   async function rollDice(pending, modifier, label = null, characterId = null) {
-    const authStore = useAuthStore()
-    const results = []
-    let total = modifier
+    if (pendingRoll.value) return  // don't stack rolls
 
-    for (const die of DICE_ORDER) {
-      const count = pending[die] ?? 0
-      const sides = parseInt(die.slice(1))
-      for (let i = 0; i < count; i++) {
-        const val = Math.floor(Math.random() * sides) + 1
-        results.push({ die, value: val })
-        total += val
-      }
-    }
-
-    const optimisticId = crypto.randomUUID()
-    const optimistic = {
-      id: optimisticId,
-      session_id: currentSessionId,
-      user_id: authStore.user?.id,
-      display_name: authStore.displayName,
-      character_id: characterId,
+    pendingRoll.value = {
       pending: { ...pending },
       modifier,
-      results,
-      total,
       label,
-      created_at: new Date().toISOString(),
     }
 
-    rolls.value = [optimistic, ...rolls.value].slice(0, HISTORY_LIMIT)
-
-    const { data, error } = await supabase
-      .from('dice_rolls')
-      .insert({
-        session_id: currentSessionId,
-        user_id: authStore.user?.id,
-        display_name: authStore.displayName ?? 'Adventurer',
-        character_id: characterId,
-        pending: { ...pending },
-        modifier,
-        results,
-        total,
-        label,
+    try {
+      const { data, error } = await supabase.rpc('roll_dice', {
+        p_session_id:   currentSessionId,
+        p_pending:      pending,
+        p_modifier:     modifier ?? 0,
+        p_label:        label ?? null,
+        p_character_id: characterId ?? null,
       })
-      .select()
-      .single()
 
-    if (error) {
-      rolls.value = rolls.value.filter(r => r.id !== optimisticId)
-      console.error('rollDice error:', error.message)
-    } else {
-      rolls.value = rolls.value.map(r => (r.id === optimisticId ? data : r))
+      if (error) {
+        console.error('rollDice:', error.message)
+        return
+      }
+
+      rolls.value = [data, ...rolls.value].slice(0, HISTORY_LIMIT)
+    } finally {
+      pendingRoll.value = null
     }
   }
 
@@ -179,8 +153,9 @@ export const useDiceStore = defineStore('dice', () => {
     }
     rolls.value       = []
     annotations.value = {}
+    pendingRoll.value = null
     currentSessionId  = null
   }
 
-  return { rolls, annotations, init, rollDice, addAnnotation, cleanup }
+  return { rolls, annotations, pendingRoll, init, rollDice, addAnnotation, cleanup }
 })
