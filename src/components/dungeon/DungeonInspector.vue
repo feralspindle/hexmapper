@@ -11,7 +11,7 @@
       </svg>
     </div>
 
-    <div class="ds-section-body" style="min-height:120px;max-height:420px">
+    <div class="ds-section-body" style="min-height:120px;flex:1 1 auto">
 
       <div v-if="!dungeonStore.selectedElement" class="ds-inspector-empty">
         <span class="ds-glyph">✦</span>
@@ -32,7 +32,7 @@
 
 
         <div class="ds-dims-readout">
-          <span style="font-family:var(--font-zine);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">Size</span>
+          <span style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">Size</span>
           <span style="background:var(--paper);border:1px solid var(--rule-strong);padding:3px 8px;letter-spacing:.04em">
             {{ selectedRoom.width * 5 }} × {{ selectedRoom.height * 5 }} ft
           </span>
@@ -84,21 +84,37 @@
       
         <div v-if="selectedRoom.items?.length">
           <label class="ds-field-label">Contents</label>
-          <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;flex-direction:column;gap:6px">
             <div
               v-for="item in selectedRoom.items"
               :key="item.id"
               class="ds-content-card"
               :class="`kind-${item.type}`"
             >
-              <div class="ds-content-stamp">
-                <i :class="faClassForType(item.type)" style="font-size:12px" />
+              <div class="ds-content-head">
+                <div class="ds-content-stamp">
+                  <i :class="faClassForType(item.type)" style="font-size:12px" />
+                </div>
+                <span class="ds-content-kind">{{ item.type }}</span>
+                <input
+                  class="ds-input ds-content-name-input"
+                  :value="item.label ?? ''"
+                  placeholder="Name…"
+                  @input="updateItem(item.id, { label: $event.target.value })"
+                />
+                <button
+                  class="ds-x-btn"
+                  @click="confirm('Remove this item?', () => dungeonStore.removeRoomItem(selectedRoom.id, item.id))"
+                >×</button>
               </div>
-              <span class="ds-content-name">{{ item.label ?? item.type }}</span>
-              <button
-                class="ds-x-btn"
-                @click="confirm('Remove this item?', () => dungeonStore.removeRoomItem(selectedRoom.id, item.id))"
-              >×</button>
+              <textarea
+                class="ds-input"
+                :value="item.notes ?? ''"
+                placeholder="Notes about this…"
+                rows="2"
+                style="resize:vertical;min-height:36px"
+                @input="updateItem(item.id, { notes: $event.target.value })"
+              />
             </div>
           </div>
         </div>
@@ -121,17 +137,21 @@ import { useD } from '@/stores/dungeonStore.js'
 import { useNotesStore } from '@/stores/notesStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useActivityStore } from '@/stores/activityStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 
-const dungeonStore  = useD()
-const notesStore    = useNotesStore()
-const authStore     = useAuthStore()
-const sessionStore  = useSessionStore()
-const { confirm }   = useConfirmDialog()
+const dungeonStore   = useD()
+const notesStore     = useNotesStore()
+const authStore      = useAuthStore()
+const sessionStore   = useSessionStore()
+const activityStore  = useActivityStore()
+const { confirm }    = useConfirmDialog()
 
 const open = ref(true)
+
+defineExpose({ openSection: () => { open.value = true } })
 
 const selectedRoom     = computed(() => dungeonStore.selectedElement?.type === 'room' ? dungeonStore.rooms.get(dungeonStore.selectedElement.id) ?? null : null)
 const selectedCorridor = computed(() => dungeonStore.selectedElement?.type === 'corridor' ? dungeonStore.corridors.get(dungeonStore.selectedElement.id) ?? null : null)
@@ -153,8 +173,16 @@ function debouncedSave() {
   saveTimer = setTimeout(() => {
     const el = dungeonStore.selectedElement
     if (!el) return
-    if (el.type === 'room') dungeonStore.updateRoom(el.id, { label: roomLabel.value })
-    else dungeonStore.updateCorridor(el.id, { label: roomLabel.value })
+    if (el.type === 'room') {
+      const newLabel = roomLabel.value
+      const oldLabel = dungeonStore.rooms.get(el.id)?.label ?? ''
+      dungeonStore.updateRoom(el.id, { label: newLabel })
+      if (newLabel.trim() && newLabel !== oldLabel) {
+        activityStore.record('renamed', `${oldLabel || 'Unnamed Room'} → ${newLabel}`)
+      }
+    } else {
+      dungeonStore.updateCorridor(el.id, { label: roomLabel.value })
+    }
   }, 500)
 }
 
@@ -169,6 +197,15 @@ async function saveNote() {
 
 function noteColor(userId) {
   return playerColorFor(userId)
+}
+
+const _itemTimers = new Map()
+function updateItem(itemId, patch) {
+  clearTimeout(_itemTimers.get(itemId))
+  _itemTimers.set(itemId, setTimeout(() => {
+    _itemTimers.delete(itemId)
+    if (selectedRoom.value) dungeonStore.updateRoomItem(selectedRoom.value.id, itemId, patch)
+  }, 400))
 }
 
 function timeAgo(ts) {

@@ -15,7 +15,7 @@
 
     <div class="ds-brand">
       <div class="ds-brand-mark">S</div>
-      The Dungeon Scribe
+      {{ sessionStore.sessionName }}
     </div>
 
     <div class="ds-divider" />
@@ -23,7 +23,7 @@
 
     <div class="ds-session-name">
       <span class="ds-ornament">✦</span>
-      {{ sessionStore.sessionName }}
+      {{ dungeonStore.dungeon?.name ?? 'Unnamed Dungeon' }}
       <span class="ds-ornament">✦</span>
     </div>
 
@@ -69,7 +69,7 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
       </svg>
-      <span style="font-size:12px">Sheet</span>
+      <span style="font-size:13px">Sheet</span>
     </button>
 
 
@@ -92,7 +92,7 @@
         style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:12px;color:var(--paper);flex-shrink:0"
       >{{ authStore.displayName?.charAt(0)?.toUpperCase() }}</div>
 
-      <span style="font-family:var(--font-body);font-size:12px;color:rgba(237,225,199,.75);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+      <span style="font-family:var(--font-body);font-size:13px;color:rgba(237,225,199,.75);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         {{ authStore.displayName }}
       </span>
 
@@ -120,6 +120,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
+import { useD } from '@/stores/dungeonStore.js'
 import TorchTimer from '@/components/dungeon/TorchTimer.vue'
 import CharacterPicker from '@/components/common/CharacterPicker.vue'
 import ShareModal from '@/components/common/ShareModal.vue'
@@ -138,6 +139,7 @@ const router       = useRouter()
 const route        = useRoute()
 const sessionStore = useSessionStore()
 const authStore    = useAuthStore()
+const dungeonStore = useD()
 
 const settingsOpen  = ref(false)
 const avatarErr     = ref(false)
@@ -152,7 +154,7 @@ function playerColor(userId) {
 }
 
 const visibleOnlineUsers = computed(() =>
-  sessionStore.onlineUsers.filter(u => u.user_id !== authStore.user?.id).slice(0, 5)
+  sessionStore.onlineUsers.slice(0, 6)
 )
 
 watch(settingsOpen, (val) => {

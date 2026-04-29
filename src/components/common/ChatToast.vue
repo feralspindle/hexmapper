@@ -56,11 +56,10 @@ watch(() => chatStore.latestMessage, (msg) => {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  background: var(--ink, #1a1410);
-  border: 1px solid rgba(237,225,199,.18);
-  border-radius: 3px;
+  background: var(--paper-2, #e3d4b3);
+  border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
   padding: 7px 10px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.6), 0 0 0 1px rgba(237,225,199,.05) inset;
+  box-shadow: 1px 0 0 rgba(255,255,255,.4) inset, 0 4px 12px rgba(0,0,0,.2);
   max-width: 280px;
   pointer-events: auto;
 }
@@ -75,7 +74,7 @@ watch(() => chatStore.latestMessage, (msg) => {
 }
 
 .ds-ct-sep {
-  color: rgba(237,225,199,.3);
+  color: var(--ink-mute, #8a7a68);
   flex: 0 0 auto;
   font-size: 11px;
 }
@@ -83,7 +82,7 @@ watch(() => chatStore.latestMessage, (msg) => {
 .ds-ct-body {
   font-family: var(--font-body, serif);
   font-size: 13px;
-  color: rgba(237,225,199,.85);
+  color: var(--ink, #1a1410);
   line-height: 1.35;
   word-break: break-word;
   flex: 1;
@@ -93,7 +92,7 @@ watch(() => chatStore.latestMessage, (msg) => {
 .ds-ct-close {
   background: transparent;
   border: 0;
-  color: rgba(237,225,199,.3);
+  color: var(--ink-mute, #8a7a68);
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
@@ -101,7 +100,7 @@ watch(() => chatStore.latestMessage, (msg) => {
   flex: 0 0 auto;
   transition: color .12s;
 }
-.ds-ct-close:hover { color: rgba(237,225,199,.7); }
+.ds-ct-close:hover { color: var(--accent, #8a1c1c); }
 
 .chat-toast-enter-active { transition: all 0.15s ease-out; }
 .chat-toast-leave-active { transition: all 0.4s ease-in; }

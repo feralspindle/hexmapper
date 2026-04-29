@@ -107,8 +107,9 @@ const drawingTools = [
 
 function deleteSelected() {
   if (!dungeonStore.selectedElement) return
-  const { type, id } = dungeonStore.selectedElement
+  const { type, id, roomId } = dungeonStore.selectedElement
   if (type === 'room') confirm('Delete this room?', () => dungeonStore.deleteRoom(id))
+  else if (type === 'door') { dungeonStore.removeDoor(roomId, id); dungeonStore.deselect() }
   else dungeonStore.deleteCorridor(id)
 }
 

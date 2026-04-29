@@ -43,7 +43,14 @@ export const useMapStore = defineStore('map', () => {
     const { data, error } = await supabase.storage
       .from('session-maps')
       .createSignedUrl(path, URL_EXPIRY_SECONDS)
-    if (error) { console.error('refreshSignedUrl:', error.message); return }
+    if (error) {
+      if (error.message === 'Object not found') {
+        targetRef.value = null
+      } else {
+        console.error('refreshSignedUrl:', error.message)
+      }
+      return
+    }
     targetRef.value = data.signedUrl
     _urlTimers[key] = setTimeout(
       () => _refreshUrl(path, targetRef, key),

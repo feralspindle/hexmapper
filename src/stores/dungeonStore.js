@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
@@ -20,6 +20,7 @@ export const useD = defineStore('dungeon', () => {
   let corridorChannel = null
   let dungeonChannel = null
   let presenceChannel = null
+  let _stopAuthWatch = null
 
   async function init(sessionId, dungeonId) {
     loading.value = true
@@ -103,6 +104,7 @@ export const useD = defineStore('dungeon', () => {
       )
       .subscribe()
 
+    if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
     if (presenceChannel) supabase.removeChannel(presenceChannel)
     const authStore = useAuthStore()
 
@@ -110,7 +112,7 @@ export const useD = defineStore('dungeon', () => {
       const state = presenceChannel.presenceState()
       const latest = Object.values(state).map(entries => entries.at(-1)).filter(Boolean)
       const byUser = new Map()
-      for (const p of latest) byUser.set(p.user_id, p)
+      for (const p of latest) byUser.set(p.user_id ?? p._clientId, p)
       viewers.value = [...byUser.values()]
     }
 
@@ -123,14 +125,30 @@ export const useD = defineStore('dungeon', () => {
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await presenceChannel.track({
-            user_id: authStore.user?.id,
+            user_id:      authStore.user?.id ?? null,
+            _clientId:    CLIENT_ID,
             display_name: authStore.displayName ?? 'Adventurer',
-            avatar_url: authStore.avatarUrl ?? null,
-            editing_id: selectedElement.value?.id ?? null,
+            avatar_url:   authStore.avatarUrl ?? null,
+            editing_id:   selectedElement.value?.id ?? null,
             editing_type: selectedElement.value?.type ?? null,
           })
         }
       })
+
+    _stopAuthWatch = watch(
+      () => authStore.user?.id,
+      (userId, prev) => {
+        if (!userId || userId === prev || !presenceChannel) return
+        presenceChannel.track({
+          user_id:      userId,
+          _clientId:    CLIENT_ID,
+          display_name: authStore.displayName ?? 'Adventurer',
+          avatar_url:   authStore.avatarUrl ?? null,
+          editing_id:   selectedElement.value?.id ?? null,
+          editing_type: selectedElement.value?.type ?? null,
+        })
+      },
+    )
   }
 
   async function addRoom(roomData) {
@@ -279,8 +297,8 @@ export const useD = defineStore('dungeon', () => {
     updateRoom(roomId, { items })
   }
 
-  function selectElement(type, id) {
-    selectedElement.value = { type, id }
+  function selectElement(type, id, extra = {}) {
+    selectedElement.value = { type, id, ...extra }
     _trackPresence()
   }
 
@@ -293,10 +311,11 @@ export const useD = defineStore('dungeon', () => {
     if (!presenceChannel) return
     const authStore = useAuthStore()
     presenceChannel.track({
-      user_id: authStore.user?.id,
+      user_id:      authStore.user?.id ?? null,
+      _clientId:    CLIENT_ID,
       display_name: authStore.displayName ?? 'Adventurer',
-      avatar_url: authStore.avatarUrl ?? null,
-      editing_id: selectedElement.value?.id ?? null,
+      avatar_url:   authStore.avatarUrl ?? null,
+      editing_id:   selectedElement.value?.id ?? null,
       editing_type: selectedElement.value?.type ?? null,
     })
   }
@@ -340,6 +359,7 @@ export const useD = defineStore('dungeon', () => {
   }
 
   function cleanup() {
+    if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
     if (dungeonChannel) supabase.removeChannel(dungeonChannel)
     if (roomChannel) supabase.removeChannel(roomChannel)
     if (corridorChannel) supabase.removeChannel(corridorChannel)

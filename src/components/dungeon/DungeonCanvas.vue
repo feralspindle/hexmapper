@@ -137,12 +137,12 @@
 
         <template v-if="dungeonStore.selectedElement?.id === id && corridor.points?.length >= 2">
           <circle
-            v-for="(pt, i) in corridor.points"
+            v-for="(pt, i) in (corridorDragGhost?.id === id ? corridorDragGhost.points : corridor.points)"
             :key="i"
             :cx="pt.x * cellPx - viewport.offsetX"
             :cy="pt.y * cellPx - viewport.offsetY"
-            :r="i === 0 || i === corridor.points.length - 1 ? 5 : 4"
-            :fill="i === 0 || i === corridor.points.length - 1 ? styleColors.selectedColor : '#ede1c7'"
+            :r="hoveredCorridorPoint === i ? 7 : (i === 0 || i === corridor.points.length - 1 ? 5 : 4)"
+            :fill="hoveredCorridorPoint === i ? '#ffcc44' : (i === 0 || i === corridor.points.length - 1 ? styleColors.selectedColor : '#ede1c7')"
             :stroke="styleColors.selectedColor"
             stroke-width="1.5"
             style="pointer-events:none"
@@ -312,7 +312,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useDungeonDraw, CELL_SIZE, pixelToGrid, corridorSegments } from '@/composables/useDungeonDraw.js'
@@ -359,9 +359,6 @@ const labelStyle = computed(() => {
   }
 })
 
-// Structured hint segments: { type: 'text' | 'kbd', text: string }[]
-// Using structured data instead of v-html to avoid XSS risk if strings ever
-// become dynamic.
 const TOOL_HINTS = {
   room:     [{ type: 'text', text: 'Click and drag to draw a room. ' }, { type: 'kbd', text: 'Double-click' }, { type: 'text', text: ' for exact dimensions.' }],
   circle:   [{ type: 'text', text: 'Click and drag to draw a round chamber. ' }, { type: 'kbd', text: 'Double-click' }, { type: 'text', text: ' for exact dimensions.' }],
@@ -402,6 +399,12 @@ function initCursorChannel(dungeonId) {
     .channel(`dungeon:${dungeonId}:cursors`)
     .on('broadcast', { event: 'cursor' }, ({ payload }) => {
       if (!payload?.userId || payload.userId === authStore.user?.id) return
+      if (payload.hidden) {
+        const next = new Map(remoteCursors.value)
+        next.delete(payload.userId)
+        remoteCursors.value = next
+        return
+      }
       remoteCursors.value = new Map(remoteCursors.value).set(payload.userId, {
         x: payload.x, y: payload.y,
         name: payload.name,
@@ -409,6 +412,12 @@ function initCursorChannel(dungeonId) {
       })
     })
     .subscribe()
+
+  watch(() => prefs.showCursors, (visible) => {
+    if (!visible && cursorChannel && authStore.user?.id) {
+      cursorChannel.send({ type: 'broadcast', event: 'cursor', payload: { userId: authStore.user.id, hidden: true } })
+    }
+  })
 }
 
 function broadcastCursor(canvasX, canvasY) {
@@ -575,9 +584,7 @@ function findFreeSlot(room, desiredX, desiredY, existingItems, step) {
   const minY = room.origin_y + m
   const maxY = room.origin_y + room.height - m
 
-  // Label sits at the room center. Deprioritize slots whose item bounding box
-  // overlaps the label text. exW covers ~2 item-widths (text can be wide);
-  // exH covers the label line + dimensions line below it (~1.2 item-heights).
+
   const labelCx = room.origin_x + room.width  / 2
   const labelCy = room.origin_y + room.height / 2
   const exW = step * 2
@@ -682,6 +689,11 @@ let moveStartGrid = null
 let moveOriginal = null
 let didMove = false
 
+const corridorDragGhost = ref(null)  // { id, points } during corridor drag
+let corridorDrag = null              // { id, type: 'point'|'whole', pointIndex, originalPoints, startGx, startGy }
+let didCorridorDrag = false
+const hoveredCorridorPoint = ref(-1) // -1=none, -2=body, >=0=point index
+
 const draggingItem = ref(null) // { roomId, itemId, ghostX, ghostY }
 
 function onItemMouseDown(_e, roomId, item) {
@@ -745,6 +757,17 @@ function hitTestHandle(mx, my, room) {
   return null
 }
 
+function hitTestCorridorPoint(mx, my, corridor) {
+  const cs = cellPx.value
+  const pts = corridor.points ?? []
+  for (let i = 0; i < pts.length; i++) {
+    const px = pts[i].x * cs - viewport.value.offsetX
+    const py = pts[i].y * cs - viewport.value.offsetY
+    if (Math.hypot(mx - px, my - py) <= HANDLE_HIT + 2) return i
+  }
+  return -1
+}
+
 function applyResize(handle, original, startGx, startGy, gx, gy) {
   const dx = gx - startGx
   const dy = gy - startGy
@@ -769,9 +792,13 @@ function applyResize(handle, original, startGx, startGy, gx, gy) {
 const cursorStyle = computed(() => {
   if (dungeonStore.drawMode === 'pan') return isPanning ? 'grabbing' : 'grab'
   if (dungeonStore.drawMode === 'edit') {
-    if (isMoving) return 'grabbing'
+    if (isMoving || corridorDrag) return 'grabbing'
     if (hoveredHandle.value) return HANDLE_CURSORS[hoveredHandle.value]
     if (dungeonStore.selectedElement?.type === 'room') return 'grab'
+    if (dungeonStore.selectedElement?.type === 'corridor') {
+      if (hoveredCorridorPoint.value >= 0) return 'move'
+      if (hoveredCorridorPoint.value === -2) return 'grab'
+    }
     return 'default'
   }
   if (dungeonStore.drawMode === 'select') return 'default'
@@ -976,7 +1003,6 @@ function drawRooms() {
       }
     }
 
-    // Classic: offset shadow behind room (2px right+down for normal, 3px for selected)
     if (mapStyle.value === 'classic' && !isPolygon) {
       const shadowOffset = isSelected ? 3 : 2
       ctx.fillStyle = isSelected ? '#d00000' : '#000000'
@@ -989,7 +1015,7 @@ function drawRooms() {
       }
     }
 
-    // Clip and fill room
+
     ctx.save()
     shapePath()
     ctx.clip()
@@ -997,7 +1023,6 @@ function drawRooms() {
     ctx.fillStyle = sc.floor
     ctx.fill()
 
-    // Parchment radial texture overlay (warm aging effect)
     if (mapStyle.value === 'parchment' || mapStyle.value === 'classic') {
       const strength = mapStyle.value === 'parchment' ? 1.0 : 0.5
       const g1 = ctx.createRadialGradient(px + pw * 0.3, py + ph * 0.2, 0, px + pw * 0.3, py + ph * 0.2, Math.max(pw, ph) * 0.85)
@@ -1008,7 +1033,7 @@ function drawRooms() {
       ctx.fillStyle = g2; ctx.fill()
     }
 
-    // Inner grid lines
+
     const gridColor = mapStyle.value === 'blueprint'
       ? 'rgba(255,255,255,.06)'
       : mapStyle.value === 'classic'
@@ -1023,24 +1048,22 @@ function drawRooms() {
 
     ctx.restore()
 
-    // Room wall/border
     const borderW = mapStyle.value === 'blueprint' ? 1.5 : mapStyle.value === 'classic' ? 2.5 : 2
     ctx.strokeStyle = sc.wall
     ctx.lineWidth = borderW
     shapePath()
     ctx.stroke()
 
-    // Selected state: accent outline drawn outside the room
     if (isSelected) {
       const outset = 4
       if (mapStyle.value === 'classic') {
-        // Classic: stroke the room in red with extra thickness
+
         ctx.strokeStyle = sc.selectedColor
         ctx.lineWidth = 3
         shapePath()
         ctx.stroke()
       } else {
-        // Parchment/blueprint: 2px accent outline with gap
+
         ctx.strokeStyle = sc.selectedColor
         ctx.lineWidth = 2
         ctx.beginPath()
@@ -1073,7 +1096,6 @@ function drawResizeHandles(room) {
 }
 
 function drawDoorAt(cx, cy, nx, ny) {
-  // Design spec: perpendicular line clearing the corridor + door frame line + accent knob
   const scale   = cellPx.value / 25   // proportion to design's GRID_PX=25
   const bgW     = Math.max(6, 10 * scale)   // paper-colored clearing line
   const fgW     = Math.max(1.5, 3 * scale)  // ink door frame line
@@ -1081,7 +1103,6 @@ function drawDoorAt(cx, cy, nx, ny) {
   const knobR   = Math.max(2, 2.5 * scale)  // door knob radius
   const tx = -ny, ty = nx  // perpendicular vector
 
-  // Background (erase corridor, reveal opening)
   const bgColor = mapStyle.value === 'blueprint' ? '#1d4868' : mapStyle.value === 'classic' ? '#ffffff' : '#ede1c7'
   ctx.strokeStyle = bgColor
   ctx.lineWidth = bgW
@@ -1091,7 +1112,6 @@ function drawDoorAt(cx, cy, nx, ny) {
   ctx.lineTo(cx + tx * halfLen, cy + ty * halfLen)
   ctx.stroke()
 
-  // Door frame (ink-colored line)
   const fgColor = mapStyle.value === 'blueprint' ? '#b8e0f0' : '#1a1410'
   ctx.strokeStyle = fgColor
   ctx.lineWidth = fgW
@@ -1101,7 +1121,6 @@ function drawDoorAt(cx, cy, nx, ny) {
   ctx.lineTo(cx + tx * halfLen, cy + ty * halfLen)
   ctx.stroke()
 
-  // Accent knob (dot at center)
   const knobFill = mapStyle.value === 'blueprint' ? '#ffaa55' : '#8a1c1c'
   ctx.beginPath()
   ctx.arc(cx, cy, knobR, 0, Math.PI * 2)
@@ -1150,6 +1169,7 @@ function doorNormal(door, room) {
 }
 
 function drawDoors() {
+  const selDoor = dungeonStore.selectedElement?.type === 'door' ? dungeonStore.selectedElement : null
   for (const [, room] of dungeonStore.rooms) {
     if (!room.doors?.length) continue
     for (const door of room.doors) {
@@ -1159,9 +1179,19 @@ function drawDoors() {
       if (isDragging) ctx.globalAlpha = 0.3
       drawDoorAt(cx, cy, nx, ny)
       if (isDragging) ctx.globalAlpha = 1
+      if (selDoor?.id === door.id) {
+        const selColor = mapStyle.value === 'blueprint' ? 'rgba(255,170,85,0.9)' : 'rgba(138,28,28,0.9)'
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(cx, cy, DOOR_HIT - 1, 0, Math.PI * 2)
+        ctx.strokeStyle = selColor
+        ctx.lineWidth = 1.5
+        ctx.setLineDash([3, 3])
+        ctx.stroke()
+        ctx.restore()
+      }
     }
   }
-  // Draw ghost door at drag target position
   if (doorDragGhost.value) {
     const { roomId, doorData } = doorDragGhost.value
     const room = dungeonStore.rooms.get(roomId)
@@ -1176,11 +1206,13 @@ function drawDoors() {
 function drawCorridors() {
   const cs = cellPx.value
   const sc = styleColors.value
-  const outerFrac = mapStyle.value === 'classic' ? 0.56 : 0.48
-  const innerFrac = mapStyle.value === 'classic' ? 0.36 : 0.32
+  const outerFrac = mapStyle.value === 'classic' ? 0.84 : 0.72
+  const innerFrac = mapStyle.value === 'classic' ? 0.54 : 0.48
 
   for (const [id, c] of dungeonStore.corridors) {
-    const segs = corridorSegments(c)
+    const ghost = corridorDragGhost.value?.id === id ? corridorDragGhost.value : null
+    const displayC = ghost ? { ...c, points: ghost.points } : c
+    const segs = corridorSegments(displayC)
     const isSelected = dungeonStore.selectedElement?.id === id
     const w = c.width ?? 1
     const outerW = outerFrac * cs * w
@@ -1189,7 +1221,6 @@ function drawCorridors() {
     ctx.lineCap = 'square'
     ctx.lineJoin = 'miter'
 
-    // Outer (wall) pass — draw full polyline as one path
     ctx.strokeStyle = isSelected ? sc.selectedColor : sc.wall
     ctx.lineWidth = outerW
     ctx.beginPath()
@@ -1203,7 +1234,6 @@ function drawCorridors() {
     })
     ctx.stroke()
 
-    // Inner (floor) pass
     ctx.strokeStyle = sc.floor
     ctx.lineWidth = innerW
     ctx.beginPath()
@@ -1314,7 +1344,6 @@ function drawGhost() {
     ctx.lineJoin = 'round'
     ctx.setLineDash([4, 4])
 
-    // Committed segments
     ctx.beginPath()
     pts.forEach((p, i) => {
       const px = p.x * cs - viewport.value.offsetX
@@ -1324,7 +1353,6 @@ function drawGhost() {
     })
     ctx.stroke()
 
-    // Preview segment from last point to cursor
     if (g.mouseX !== undefined) {
       const last = pts[pts.length - 1]
       ctx.strokeStyle = 'rgba(200,168,107,.55)'
@@ -1335,7 +1363,6 @@ function drawGhost() {
     }
     ctx.setLineDash([])
 
-    // Dots at each waypoint
     pts.forEach((p, i) => {
       const px = p.x * cs - viewport.value.offsetX
       const py = p.y * cs - viewport.value.offsetY
@@ -1363,15 +1390,20 @@ function onMouseDown(e) {
     return
   }
 
-  if (e.button === 0 && dungeonStore.drawMode === 'door') {
+  if (e.button === 0 && (dungeonStore.drawMode === 'door' || dungeonStore.drawMode === 'select' || dungeonStore.drawMode === 'edit')) {
     const rect = getRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
     const near = findDoorAtClick(mx, my)
     if (near) {
-      doorDrag = near
-      doorDragMoved = false
-      doorDragGhost.value = null
+      if (dungeonStore.drawMode === 'select') {
+        dungeonStore.selectElement('door', near.doorId, { roomId: near.roomId })
+        skipNextDoorClick = true
+      } else {
+        doorDrag = near
+        doorDragMoved = false
+        doorDragGhost.value = null
+      }
       return
     }
   }
@@ -1410,6 +1442,30 @@ function onMouseDown(e) {
     }
   }
 
+  if (e.button === 0 && dungeonStore.drawMode === 'edit' && dungeonStore.selectedElement?.type === 'corridor') {
+    const corridor = dungeonStore.corridors.get(dungeonStore.selectedElement.id)
+    if (corridor?.points?.length >= 2) {
+      const rect = getRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      const ptIdx = hitTestCorridorPoint(mx, my, corridor)
+      if (ptIdx !== -1) {
+        const { gx, gy } = pixelToGrid(mx, my, viewport.value)
+        corridorDrag = { id: corridor.id, type: 'point', pointIndex: ptIdx, originalPoints: corridor.points.map(p => ({ ...p })), startGx: gx, startGy: gy }
+        didCorridorDrag = false
+        corridorDragGhost.value = { id: corridor.id, points: corridor.points.map(p => ({ ...p })) }
+        return
+      }
+      const { gx, gy } = pixelToGrid(mx, my, viewport.value)
+      if (draw.hitTestCorridor(gx, gy, dungeonStore.corridors) === corridor.id) {
+        corridorDrag = { id: corridor.id, type: 'whole', originalPoints: corridor.points.map(p => ({ ...p })), startGx: gx, startGy: gy }
+        didCorridorDrag = false
+        corridorDragGhost.value = { id: corridor.id, points: corridor.points.map(p => ({ ...p })) }
+        return
+      }
+    }
+  }
+
   if (dungeonStore.drawMode === 'room' || dungeonStore.drawMode === 'circle') {
     draw.onMouseDown(e, dungeonStore.drawMode, getRect())
   }
@@ -1427,6 +1483,22 @@ function onMouseMove(e) {
       offsetY: panOrigin.offsetY - (e.clientY - panStart.y),
       zoom: panOrigin.zoom,
     }
+    return
+  }
+
+  if (corridorDrag) {
+    const rect = getRect()
+    const { gx, gy } = pixelToGrid(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
+    if (corridorDrag.type === 'point') {
+      corridorDragGhost.value = { id: corridorDrag.id, points: corridorDrag.originalPoints.map((p, i) =>
+        i === corridorDrag.pointIndex ? { x: gx, y: gy } : { ...p }
+      )}
+    } else {
+      const dx = gx - corridorDrag.startGx
+      const dy = gy - corridorDrag.startGy
+      corridorDragGhost.value = { id: corridorDrag.id, points: corridorDrag.originalPoints.map(p => ({ x: p.x + dx, y: p.y + dy })) }
+    }
+    didCorridorDrag = true
     return
   }
 
@@ -1469,8 +1541,27 @@ function onMouseMove(e) {
     const room = dungeonStore.rooms.get(dungeonStore.selectedElement.id)
     const rect = getRect()
     hoveredHandle.value = room ? hitTestHandle(e.clientX - rect.left, e.clientY - rect.top, room) : null
+    hoveredCorridorPoint.value = -1
+  } else if (dungeonStore.drawMode === 'edit' && dungeonStore.selectedElement?.type === 'corridor') {
+    hoveredHandle.value = null
+    const corridor = dungeonStore.corridors.get(dungeonStore.selectedElement.id)
+    if (corridor?.points?.length >= 2) {
+      const rect = getRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      const ptIdx = hitTestCorridorPoint(mx, my, corridor)
+      if (ptIdx !== -1) {
+        hoveredCorridorPoint.value = ptIdx
+      } else {
+        const { gx, gy } = pixelToGrid(mx, my, viewport.value)
+        hoveredCorridorPoint.value = draw.hitTestCorridor(gx, gy, dungeonStore.corridors) === corridor.id ? -2 : -1
+      }
+    } else {
+      hoveredCorridorPoint.value = -1
+    }
   } else {
     hoveredHandle.value = null
+    hoveredCorridorPoint.value = -1
   }
 
   draw.onMouseMove(e, dungeonStore.drawMode, getRect())
@@ -1484,12 +1575,23 @@ function onMouseUp(e) {
     return
   }
 
+  if (corridorDrag) {
+    if (didCorridorDrag && corridorDragGhost.value) {
+      dungeonStore.updateCorridor(corridorDrag.id, { points: corridorDragGhost.value.points })
+    }
+    corridorDrag = null
+    corridorDragGhost.value = null
+
+    return
+  }
+
   if (doorDrag) {
     if (doorDragMoved && doorDragGhost.value) {
       const { roomId, doorData } = doorDragGhost.value
       dungeonStore.moveDoor(doorDrag.roomId, doorDrag.doorId, roomId, doorData)
+      dungeonStore.deselect()
     } else {
-      dungeonStore.removeDoor(doorDrag.roomId, doorDrag.doorId)
+      dungeonStore.selectElement('door', doorDrag.doorId, { roomId: doorDrag.roomId })
     }
     doorDrag = null
     doorDragGhost.value = null
@@ -1543,8 +1645,9 @@ function onMouseUp(e) {
 }
 
 function onClick(e) {
-  if (didResize) { didResize = false; return }
-  if (didMove)   { didMove   = false; return }
+  if (didResize)        { didResize = false; return }
+  if (didMove)          { didMove = false; return }
+  if (didCorridorDrag)  { didCorridorDrag = false; return }
 
   if (dungeonStore.drawMode === 'door') {
     if (skipNextDoorClick) { skipNextDoorClick = false; return }
@@ -1588,13 +1691,23 @@ function onClick(e) {
   }
 
   if (dungeonStore.drawMode === 'select' || dungeonStore.drawMode === 'edit') {
+    if (skipNextDoorClick) { skipNextDoorClick = false; return }
     const rect = getRect()
     const { gx, gy } = pixelToGrid(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
     const roomId = draw.hitTestRoom(gx, gy, dungeonStore.rooms)
-    if (roomId) { dungeonStore.selectElement('room', roomId); return }
+    if (roomId) {
+      dungeonStore.selectElement('room', roomId)
+      if (dungeonStore.drawMode === 'edit') dungeonStore.drawMode = 'select'
+      return
+    }
     const corridorId = draw.hitTestCorridor(gx, gy, dungeonStore.corridors)
-    if (corridorId) { dungeonStore.selectElement('corridor', corridorId); return }
+    if (corridorId) {
+      dungeonStore.selectElement('corridor', corridorId)
+      if (dungeonStore.drawMode === 'edit') dungeonStore.drawMode = 'select'
+      return
+    }
     dungeonStore.deselect()
+    if (dungeonStore.drawMode === 'edit') dungeonStore.drawMode = 'select'
   }
 }
 
@@ -1622,9 +1735,26 @@ function onDoubleClick(e) {
     return
   }
 
-  if (dungeonStore.drawMode !== 'select') return
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+  const doorHit = findDoorAtClick(mx, my)
+  if (doorHit) {
+    dungeonStore.drawMode = 'edit'
+    dungeonStore.selectElement('door', doorHit.doorId, { roomId: doorHit.roomId })
+    return
+  }
   const roomId = draw.hitTestRoom(gx, gy, dungeonStore.rooms)
-  if (roomId) openAnnotation('room', roomId)
+  if (roomId) {
+    dungeonStore.drawMode = 'edit'
+    dungeonStore.selectElement('room', roomId)
+    return
+  }
+  const corridorId = draw.hitTestCorridor(gx, gy, dungeonStore.corridors)
+  if (corridorId) {
+    dungeonStore.drawMode = 'edit'
+    dungeonStore.selectElement('corridor', corridorId)
+    return
+  }
 }
 
 function submitDim() {
@@ -1687,9 +1817,12 @@ function onKeyDown(e) {
   if (e.key === '=' || e.key === '+') { zoomIn(); return }
   if (e.key === '-' || e.key === '_') { zoomOut(); return }
   if ((e.key === 'Delete' || e.key === 'Backspace') && dungeonStore.selectedElement) {
-    const { type, id } = dungeonStore.selectedElement
+    const { type, id, roomId } = dungeonStore.selectedElement
     if (type === 'room') {
       confirm('Delete this room?', () => dungeonStore.deleteRoom(id))
+    } else if (type === 'door') {
+      dungeonStore.removeDoor(roomId, id)
+      dungeonStore.deselect()
     } else {
       dungeonStore.deleteCorridor(id)
     }

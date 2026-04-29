@@ -89,12 +89,15 @@ export const useCharacterStore = defineStore('character', () => {
       .from('session_members')
       .select('user_id, active_character_id')
       .eq('session_id', sessionId)
-    if (members) memberSelections.value = members
+    if (members) {
+      memberSelections.value = members
+      await _fetchMissingChars(members.map(m => m.active_character_id))
+    }
 
     const storageKey = `char_active_${authStore.user.id}_${sessionId}`
     const savedId = localStorage.getItem(storageKey)
     if (savedId && characters.value.find(c => c.id === savedId)) {
-      activeId.value = savedId
+      setActive(savedId)
     } else {
       const mine = characters.value.filter(c => c.user_id === authStore.user.id)
       if (mine.length === 1) setActive(mine[0].id)
@@ -240,21 +243,84 @@ export const useCharacterStore = defineStore('character', () => {
     updateField('attacks', character.value.attacks.filter((_, i) => i !== idx))
   }
 
+  async function _fetchMissingChars(ids) {
+    const missing = (ids ?? []).filter(id => id && !characters.value.find(c => c.id === id))
+    if (!missing.length) return
+    const { data } = await supabase.from('characters').select('*').in('id', missing)
+    if (data?.length) {
+      const existing = new Set(characters.value.map(c => c.id))
+      characters.value = [...characters.value, ...data.filter(c => !existing.has(c.id))]
+    }
+  }
+
   function _subscribeRealtime(sessionId) {
     if (_realtimeChannel) supabase.removeChannel(_realtimeChannel)
     _realtimeChannel = supabase
       .channel(`characters:${sessionId}`)
       .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'characters',
+        filter: `session_id=eq.${sessionId}`,
+      }, ({ new: row }) => {
+        const authStore = useAuthStore()
+        if (row.user_id === authStore.user?.id) return  // we created it ourselves
+        if (!characters.value.find(c => c.id === row.id)) {
+          characters.value = [...characters.value, row]
+        }
+      })
+      .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'characters',
         filter: `session_id=eq.${sessionId}`,
-      }, (payload) => {
-        const updated = payload.new
+      }, ({ new: updated }) => {
         if (updated.id === activeId.value) return  // we're the source of truth for our own
         characters.value = characters.value.map(c =>
           c.id === updated.id ? { ...c, data: _augment(updated.data) } : c
         )
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'characters',
+        filter: `session_id=eq.${sessionId}`,
+      }, ({ old }) => {
+        characters.value = characters.value.filter(c => c.id !== old.id)
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'session_members',
+        filter: `session_id=eq.${sessionId}`,
+      }, async ({ new: row }) => {
+        if (!memberSelections.value.find(m => m.user_id === row.user_id)) {
+          memberSelections.value = [
+            ...memberSelections.value,
+            { user_id: row.user_id, active_character_id: row.active_character_id ?? null },
+          ]
+        }
+        await _fetchMissingChars([row.active_character_id])
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'session_members',
+        filter: `session_id=eq.${sessionId}`,
+      }, async ({ new: row }) => {
+        const idx = memberSelections.value.findIndex(m => m.user_id === row.user_id)
+        const entry = { user_id: row.user_id, active_character_id: row.active_character_id ?? null }
+        if (idx !== -1) memberSelections.value[idx] = entry
+        else memberSelections.value = [...memberSelections.value, entry]
+        await _fetchMissingChars([row.active_character_id])
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'session_members',
+        filter: `session_id=eq.${sessionId}`,
+      }, ({ old }) => {
+        memberSelections.value = memberSelections.value.filter(m => m.user_id !== old.user_id)
       })
       .subscribe()
   }

@@ -30,23 +30,24 @@
 
 
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="font-family:var(--font-zine);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">Mod</span>
+        <span style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">Mod</span>
         <button class="ds-btn tiny ghost" @click="modifier--">−</button>
-        <span style="font-family:var(--font-mono);font-size:12px;min-width:24px;text-align:center;color:var(--ink-2)">{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
+        <span style="font-family:var(--font-mono);font-size:13px;min-width:24px;text-align:center;color:var(--ink-2)">{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
         <button class="ds-btn tiny ghost" @click="modifier++">+</button>
-        <div style="flex:1;font-family:var(--font-mono);font-size:11px;color:var(--ink-soft)">{{ formula || '—' }}</div>
+        <div style="flex:1;font-family:var(--font-mono);font-size:12px;color:var(--ink-soft)">{{ formula || '—' }}</div>
         <button v-if="hasAnything" class="ds-btn tiny ghost" @click="clear" style="font-size:10px">Clear</button>
         <button class="ds-btn tiny" :disabled="!hasDice" @click="roll">Roll!</button>
       </div>
     </div>
 
 
+    <button
+      v-if="hasUnseen"
+      class="ds-new-rolls-bar"
+      @click="scrollToTop"
+    >↑ New rolls</button>
+
     <div ref="scrollEl" class="ds-section-body" style="max-height:220px;border-top:1px solid var(--rule);padding-top:8px" @scroll="onScroll">
-      <button
-        v-if="hasUnseen"
-        style="width:100%;padding:4px;background:var(--accent-2);color:var(--paper);font-family:var(--font-zine);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border:0;cursor:default;margin-bottom:6px"
-        @click="scrollToTop"
-      >↑ New rolls</button>
 
       <div v-if="!diceStore.rolls.length" style="font-family:var(--font-body);font-style:italic;font-size:13px;color:var(--ink-mute);text-align:center;padding:12px 0">
         No rolls yet
@@ -82,6 +83,8 @@ const diceStore = useDiceStore()
 const { gmName } = useGMLabel()
 
 const open = ref(true)
+
+defineExpose({ openSection: () => { open.value = true } })
 
 const DICE = ['d4','d6','d8','d10','d12','d20','d100']
 const pending  = ref(Object.fromEntries(DICE.map(d => [d, 0])))

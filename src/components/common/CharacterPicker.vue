@@ -194,7 +194,7 @@ async function handleFile(event) {
 .cp-section-head {
   padding: 6px 12px 4px;
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--ink-mute, #8a7a68);
@@ -220,17 +220,17 @@ async function handleFile(event) {
   transition: background .1s;
 }
 .cp-row:hover { background: var(--paper-2, #e3d4b3); }
-.cp-row--muted { color: var(--ink-mute, #8a7a68); font-size: 12px; }
+.cp-row--muted { color: var(--ink-mute, #8a7a68); font-size: 13px; }
 .cp-row--muted:hover { color: var(--ink, #1a1410); }
-.cp-check { font-size: 11px; width: 12px; flex-shrink: 0; color: var(--accent, #8a1c1c); transition: opacity .1s; }
+.cp-check { font-size: 12px; width: 12px; flex-shrink: 0; color: var(--accent, #8a1c1c); transition: opacity .1s; }
 .cp-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cp-other-icon { font-size: 11px; color: var(--ink-mute, #8a7a68); flex-shrink: 0; }
+.cp-other-icon { font-size: 12px; color: var(--ink-mute, #8a7a68); flex-shrink: 0; }
 .cp-del {
   opacity: 0;
   background: transparent;
   border: none;
   color: var(--ink-mute, #8a7a68);
-  font-size: 11px;
+  font-size: 12px;
   cursor: default;
   padding: 2px 4px;
   transition: color .1s, opacity .1s;
@@ -242,7 +242,7 @@ async function handleFile(event) {
 .cp-empty {
   padding: 10px 12px;
   font-style: italic;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink-mute, #8a7a68);
 }
 .cp-import { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -259,7 +259,7 @@ async function handleFile(event) {
 .cp-back:hover { color: var(--ink, #1a1410); }
 .cp-import-title {
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--ink-mute, #8a7a68);
@@ -270,7 +270,7 @@ async function handleFile(event) {
   border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
   padding: 6px 8px;
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink, #1a1410);
   resize: none;
   outline: none;
@@ -278,6 +278,6 @@ async function handleFile(event) {
 }
 .cp-textarea:focus { border-color: var(--accent, #8a1c1c); }
 .cp-textarea::placeholder { color: var(--ink-mute, #8a7a68); }
-.cp-error { font-size: 11px; color: var(--accent, #8a1c1c); margin: 0; }
+.cp-error { font-size: 12px; color: var(--accent, #8a1c1c); margin: 0; }
 .cp-import-btns { display: flex; gap: 6px; }
 </style>

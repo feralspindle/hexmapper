@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
+import { useActivityStore } from '@/stores/activityStore.js'
 
 export const useNotesStore = defineStore('notes', () => {
   const notes = ref([])
@@ -130,6 +131,9 @@ export const useNotesStore = defineStore('notes', () => {
       console.error('addNote error:', error.message)
     } else {
       notes.value = notes.value.map(n => (n.id === optimisticId ? data : n))
+      const ctx = channel?._ctx
+      const where = ctx?.type === 'hex' ? 'hex cell' : (ctx?.elementType ?? 'element')
+      useActivityStore().record('added note to', where)
     }
   }
 

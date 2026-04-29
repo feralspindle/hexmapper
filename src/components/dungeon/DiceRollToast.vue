@@ -38,17 +38,8 @@ const diceStore = useDiceStore()
 const { gmName } = useGMLabel()
 const toasts = ref([])
 
-const seenKeys = new Set()
+const seenIds = new Set()
 let ready = false
-
-function rollKey(roll) {
-  const dice = Object.entries(roll.pending ?? {})
-    .filter(([, v]) => v > 0)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}:${v}`)
-    .join(',')
-  return `${roll.user_id ?? roll.display_name}:${roll.total}:${dice}`
-}
 
 watch(
   () => diceStore.rolls[0],
@@ -56,17 +47,16 @@ watch(
     if (!newRoll) return
     if (!ready) { ready = true; return }
 
-    const key = rollKey(newRoll)
-    if (seenKeys.has(key)) return
-    seenKeys.add(key)
+    const id = newRoll.id
+    if (seenIds.has(id)) return
+    seenIds.add(id)
 
-    const toastId = newRoll.id
-    toasts.value.push({ id: toastId, roll: newRoll })
+    toasts.value.push({ id, roll: newRoll })
     if (toasts.value.length > 5) toasts.value.shift()
 
     setTimeout(() => {
-      toasts.value = toasts.value.filter(t => t.id !== toastId)
-      seenKeys.delete(key)
+      toasts.value = toasts.value.filter(t => t.id !== id)
+      seenIds.delete(id)
     }, 5000)
   },
 )
@@ -131,25 +121,24 @@ function rollLabel(roll) {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: var(--ink, #1a1410);
-  border: 1px solid rgba(237,225,199,.18);
-  border-radius: 4px;
+  background: var(--paper-2, #e3d4b3);
+  border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
+  border-left: 3px solid var(--accent, #8a1c1c);
   padding: 10px 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.65), 0 0 0 1px rgba(237,225,199,.05) inset;
+  box-shadow: 1px 0 0 rgba(255,255,255,.4) inset, 0 4px 14px rgba(0,0,0,.22);
 }
 
 .ds-rt-die {
   flex: 0 0 auto;
   width: 28px; height: 28px;
   display: grid; place-items: center;
-  background: rgba(237,225,199,.07);
-  border: 1px solid rgba(237,225,199,.16);
-  border-radius: 3px;
+  background: var(--paper-3, #d8c69e);
+  border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
   margin-top: 2px;
 }
 
 .ds-rt-die-icon {
-  color: var(--accent, #c8a86b);
+  color: var(--accent, #8a1c1c);
   font-size: 14px;
 }
 
@@ -163,7 +152,7 @@ function rollLabel(roll) {
   font-size: 9px;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: rgba(237,225,199,.45);
+  color: var(--ink-mute, #8a7a68);
   margin-bottom: 2px;
 }
 
@@ -176,14 +165,14 @@ function rollLabel(roll) {
 .ds-rt-total {
   font-family: var(--font-zine, 'Special Elite', serif);
   font-size: 28px;
-  color: var(--paper, #ede1c7);
+  color: var(--ink, #1a1410);
   line-height: 1;
 }
 
 .ds-rt-formula {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 10px;
-  color: rgba(237,225,199,.4);
+  color: var(--ink-mute, #8a7a68);
   margin-left: auto;
 }
 
@@ -191,34 +180,34 @@ function rollLabel(roll) {
   font-family: var(--font-zine, 'Special Elite', serif);
   font-size: 10px;
   letter-spacing: .1em;
-  color: var(--accent, #c8a86b);
+  color: var(--accent, #8a1c1c);
   font-weight: bold;
 }
 
 .ds-rt-fumble {
   font-size: 10px;
   letter-spacing: .08em;
-  color: #b84040;
+  color: var(--accent-2, #b8541c);
   font-weight: bold;
 }
 
 .ds-rt-breakdown {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 10px;
-  color: rgba(237,225,199,.38);
+  color: var(--ink-soft, #5a4a3a);
   margin-top: 3px;
   line-height: 1.4;
 }
 
 .ds-rt-sep {
-  color: rgba(237,225,199,.22);
+  color: var(--ink-mute, #8a7a68);
 }
 
 .ds-rt-who {
   font-family: var(--font-display, 'IM Fell English', serif);
   font-style: italic;
   font-size: 11px;
-  color: rgba(237,225,199,.42);
+  color: var(--ink-mute, #8a7a68);
   margin-top: 5px;
   white-space: nowrap;
   overflow: hidden;

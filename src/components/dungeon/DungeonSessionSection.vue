@@ -59,14 +59,14 @@
         v-for="item in activityStore.activities"
         :key="item.id"
         class="ds-activity-item"
-        :style="{ '--act-color': actColor(item.userId) }"
+        :style="{ '--act-color': actColor(item.user_id) }"
       >
-        <div style="flex:1;min-width:0">
-          <span class="ds-activity-who">{{ item.who }}</span>
-          <span class="ds-activity-verb"> {{ item.verb }} </span>
+        <div style="flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px">
+          <span class="ds-activity-who">{{ item.display_name }}</span>
+          <span class="ds-activity-verb">{{ item.verb }}</span>
           <span class="ds-activity-what">{{ item.what }}</span>
         </div>
-        <span class="ds-activity-when">{{ timeAgo(item.at) }}</span>
+        <span class="ds-activity-when"> {{ timeAgo(item.created_at) }} </span>
       </div>
     </div>
   </div>

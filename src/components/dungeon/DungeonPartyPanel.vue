@@ -4,7 +4,8 @@
     v-if="hidden"
     class="ds-party-reopen"
     :style="{ left: `${pos.x}px`, top: `${pos.y + 32}px` }"
-    @click="hidden = false"
+    @mousedown.stop="startDrag"
+    @click="reopenClick"
   >
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
@@ -55,31 +56,30 @@
       </div>
       <div class="ds-party-grid">
         <div
-          v-for="char in partyCards"
-          :key="char.id"
+          v-for="card in partyCards"
+          :key="card.userId"
           class="ds-player-card"
-          :class="{ me: char.user_id === authStore.user?.id }"
-          :style="{ '--player-color': charColor(char.user_id) }"
+          :class="{ me: card.userId === authStore.user?.id }"
+          :style="{ '--player-color': charColor(card.userId) }"
         >
           <div style="display:flex;align-items:center;gap:6px">
             <div class="ds-pc-dot" />
-            <span class="ds-pc-name">{{ char.data?.name ?? 'Unnamed' }}</span>
-            <div v-if="isOnline(char.user_id)" class="ds-online-dot" style="margin-left:auto" title="Online" />
+            <span class="ds-pc-name">{{ card.char?.data?.name ?? card.displayName }}</span>
+            <div v-if="isOnline(card.userId)" class="ds-online-dot" style="margin-left:auto" title="Online" />
           </div>
 
-          <div class="ds-pc-role">{{ charRole(char) }}</div>
+          <div v-if="cardRole(card)" class="ds-pc-role">{{ cardRole(card) }}</div>
 
-   
-          <div v-if="char.data?.maxHitPoints" class="ds-hp-row">
-            <span style="min-width:30px">{{ char.data?.currentHp ?? char.data?.maxHitPoints ?? '—' }}/{{ char.data?.maxHitPoints }}</span>
+          <div v-if="card.char?.data?.maxHitPoints" class="ds-hp-row">
+            <span style="min-width:30px">{{ card.char.data.currentHp ?? card.char.data.maxHitPoints }}/{{ card.char.data.maxHitPoints }}</span>
             <div class="ds-hp-bar">
-              <span :style="{ width: hpPct(char) + '%' }" />
+              <span :style="{ width: hpPct(card.char) + '%' }" />
             </div>
-            <span v-if="char.data?.armorClass" style="min-width:22px;text-align:right">AC {{ char.data.armorClass }}</span>
+            <span v-if="card.char?.data?.armorClass" style="min-width:22px;text-align:right">AC {{ card.char.data.armorClass }}</span>
           </div>
 
-          <div v-else-if="isGM(char)" style="font-family:var(--font-zine);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">
-            Game Master
+          <div v-else style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">
+            {{ card.isGM ? 'Game Master' : (card.char ? '' : 'No character') }}
           </div>
         </div>
       </div>
@@ -116,13 +116,17 @@ function persistPos() { localStorage.setItem(STORAGE_KEY, JSON.stringify(pos.val
 
 
 let dragStart = null
+let didDrag = false
+
 function startDrag(e) {
+  didDrag = false
   dragStart = { mx: e.clientX, my: e.clientY, px: pos.value.x, py: pos.value.y }
   window.addEventListener('mousemove', onDragMove)
   window.addEventListener('mouseup', onDragUp)
 }
 function onDragMove(e) {
   if (!dragStart) return
+  if (Math.hypot(e.clientX - dragStart.mx, e.clientY - dragStart.my) > 3) didDrag = true
   pos.value = {
     x: Math.max(0, dragStart.px + (e.clientX - dragStart.mx)),
     y: Math.max(0, dragStart.py + (e.clientY - dragStart.my)),
@@ -134,6 +138,10 @@ function onDragUp() {
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragUp)
 }
+function reopenClick() {
+  if (didDrag) { didDrag = false; return }
+  hidden.value = false
+}
 onUnmounted(() => {
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragUp)
@@ -143,48 +151,60 @@ const onlineUserIds = computed(() => new Set(sessionStore.onlineUsers.map(u => u
 const onlineCount   = computed(() => onlineUserIds.value.size)
 
 const partyCards = computed(() => {
-  const selectionMap = new Map(
-    characterStore.memberSelections
-      .filter(m => m.active_character_id)
-      .map(m => [m.user_id, m.active_character_id])
-  )
-  if (authStore.user?.id && characterStore.activeId) {
-    selectionMap.set(authStore.user.id, characterStore.activeId)
-  }
-
   const result = []
-  const seen = new Set()
+  const seen   = new Set()
 
-  for (const [userId, charId] of selectionMap) {
-    const char = characterStore.characters.find(c => c.id === charId && c.user_id === userId)
-    if (char && !seen.has(userId)) { result.push(char); seen.add(userId) }
+  const gmId = sessionStore.sessionOwnerId
+  if (gmId) {
+    const gmPresence = sessionStore.onlineUsers.find(u => u.user_id === gmId)
+    result.push({
+      userId:      gmId,
+      isGM:        true,
+      displayName: gmPresence?.display_name ?? 'Game Master',
+      char:        null,
+    })
+    seen.add(gmId)
   }
 
-  for (const char of [...characterStore.characters].reverse()) {
-    if (!seen.has(char.user_id)) { result.push(char); seen.add(char.user_id) }
+  for (const member of characterStore.memberSelections) {
+    if (seen.has(member.user_id)) continue
+    seen.add(member.user_id)
+
+    const char = member.active_character_id
+      ? characterStore.characters.find(c => c.id === member.active_character_id) ?? null
+      : null
+
+    const presence = sessionStore.onlineUsers.find(u => u.user_id === member.user_id)
+
+    result.push({
+      userId:      member.user_id,
+      isGM:        false,
+      displayName: presence?.display_name ?? char?.display_name ?? 'Adventurer',
+      char,
+    })
   }
 
   return result
 })
 
 function isOnline(userId) { return userId && onlineUserIds.value.has(userId) }
-function isGM(char) { return char.user_id === sessionStore.sessionOwnerId }
 
 function charColor(userId) {
   if (!userId) return 'var(--ink-mute)'
   return playerColorFor(userId)
 }
 
-function charRole(char) {
-  const d = char.data
+function cardRole(card) {
+  if (card.isGM) return ''
+  const d = card.char?.data
   if (!d) return ''
   const parts = [d.ancestry, d.class ?? d.characterClass].filter(Boolean)
   if (d.level) parts.push(`Lvl ${d.level}`)
-  return parts.join(' · ') || (isGM(char) ? 'Dungeon Master' : '')
+  return parts.join(' · ')
 }
 
 function hpPct(char) {
-  const max = char.data?.maxHitPoints ?? 0
+  const max = char?.data?.maxHitPoints ?? 0
   if (!max) return 0
   return Math.round(Math.min(100, Math.max(0, ((char.data?.currentHp ?? max) / max) * 100)))
 }

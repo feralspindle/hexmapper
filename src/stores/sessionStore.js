@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
 import router from '@/router/index.js'
@@ -24,6 +24,7 @@ export const useSessionStore = defineStore('session', () => {
 
   let sessionChannel  = null
   let presenceChannel = null
+  let _stopAuthWatch  = null
 
   const onlineUsers = ref([])
   const latestJoin  = ref(null)
@@ -154,6 +155,7 @@ export const useSessionStore = defineStore('session', () => {
   function initPresence(id) {
     const authStore = useAuthStore()
     if (presenceChannel) supabase.removeChannel(presenceChannel)
+    if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
 
     const syncUsers = () => {
       const state = presenceChannel.presenceState()
@@ -188,9 +190,23 @@ export const useSessionStore = defineStore('session', () => {
           avatar_url:   authStore.avatarUrl ?? null,
         })
       })
+
+    _stopAuthWatch = watch(
+      () => authStore.user?.id,
+      (userId, prev) => {
+        if (!userId || userId === prev || !presenceChannel) return
+        presenceChannel.track({
+          user_id:      userId,
+          _clientId:    CLIENT_ID,
+          display_name: authStore.displayName ?? 'Adventurer',
+          avatar_url:   authStore.avatarUrl ?? null,
+        })
+      },
+    )
   }
 
   function cleanupPresence() {
+    if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
     if (presenceChannel) { supabase.removeChannel(presenceChannel); presenceChannel = null }
     onlineUsers.value = []
     latestJoin.value  = null

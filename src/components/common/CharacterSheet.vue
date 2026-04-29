@@ -69,9 +69,9 @@
               <button v-if="canEdit" class="cs-adj-btn" title="+1 HP" @click="characterStore.adjustHp(1)">+</button>
             </div>
             <template v-if="editingMaxHp && canEdit">
-              <input v-model.number="maxHpDraft" type="number" min="1" class="cs-input" style="width:56px;text-align:center" @keyup.enter="saveMaxHp" @keyup.escape="editingMaxHp=false" @blur="saveMaxHp" />
+              <input ref="maxHpInputRef" v-model.number="maxHpDraft" type="number" min="1" class="cs-input" style="width:56px;text-align:center" @keyup.enter="saveMaxHp" @keyup.escape="editingMaxHp=false" @blur="saveMaxHp" />
             </template>
-            <button v-else-if="canEdit" class="cs-sub-val" title="Edit max HP" @click="startEditMaxHp">/ {{ char.maxHitPoints }}</button>
+            <button v-else-if="canEdit" class="cs-sub-val" @click="startEditMaxHp">/ {{ char.maxHitPoints }}<span class="cs-tip">Click to edit</span></button>
             <span v-else class="cs-sub-val">/ {{ char.maxHitPoints }}</span>
        
             <div class="cs-hp-bar" style="margin-top:4px">
@@ -82,9 +82,9 @@
           <div class="cs-big-stat">
             <span class="cs-section-label">AC</span>
             <template v-if="editingAC && canEdit">
-              <input v-model.number="acDraft" type="number" min="0" class="cs-input" style="width:52px;text-align:center;font-size:20px;font-family:var(--font-mono);font-weight:700" @keyup.enter="saveAC" @keyup.escape="editingAC=false" @blur="saveAC" />
+              <input ref="acInputRef" v-model.number="acDraft" type="number" min="0" class="cs-input" style="width:52px;text-align:center;font-size:20px;font-family:var(--font-mono);font-weight:700" @keyup.enter="saveAC" @keyup.escape="editingAC=false" @blur="saveAC" />
             </template>
-            <button v-else-if="canEdit" class="cs-big-val cs-clickable" title="Edit AC" @click="startEditAC">{{ char.armorClass }}</button>
+            <button v-else-if="canEdit" class="cs-big-val cs-clickable" @click="startEditAC">{{ char.armorClass }}<span class="cs-tip">Click to edit</span></button>
             <span v-else class="cs-big-val">{{ char.armorClass }}</span>
           </div>
 
@@ -92,9 +92,9 @@
           <div class="cs-big-stat">
             <span class="cs-section-label">XP</span>
             <template v-if="editingXP && canEdit">
-              <input v-model.number="xpDraft" type="number" min="0" class="cs-input" style="width:52px;text-align:center;font-size:20px;font-family:var(--font-mono);font-weight:700" @keyup.enter="saveXP" @keyup.escape="editingXP=false" @blur="saveXP" />
+              <input ref="xpInputRef" v-model.number="xpDraft" type="number" min="0" class="cs-input" style="width:52px;text-align:center;font-size:20px;font-family:var(--font-mono);font-weight:700" @keyup.enter="saveXP" @keyup.escape="editingXP=false" @blur="saveXP" />
             </template>
-            <button v-else-if="canEdit" class="cs-big-val cs-clickable" title="Edit XP" @click="startEditXP">{{ char.XP ?? 0 }}</button>
+            <button v-else-if="canEdit" class="cs-big-val cs-clickable" @click="startEditXP">{{ char.XP ?? 0 }}<span class="cs-tip">Click to edit</span></button>
             <span v-else class="cs-big-val">{{ char.XP ?? 0 }}</span>
           </div>
         </div>
@@ -425,7 +425,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useCharacterStore, statMod, parseAttack, parseDamageDie } from '@/stores/characterStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
@@ -520,23 +520,26 @@ function saveInfoEdit() {
   editingInfo.value = false
 }
 
-const editingMaxHp = ref(false)
-const maxHpDraft   = ref(0)
-const editingAC    = ref(false)
-const acDraft      = ref(0)
-const editingXP    = ref(false)
-const xpDraft      = ref(0)
+const editingMaxHp  = ref(false)
+const maxHpDraft    = ref(0)
+const maxHpInputRef = ref(null)
+const editingAC     = ref(false)
+const acDraft       = ref(0)
+const acInputRef    = ref(null)
+const editingXP     = ref(false)
+const xpDraft       = ref(0)
+const xpInputRef    = ref(null)
 
-function startEditMaxHp() { maxHpDraft.value = char.value.maxHitPoints ?? 0; editingMaxHp.value = true }
+function startEditMaxHp() { maxHpDraft.value = char.value.maxHitPoints ?? 0; editingMaxHp.value = true; nextTick(() => maxHpInputRef.value?.focus()) }
 function saveMaxHp() {
   const v = Number(maxHpDraft.value) || 1
   characterStore.updateField('maxHitPoints', v)
   if ((char.value.currentHp ?? 0) > v) characterStore.updateField('currentHp', v)
   editingMaxHp.value = false
 }
-function startEditAC() { acDraft.value = char.value.armorClass ?? 0; editingAC.value = true }
+function startEditAC() { acDraft.value = char.value.armorClass ?? 0; editingAC.value = true; nextTick(() => acInputRef.value?.focus()) }
 function saveAC() { characterStore.updateField('armorClass', Number(acDraft.value) || 0); editingAC.value = false }
-function startEditXP() { xpDraft.value = char.value.XP ?? 0; editingXP.value = true }
+function startEditXP() { xpDraft.value = char.value.XP ?? 0; editingXP.value = true; nextTick(() => xpInputRef.value?.focus()) }
 function saveXP() { characterStore.updateField('XP', Number(xpDraft.value) || 0); editingXP.value = false }
 
 const editingAtkIdx = ref(null)
@@ -728,8 +731,40 @@ button.cs-big-val { background: transparent; border: none; cursor: pointer; }
   font-size: 11px;
   color: var(--ink-mute, #9e8e7e);
 }
-button.cs-sub-val { background: transparent; border: none; cursor: pointer; }
+button.cs-sub-val { background: transparent; border: none; cursor: pointer; position: relative; }
 button.cs-sub-val:hover { color: var(--accent-2, #b8541c); }
+button.cs-big-val { position: relative; }
+
+.cs-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink, #1a1410);
+  color: var(--paper, #ede1c7);
+  font-family: var(--font-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 9px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s;
+  z-index: 100;
+  border: 1px solid rgba(237,225,199,.22);
+  box-shadow: 0 3px 12px rgba(0,0,0,.4);
+}
+.cs-tip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-bottom-color: var(--ink, #1a1410);
+}
+button.cs-sub-val:hover .cs-tip,
+button.cs-big-val:hover .cs-tip { opacity: 1; transition: opacity 0s; }
 
 
 .cs-hp-bar {
@@ -763,7 +798,7 @@ button.cs-sub-val:hover { color: var(--accent-2, #b8541c); }
 }
 .cs-stat-lbl {
   font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: .08em;
   color: var(--ink-mute, #9e8e7e);
   text-transform: uppercase;
@@ -777,7 +812,7 @@ button.cs-sub-val:hover { color: var(--accent-2, #b8541c); }
 }
 button.cs-stat-val { background: transparent; border: none; cursor: pointer; }
 button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
-.cs-stat-mod { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 10px; }
+.cs-stat-mod { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 12px; }
 .cs-stat-mod.positive { color: var(--accent-3, #5a6b3a); }
 .cs-stat-mod.negative { color: #8a1c1c; }
 
@@ -787,7 +822,7 @@ button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
   border: 1px solid var(--rule, #d4c4a8);
   padding: 8px 10px;
 }
-.cs-info-rows { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--ink-2, #3a2e22); }
+.cs-info-rows { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--ink-2, #3a2e22); }
 .cs-info-lbl { color: var(--ink-mute, #9e8e7e); margin-right: 4px; }
 
 
@@ -851,7 +886,7 @@ button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
 
 .cs-gear-badge {
   font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: .08em;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -952,7 +987,7 @@ button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
 
 
 .cs-form-stack { display: flex; flex-direction: column; gap: 6px; }
-.cs-form-label { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-zine, 'Special Elite', serif); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-mute, #9e8e7e); }
+.cs-form-label { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-zine, 'Special Elite', serif); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-mute, #9e8e7e); }
 .cs-form-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 2px; }
 
 .cs-input {

@@ -39,7 +39,7 @@
 
           <div>
             <label class="br-label">
-              Screenshot <span class="br-label-note">(optional but helpful. no penises please)</span>
+              Screenshot <span class="br-label-note">(optional but helpful. no penises or buttholes please)</span>
             </label>
             <div class="br-drop" :class="{ 'br-drop--filled': previewUrl }">
               <img v-if="previewUrl" :src="previewUrl" style="width:100%;max-height:120px;object-fit:cover;display:block" />
@@ -233,7 +233,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 .br-title {
   flex: 1;
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--ink-mute, #8a7a68);
@@ -255,7 +255,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   border: 1px solid var(--rule, rgba(26,20,16,.18));
   padding: 7px 9px;
   font-family: var(--font-mono, monospace);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--ink-2, #3a2e22);
   display: flex;
   flex-direction: column;
@@ -265,13 +265,13 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 .br-label {
   display: block;
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--ink-mute, #8a7a68);
   margin-bottom: 5px;
 }
-.br-label-note { font-family: var(--font-body, Georgia, serif); text-transform: none; letter-spacing: 0; font-size: 10px; }
+.br-label-note { font-family: var(--font-body, Georgia, serif); text-transform: none; letter-spacing: 0; font-size: 11px; }
 .br-textarea {
   width: 100%;
   background: var(--paper-2, #e3d4b3);
@@ -301,7 +301,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   justify-content: center;
   gap: 6px;
   padding: 10px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink-mute, #8a7a68);
 }
 .br-file-input {
@@ -331,7 +331,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   color: #ede1c7;
   border: none;
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: .08em;
   text-transform: uppercase;
   cursor: default;
@@ -339,6 +339,6 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 }
 .br-submit:hover:not(:disabled) { background: #a52020; }
 .br-submit--disabled { background: var(--paper-2, #e3d4b3); color: var(--ink-mute, #8a7a68); cursor: not-allowed; }
-.br-success { font-size: 12px; color: #3a6b3a; text-align: center; margin: 0; }
-.br-error   { font-size: 12px; color: var(--accent, #8a1c1c); text-align: center; margin: 0; }
+.br-success { font-size: 13px; color: #3a6b3a; text-align: center; margin: 0; }
+.br-error   { font-size: 13px; color: var(--accent, #8a1c1c); text-align: center; margin: 0; }
 </style>
