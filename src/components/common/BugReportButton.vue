@@ -8,6 +8,7 @@
       @click="open = !open"
     >
       <i class="fa-solid fa-bug" style="font-size:13px" />
+      <span v-if="label" class="hidden sm:inline">{{ label }}</span>
     </button>
     <Transition name="bug-dropdown">
       <div v-if="open" class="br-menu">
@@ -77,6 +78,8 @@ import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { supabase } from '@/lib/supabase.js'
 import { activeNavDropdown } from '@/composables/useNavDropdown.js'
+
+const props = defineProps({ label: { type: String, default: '' } })
 
 const isStaging = import.meta.env.VITE_APP_ENV === 'staging'
 
@@ -233,7 +236,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 .br-title {
   flex: 1;
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--ink-mute, #8a7a68);
@@ -255,7 +258,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   border: 1px solid var(--rule, rgba(26,20,16,.18));
   padding: 7px 9px;
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: 10.5px;
   color: var(--ink-2, #3a2e22);
   display: flex;
   flex-direction: column;
@@ -265,13 +268,13 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 .br-label {
   display: block;
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 11px;
+  font-size: 9.5px;
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--ink-mute, #8a7a68);
   margin-bottom: 5px;
 }
-.br-label-note { font-family: var(--font-body, Georgia, serif); text-transform: none; letter-spacing: 0; font-size: 11px; }
+.br-label-note { font-family: var(--font-body, Georgia, serif); text-transform: none; letter-spacing: 0; font-size: 10px; }
 .br-textarea {
   width: 100%;
   background: var(--paper-2, #e3d4b3);
@@ -301,7 +304,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   justify-content: center;
   gap: 6px;
   padding: 10px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ink-mute, #8a7a68);
 }
 .br-file-input {
@@ -317,7 +320,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   top: 4px; right: 4px;
   background: rgba(26,20,16,.7);
   border: none;
-  color: var(--paper, #ede1c7);
+  color: #e7e5e4;
   font-size: 11px;
   padding: 2px 6px;
   cursor: default;
@@ -331,7 +334,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   color: #ede1c7;
   border: none;
   font-family: var(--font-zine, "Special Elite", monospace);
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: .08em;
   text-transform: uppercase;
   cursor: default;
@@ -339,6 +342,6 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 }
 .br-submit:hover:not(:disabled) { background: #a52020; }
 .br-submit--disabled { background: var(--paper-2, #e3d4b3); color: var(--ink-mute, #8a7a68); cursor: not-allowed; }
-.br-success { font-size: 13px; color: #3a6b3a; text-align: center; margin: 0; }
-.br-error   { font-size: 13px; color: var(--accent, #8a1c1c); text-align: center; margin: 0; }
+.br-success { font-size: 12px; color: #3a6b3a; text-align: center; margin: 0; }
+.br-error   { font-size: 12px; color: var(--accent, #8a1c1c); text-align: center; margin: 0; }
 </style>

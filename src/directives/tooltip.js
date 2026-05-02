@@ -19,6 +19,7 @@ function show(el) {
     border:          '1px solid #57534e',
     borderRadius:    '4px',
     padding:         '4px 8px',
+    fontFamily:      '"JetBrains Mono", ui-monospace, monospace',
     fontSize:        '12px',
     lineHeight:      '1.5',
     maxWidth:        '220px',

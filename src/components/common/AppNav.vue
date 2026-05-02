@@ -1,7 +1,8 @@
 <template>
   <header
     ref="headerEl"
-    class="flex items-center gap-3 px-4 py-2 bg-stone-900 border-b border-stone-700 shrink-0 relative z-50"
+    class="hm-nav flex items-center gap-3 px-4 py-2 bg-stone-900 border-b border-stone-700 shrink-0 relative z-50"
+    :style="hexMapTheme"
   >
     <RouterLink to="/" class="text-parchment-300 hover:text-parchment-100 font-display text-lg transition-colors">⬡ Hex Map</RouterLink>
 
@@ -76,7 +77,7 @@
       </button>
 
       <ShareModal :session-id="props.sessionId" />
-      <BugReportButton />
+      <BugReportButton label="Report Bug" />
 
       <template v-if="authStore.isAuthenticated">
         <div class="flex items-center gap-2 pl-2 border-l border-stone-700">
@@ -141,6 +142,26 @@ defineEmits(['update:charOpen'])
 
 const sessionStore = useSessionStore()
 const authStore = useAuthStore()
+
+const hexMapTheme = {
+  '--paper':      '#1c1917',
+  '--paper-2':    '#292524',
+  '--paper-3':    '#3c3835',
+  '--paper-edge': '#57534e',
+  '--ink':        '#f5f5f4',
+  '--ink-2':      '#d6d3d1',
+  '--ink-soft':   '#a8a29e',
+  '--ink-mute':   '#78716c',
+  '--rule':       'rgba(255,255,255,.08)',
+  '--rule-strong':'rgba(255,255,255,.18)',
+  '--accent':     '#dca85a',
+  '--accent-2':   '#e8c488',
+  '--accent-3':   '#86efac',
+  '--font-body':  'ui-sans-serif, system-ui, sans-serif',
+  '--font-zine':  'ui-monospace, monospace',
+  '--font-mono':  'ui-monospace, monospace',
+  '--font-ui':    'ui-sans-serif, system-ui, sans-serif',
+}
 
 const VIEWER_COLORS = ['bg-indigo-600', 'bg-purple-600', 'bg-rose-600', 'bg-amber-600', 'bg-teal-600', 'bg-sky-600', 'bg-emerald-600', 'bg-pink-600']
 function viewerColor(userId) {

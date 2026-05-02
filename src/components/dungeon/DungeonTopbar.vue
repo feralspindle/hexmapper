@@ -92,7 +92,7 @@
         style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:12px;color:var(--paper);flex-shrink:0"
       >{{ authStore.displayName?.charAt(0)?.toUpperCase() }}</div>
 
-      <span style="font-family:var(--font-body);font-size:13px;color:rgba(237,225,199,.75);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+      <span style="font-family:var(--font-display);font-size:12px;color:rgba(237,225,199,.75);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         {{ authStore.displayName }}
       </span>
 

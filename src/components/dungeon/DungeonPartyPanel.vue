@@ -78,7 +78,7 @@
             <span v-if="card.char?.data?.armorClass" style="min-width:22px;text-align:right">AC {{ card.char.data.armorClass }}</span>
           </div>
 
-          <div v-else style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">
+          <div v-else style="font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">
             {{ card.isGM ? 'Game Master' : (card.char ? '' : 'No character') }}
           </div>
         </div>

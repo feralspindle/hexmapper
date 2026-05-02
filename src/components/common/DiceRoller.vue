@@ -14,9 +14,8 @@
           @click="addDie(die)"
           @contextmenu.prevent="removeDie(die)"
         >
-          <i v-if="dieIcon(die)" :class="[dieIcon(die), 'text-base leading-none']" />
-          <span v-else class="text-sm font-bold leading-none font-mono">{{ die === 'd100' ? 'd%' : die }}</span>
-          <span class="text-sm font-mono mt-0.5 leading-none">{{ die }}</span>
+          <component :is="DIE_ICONS[die]" :size="20" />
+          <span class="text-xs font-mono mt-0.5 leading-none">{{ die === 'd100' ? 'd%' : die }}</span>
           <span
             v-if="pending[die] > 0"
             class="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full bg-parchment-500 text-stone-900 text-[14px] font-bold flex items-center justify-center px-0.5 leading-none"
@@ -206,6 +205,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { DIE_ICONS } from '@/composables/useDiceIcons.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
@@ -216,11 +216,6 @@ const { gmName } = useGMLabel()
 
 const DICE = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
 
-function dieIcon(die) {
-  if (die === 'd20') return 'fa-solid fa-dice-d20'
-  if (die === 'd100') return ''
-  return 'fa-solid fa-dice-d6'
-}
 
 const pending = ref(Object.fromEntries(DICE.map(d => [d, 0])))
 const modifier = ref(0)

@@ -67,6 +67,18 @@
       </button>
     </div>
 
+    <div class="ds-tool-group">
+      <button
+        class="ds-tool"
+        :class="{ disabled: !dungeonStore.undoStack.length }"
+        title="Undo (Ctrl+Z)"
+        @click="dungeonStore.undo()"
+      >
+        <UndoIcon :size="18" />
+        <span class="ds-tip">Undo<kbd>⌘Z</kbd></span>
+      </button>
+    </div>
+
   </aside>
 </template>
 
@@ -92,6 +104,7 @@ const ZoomInIcon  = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24
 const ZoomOutIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('circle',{cx:11,cy:11,r:7}),h('path',{d:'M21 21l-4.3-4.3M8 11h6'})]) }
 const MoveIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('path',{d:'M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3'})]) }
 const TrashIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'})]) }
+const UndoIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polyline',{points:'9 14 4 9 9 4'}),h('path',{d:'M20 20v-7a4 4 0 0 0-4-4H4'})]) }
 
 const selectionTools = [
   { mode: 'select',   icon: CursorIcon,   label: 'Select',   key: 'V' },

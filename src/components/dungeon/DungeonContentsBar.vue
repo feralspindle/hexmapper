@@ -6,7 +6,6 @@
       :key="item.type"
       class="ds-stamp-btn"
       :aria-pressed="selectedStamp === item.type ? 'true' : 'false'"
-      :title="item.label"
       @mousedown.prevent="onMouseDown($event, item)"
       @click="selectStamp(item.type)"
     >

@@ -23,8 +23,12 @@
           @click="addDie(die)"
           @contextmenu.prevent="removeDie(die)"
         >
-          {{ die }}
-          <sup v-if="pending[die] > 0" style="font-size:9px;font-family:var(--font-mono)">{{ pending[die] }}</sup>
+          <component :is="DIE_ICONS[die]" :size="16" />
+          <span style="font-family:var(--font-mono);font-size:10px;line-height:1">{{ die === 'd100' ? 'd%' : die }}</span>
+          <span
+            v-if="pending[die] > 0"
+            style="position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;border-radius:50%;background:var(--gold);color:var(--ink);font-family:var(--font-mono);font-size:8px;font-weight:bold;display:flex;align-items:center;justify-content:center;padding:0 2px;line-height:1"
+          >{{ pending[die] }}</span>
         </button>
       </div>
 
@@ -34,7 +38,7 @@
         <button class="ds-btn tiny ghost" @click="modifier--">−</button>
         <span style="font-family:var(--font-mono);font-size:13px;min-width:24px;text-align:center;color:var(--ink-2)">{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
         <button class="ds-btn tiny ghost" @click="modifier++">+</button>
-        <div style="flex:1;font-family:var(--font-mono);font-size:12px;color:var(--ink-soft)">{{ formula || '—' }}</div>
+        <div style="flex:1;min-width:0;font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ formula || '—' }}</div>
         <button v-if="hasAnything" class="ds-btn tiny ghost" @click="clear" style="font-size:10px">Clear</button>
         <button class="ds-btn tiny" :disabled="!hasDice" @click="roll">Roll!</button>
       </div>
@@ -75,6 +79,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { DIE_ICONS } from '@/composables/useDiceIcons.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'

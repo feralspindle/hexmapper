@@ -798,7 +798,7 @@ button.cs-big-val:hover .cs-tip { opacity: 1; transition: opacity 0s; }
 }
 .cs-stat-lbl {
   font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 11px;
+  font-size: 9px;
   letter-spacing: .08em;
   color: var(--ink-mute, #9e8e7e);
   text-transform: uppercase;
@@ -812,7 +812,7 @@ button.cs-big-val:hover .cs-tip { opacity: 1; transition: opacity 0s; }
 }
 button.cs-stat-val { background: transparent; border: none; cursor: pointer; }
 button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
-.cs-stat-mod { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 12px; }
+.cs-stat-mod { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 10px; }
 .cs-stat-mod.positive { color: var(--accent-3, #5a6b3a); }
 .cs-stat-mod.negative { color: #8a1c1c; }
 
@@ -822,7 +822,7 @@ button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
   border: 1px solid var(--rule, #d4c4a8);
   padding: 8px 10px;
 }
-.cs-info-rows { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--ink-2, #3a2e22); }
+.cs-info-rows { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--ink-2, #3a2e22); }
 .cs-info-lbl { color: var(--ink-mute, #9e8e7e); margin-right: 4px; }
 
 
@@ -886,7 +886,7 @@ button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
 
 .cs-gear-badge {
   font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 11px;
+  font-size: 9px;
   letter-spacing: .08em;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -987,7 +987,7 @@ button.cs-stat-val:hover { color: var(--accent-2, #b8541c); }
 
 
 .cs-form-stack { display: flex; flex-direction: column; gap: 6px; }
-.cs-form-label { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-zine, 'Special Elite', serif); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-mute, #9e8e7e); }
+.cs-form-label { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-zine, 'Special Elite', serif); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-mute, #9e8e7e); }
 .cs-form-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 2px; }
 
 .cs-input {

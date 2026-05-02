@@ -15,18 +15,35 @@ export const useD = defineStore('dungeon', () => {
   const drawMode = ref('select')
   const selectedElement = ref(null)
   const viewers = ref([])
+  const undoStack = ref([])
   const _editingRoom = ref(null)
   let roomChannel = null
   let corridorChannel = null
   let dungeonChannel = null
   let presenceChannel = null
   let _stopAuthWatch = null
+  let _undoing = false
+
+  function pushUndo(fn) {
+    if (_undoing) return
+    undoStack.value.push(fn)
+    if (undoStack.value.length > 50) undoStack.value.shift()
+  }
+
+  async function undo() {
+    const fn = undoStack.value.pop()
+    if (!fn) return
+    _undoing = true
+    try { await fn() }
+    finally { _undoing = false }
+  }
 
   async function init(sessionId, dungeonId) {
     loading.value = true
     loadError.value = null
     drawMode.value = 'select'
     selectedElement.value = null
+    undoStack.value = []
 
     try {
       const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }] = await Promise.all([
@@ -166,6 +183,12 @@ export const useD = defineStore('dungeon', () => {
     if (error) { console.error('addRoom error:', error.message); return }
     rooms.value.set(data.id, data)
     useActivityStore().record('added room', data.name ?? 'Unnamed Room')
+    pushUndo(async () => {
+      const id = data.id
+      rooms.value.delete(id)
+      if (selectedElement.value?.id === id) selectedElement.value = null
+      await supabase.from('dungeon_rooms').delete().eq('id', id)
+    })
   }
 
   async function updateRoom(id, patch) {
@@ -181,6 +204,9 @@ export const useD = defineStore('dungeon', () => {
     if (error) {
       rooms.value.set(id, existing)
       console.error('updateRoom error:', error.message)
+    } else {
+      const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
+      pushUndo(() => updateRoom(id, revert))
     }
   }
 
@@ -195,6 +221,12 @@ export const useD = defineStore('dungeon', () => {
       console.error('deleteRoom error:', error.message)
     } else {
       useActivityStore().record('deleted room', backup?.name ?? 'Unnamed Room')
+      pushUndo(async () => {
+        if (!backup) return
+        rooms.value.set(backup.id, { ...backup })
+        const { error: e } = await supabase.from('dungeon_rooms').insert({ ...backup, source_client: CLIENT_ID })
+        if (e) { rooms.value.delete(backup.id); console.error('undo deleteRoom:', e.message) }
+      })
     }
   }
 
@@ -213,6 +245,12 @@ export const useD = defineStore('dungeon', () => {
     if (error) { console.error('addCorridor error:', error.message); return }
     corridors.value.set(data.id, data)
     useActivityStore().record('added corridor', '')
+    pushUndo(async () => {
+      const id = data.id
+      corridors.value.delete(id)
+      if (selectedElement.value?.id === id) selectedElement.value = null
+      await supabase.from('dungeon_corridors').delete().eq('id', id)
+    })
   }
 
   async function updateCorridor(id, patch) {
@@ -228,6 +266,9 @@ export const useD = defineStore('dungeon', () => {
     if (error) {
       corridors.value.set(id, existing)
       console.error('updateCorridor error:', error.message)
+    } else {
+      const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
+      pushUndo(() => updateCorridor(id, revert))
     }
   }
 
@@ -242,6 +283,12 @@ export const useD = defineStore('dungeon', () => {
       console.error('deleteCorridor error:', error.message)
     } else {
       useActivityStore().record('deleted corridor', '')
+      pushUndo(async () => {
+        if (!backup) return
+        corridors.value.set(backup.id, { ...backup })
+        const { error: e } = await supabase.from('dungeon_corridors').insert({ ...backup, source_client: CLIENT_ID })
+        if (e) { corridors.value.delete(backup.id); console.error('undo deleteCorridor:', e.message) }
+      })
     }
   }
 
@@ -375,6 +422,7 @@ export const useD = defineStore('dungeon', () => {
     selectedElement.value = null
     loadError.value = null
     loading.value = true
+    undoStack.value = []
   }
 
   return {
@@ -386,7 +434,9 @@ export const useD = defineStore('dungeon', () => {
     drawMode,
     selectedElement,
     viewers,
+    undoStack,
     init,
+    undo,
     addRoom,
     updateRoom,
     deleteRoom,

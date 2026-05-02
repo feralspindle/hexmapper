@@ -303,7 +303,7 @@
         @keydown.enter="submitDim"
         @keydown.escape="dimEntry = null"
       />
-      <span>ft</span>
+      <span>squares</span>
       <button class="ds-dim-btn" @click="submitDim">Drop</button>
       <button class="ds-dim-btn ds-dim-ghost" @click="dimEntry = null">Esc</button>
     </div>
@@ -364,7 +364,7 @@ const TOOL_HINTS = {
   circle:   [{ type: 'text', text: 'Click and drag to draw a round chamber. ' }, { type: 'kbd', text: 'Double-click' }, { type: 'text', text: ' for exact dimensions.' }],
   polygon:  [{ type: 'text', text: 'Click to place vertices. Double-click or ' }, { type: 'kbd', text: 'Enter' }, { type: 'text', text: ' to close. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
   corridor: [{ type: 'text', text: 'Click to place points along the corridor. Double-click to finish. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
-  door:     [{ type: 'text', text: 'Click a wall to place a door. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
+  door:     [{ type: 'text', text: 'Click a wall to place a door. ' }],
 }
 const statusBanner = computed(() => TOOL_HINTS[dungeonStore.drawMode] ?? null)
 
@@ -1880,7 +1880,7 @@ onUnmounted(() => {
 }
 
 .ds-dim-input input {
-  width: 50px;
+  width: auto;
   background: transparent;
   border: 0;
   border-bottom: 1px solid rgba(237,225,199,.4);
@@ -1899,7 +1899,7 @@ onUnmounted(() => {
   border: 1px solid rgba(237,225,199,.3);
   border-radius: 3px;
   padding: 2px 8px;
-  font-family: var(--font-ui, sans-serif);
+  font-family: var(--font-mono);
   font-size: 11px;
   cursor: pointer;
   transition: background .12s, border-color .12s;

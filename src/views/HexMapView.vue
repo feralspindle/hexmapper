@@ -273,7 +273,7 @@ watch(displayMapId, async (newId) => {
 })
 
 onMounted(async () => {
-  if (!sessionStore.sessionId) {
+  if (sessionStore.sessionId !== sessionId) {
     await sessionStore.joinSession(sessionId)
   }
   await mapStore.init(sessionId)

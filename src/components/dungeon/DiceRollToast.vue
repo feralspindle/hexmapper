@@ -3,7 +3,7 @@
     <TransitionGroup name="roll-toast">
       <div v-for="toast in toasts" :key="toast.id" class="ds-roll-toast">
         <div class="ds-rt-die">
-          <i :class="[dieIconClass(toast.roll), 'ds-rt-die-icon']" />
+          <component :is="DIE_ICONS[highestDie(toast.roll)] ?? DIE_ICONS.d6" :size="16" class="ds-rt-die-icon" />
         </div>
 
         <div class="ds-rt-body">
@@ -33,13 +33,14 @@
 import { ref, watch } from 'vue'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
+import { DIE_ICONS } from '@/composables/useDiceIcons.js'
 
 const diceStore = useDiceStore()
 const { gmName } = useGMLabel()
 const toasts = ref([])
 
 const seenIds = new Set()
-let ready = false
+let ready = diceStore.rolls.length > 0
 
 watch(
   () => diceStore.rolls[0],
@@ -70,12 +71,6 @@ function highestDie(roll) {
   return null
 }
 
-function dieIconClass(roll) {
-  const die = highestDie(roll)
-  if (die === 'd20') return 'fa-solid fa-dice-d20'
-  if (die === 'd100') return 'fa-solid fa-percent'
-  return 'fa-solid fa-dice-d6'
-}
 
 function isSingleD20(roll) {
   return (roll.pending?.d20 ?? 0) === 1 &&

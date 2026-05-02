@@ -59,7 +59,7 @@
     <DungeonPartyPanel />
 
 
-    <CharacterDrawer :open="charOpen" :nav-height="topbarHeight" @close="charOpen = false" />
+    <CharacterDrawer parchment :open="charOpen" :nav-height="topbarHeight" @close="charOpen = false" />
 
     <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
 
@@ -134,9 +134,19 @@ function measureTopbar() {
   if (topbarEl.value?.$el) topbarHeight.value = topbarEl.value.$el.offsetHeight
 }
 
+function onKeyDown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    const tag = document.activeElement?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
+    e.preventDefault()
+    dungeonStore.undo()
+  }
+}
+
 onMounted(async () => {
   measureTopbar()
   window.addEventListener('resize', measureTopbar)
+  window.addEventListener('keydown', onKeyDown)
 
   await prefs.load()
 
@@ -154,6 +164,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', measureTopbar)
+  window.removeEventListener('keydown', onKeyDown)
   dungeonStore.cleanup()
   characterStore.cleanup()
   chatStore.cleanup()

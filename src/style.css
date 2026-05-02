@@ -59,7 +59,7 @@ svg {
   --grid-strong: rgba(58,46,34,.22);
   --p1: #8a1c1c; --p2: #b8541c; --p3: #5a6b3a;
   --p4: #2c5266; --p5: #6b3a5a; --p6: #b89c2a;
-  --font-display: "IM Fell English","Cormorant Garamond",Georgia,serif;
+  --font-display: "Special Elite","Courier New",monospace;
   --font-zine: "Special Elite","Courier New",monospace;
   --font-mono: "JetBrains Mono",ui-monospace,monospace;
   --font-body: "Cormorant Garamond",Georgia,serif;
@@ -194,7 +194,7 @@ svg {
   background: transparent; color: var(--paper);
   border: 1px solid rgba(237,225,199,.18);
   padding: 6px 11px; border-radius: 4px;
-  font-family: var(--font-ui); font-size: 12.5px;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1;
   transition: background .12s, border-color .12s, color .12s; cursor: default;
 }
 .ds-tb-btn:hover { background: rgba(237,225,199,.09); border-color: rgba(237,225,199,.32); }
@@ -235,7 +235,7 @@ svg {
   position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
   background: var(--ink); color: var(--paper);
   padding: 7px 12px; border-radius: 5px;
-  font-family: var(--font-ui); font-size: 13px; font-weight: 500;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
   white-space: nowrap; pointer-events: none; opacity: 0;
   transition: opacity .12s; z-index: 200;
   border: 1px solid rgba(237,225,199,.22);
@@ -426,12 +426,14 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
 .ds-die-btn {
   flex: 1 1 0; min-width: 38px;
   background: var(--paper); border: 1px solid var(--rule-strong);
-  padding: 7px 4px; font-family: var(--font-display); font-style: italic;
+  padding: 6px 4px; font-family: var(--font-mono);
   font-size: 14px; color: var(--ink); letter-spacing: .01em;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  position: relative;
   transition: background .12s, color .12s; cursor: default;
 }
 .ds-die-btn:hover { background: var(--ink); color: var(--paper); }
-.ds-die-btn.active { background: var(--accent-2); color: var(--paper); border-color: var(--accent-2); }
+.ds-die-btn.active { background: linear-gradient(160deg, #d4af3a 0%, #8a6f1e 100%); color: var(--paper); border-color: #b89c2a; }
 .ds-roll-row {
   display: grid; grid-template-columns: 8px 1fr auto; gap: 8px; align-items: start;
   padding: 6px 0; border-top: 1px dashed var(--rule);
@@ -494,7 +496,7 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
 .ds-stamp-btn .ds-stamp-lbl {
   position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
   background: var(--ink); color: var(--paper);
-  font-family: var(--font-ui); font-size: 13px; font-weight: 500;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
   padding: 7px 12px; border-radius: 5px; white-space: nowrap;
   pointer-events: none; opacity: 0; transition: opacity .12s; z-index: 200;
   border: 1px solid rgba(237,225,199,.22);
@@ -666,7 +668,7 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
   position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
   background: var(--ink); color: var(--paper);
   padding: 8px 18px; border: 1px solid var(--accent); border-radius: 4px;
-  font-family: var(--font-ui); font-size: 12.5px;
+  font-family: var(--font-mono); font-size: 12.5px;
   display: flex; align-items: center; gap: 10px;
   z-index: 25; box-shadow: 0 6px 24px rgba(0,0,0,.5); letter-spacing: .02em;
   pointer-events: none; white-space: nowrap;
@@ -693,3 +695,52 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
   cursor: default; box-shadow: 0 6px 16px rgba(0,0,0,.3); transition: transform .12s;
 }
 .ds-party-reopen:hover { transform: translateY(-1px); }
+
+/* ─── Hex-map nav: restyle ds-tb-btn to match native AppNav buttons ─── */
+.hm-nav .ds-tb-btn {
+  color: #dca85a !important;
+  border: none;
+  background: transparent;
+  padding: 4px 8px;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  border-radius: 4px;
+}
+.hm-nav .ds-tb-btn:hover {
+  background: #292524;
+  border: none;
+  color: #f2dcb8 !important;
+}
+.hm-nav .ds-tb-btn.active {
+  background: #dca85a;
+  border: none;
+  color: #1c1917 !important;
+}
+
+/* ─── Dungeon-only overrides for shared components ─── */
+/* CharacterPicker */
+.dungeon-scribe .cp-section-head   { font-size: 11px !important; }
+.dungeon-scribe .cp-row--muted     { font-size: 13px !important; }
+.dungeon-scribe .cp-check          { font-size: 12px !important; }
+.dungeon-scribe .cp-other-icon     { font-size: 12px !important; }
+.dungeon-scribe .cp-del            { font-size: 12px !important; }
+.dungeon-scribe .cp-empty          { font-size: 13px !important; }
+.dungeon-scribe .cp-import-title   { font-size: 11px !important; }
+.dungeon-scribe .cp-textarea       { font-size: 12px !important; }
+.dungeon-scribe .cp-error          { font-size: 12px !important; }
+/* BugReportButton */
+.dungeon-scribe .br-title          { font-size: 11px !important; }
+.dungeon-scribe .br-meta           { font-size: 12px !important; }
+.dungeon-scribe .br-label          { font-size: 11px !important; }
+.dungeon-scribe .br-label-note     { font-size: 11px !important; }
+.dungeon-scribe .br-drop-prompt    { font-size: 13px !important; }
+.dungeon-scribe .br-submit         { font-size: 12px !important; }
+.dungeon-scribe .br-success        { font-size: 13px !important; }
+.dungeon-scribe .br-error          { font-size: 13px !important; }
+/* CharacterSheet */
+.dungeon-scribe .cs-stat-lbl       { font-size: 11px !important; }
+.dungeon-scribe .cs-stat-mod       { font-size: 12px !important; }
+.dungeon-scribe .cs-info-rows      { font-size: 13px !important; }
+.dungeon-scribe .cs-gear-badge     { font-size: 11px !important; }
+.dungeon-scribe .cs-form-label     { font-size: 11px !important; }

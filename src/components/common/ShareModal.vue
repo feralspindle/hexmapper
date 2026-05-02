@@ -5,8 +5,8 @@
       :title="copied ? 'Copied!' : 'Copy session link'"
       @click="copyLink"
     >
-      <i :class="copied ? 'fa-solid fa-check' : 'fa-solid fa-link'" style="font-size:12px" />
-      <span style="font-size:12px">{{ copied ? 'Copied!' : 'Share' }}</span>
+      <i :class="copied ? 'fa-solid fa-check' : 'fa-solid fa-link'" style="font-size:14px" />
+      <span>{{ copied ? 'Copied!' : 'Share' }}</span>
     </button>
   </div>
 </template>

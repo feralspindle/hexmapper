@@ -215,6 +215,10 @@ export const useSessionStore = defineStore('session', () => {
   function cleanup() {
     if (sessionChannel) { supabase.removeChannel(sessionChannel); sessionChannel = null }
     cleanupPresence()
+    sessionId.value      = null
+    sessionName.value    = 'Untitled Campaign'
+    sessionOwnerId.value = null
+    activeMapId.value    = null
   }
 
   return {
