@@ -61,7 +61,7 @@
       </template>
     </g>
 
-    <g v-if="visibleToPlayer && markerCount" class="pointer-events-none">
+    <g v-if="blankMode && visibleToPlayer && markerCount" class="pointer-events-none">
       <circle
         cx="0" cy="0"
         :r="markerR"
