@@ -123,9 +123,10 @@ svg {
   box-shadow: -6px 0 24px rgba(0,0,0,.35);
 }
 
-/* topbar */
+
 .ds-topbar {
   display: flex; align-items: center;
+  height: 48px;
   background: var(--ink); color: var(--paper);
   padding: 0 16px; gap: 0;
   border-bottom: 2px solid #000;
@@ -140,12 +141,8 @@ svg {
 }
 .ds-brand-mark {
   width: 28px; height: 28px;
-  display: grid; place-items: center;
-  background: var(--accent); color: var(--paper);
-  font-family: var(--font-display); font-style: italic; font-size: 15px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--paper) inset, 0 0 0 3px var(--accent);
   flex: 0 0 auto;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4));
 }
 .ds-divider { width: 1px; height: 22px; background: rgba(237,225,199,.15); margin: 0 14px; flex: 0 0 auto; }
 .ds-session-name {
@@ -371,6 +368,117 @@ svg {
 .ds-input:focus { border-color: var(--accent); }
 textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size: 14px; resize: vertical; min-height: 60px; line-height: 1.45; }
 .ds-input::placeholder { color: var(--ink-mute); font-style: italic; }
+
+/* ─── Hex inspector field styles ─── */
+.hm-ghost-btn {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em;
+  color: var(--ink-mute); background: none; border: none; cursor: pointer; padding: 0;
+  transition: color .12s;
+}
+.hm-ghost-btn:hover { color: var(--ink-2); }
+.hm-ghost-btn--danger { color: var(--accent); opacity: .7; }
+.hm-ghost-btn--danger:hover { opacity: 1; }
+
+.hm-terrain-picker {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
+}
+.hm-terrain-chip {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  background: var(--paper); border: 1px solid var(--rule-strong);
+  font-family: var(--font-display); font-style: italic; font-size: 13px;
+  color: var(--ink-2); text-align: left; text-transform: capitalize; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.hm-terrain-chip:hover { background: var(--paper-3); }
+.hm-terrain-chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.hm-terrain-swatch {
+  width: 14px; height: 14px; border-radius: 2px;
+  border: 1px solid rgba(0,0,0,.2); flex: 0 0 auto;
+}
+.hm-terrain-chip.active .hm-terrain-swatch { border-color: rgba(237,225,199,.3); }
+
+.hm-content-card {
+  background: var(--paper); border: 1px solid var(--rule-strong);
+  border-left: 3px solid var(--accent-2);
+  padding: 8px 10px;
+}
+.hm-content-card-head {
+  display: flex; align-items: center; gap: 8px;
+}
+.hm-stamp {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1.5px solid var(--ink); background: var(--paper-2);
+  flex: 0 0 auto; color: var(--ink);
+}
+.hm-kind {
+  font-family: var(--font-zine); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-mute); white-space: nowrap; flex-shrink: 0;
+}
+.hm-card-input {
+  flex: 1; font-size: 13px !important; padding: 3px 6px !important;
+  border-bottom-width: 1px !important;
+}
+.hm-content-card-x {
+  background: transparent; border: 0; color: var(--ink-mute);
+  width: 22px; height: 22px; display: grid; place-items: center;
+  border-radius: 3px; flex-shrink: 0; cursor: pointer; font-size: 15px; line-height: 1;
+  transition: color .1s, background .1s;
+}
+.hm-content-card-x:hover { color: var(--accent); background: rgba(138,28,28,.08); }
+
+.hm-marker-picker {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
+}
+.hm-marker-chip {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  background: var(--paper); border: 1px solid var(--rule-strong);
+  font-family: var(--font-display); font-style: italic; font-size: 13px;
+  color: var(--ink-2); text-align: left; text-transform: capitalize; cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.hm-marker-chip:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.hm-note {
+  background: var(--paper); border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent-2);
+  padding: 8px 10px;
+  font-family: var(--font-body); font-size: 13px; line-height: 1.45; color: var(--ink);
+}
+.hm-note-meta {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;
+  font-family: var(--font-ui); font-size: 11px;
+}
+.hm-note-author { font-weight: 600; color: var(--accent-2); letter-spacing: .02em; }
+.hm-note-time { color: var(--ink-mute); font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; }
+.hm-note-text { white-space: pre-wrap; word-break: break-word; }
+
+.hm-note-add { display: flex; flex-direction: column; gap: 6px; }
+.hm-note-add-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+.hm-kbd-hint {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--ink-mute); letter-spacing: .06em; text-transform: uppercase;
+}
+
+.hm-dashed-btn {
+  width: 100%; border: 1px dashed var(--rule-strong); border-radius: 3px;
+  padding: 7px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em;
+  color: var(--ink-mute); background: none; cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.hm-dashed-btn:hover { color: var(--ink-2); border-color: var(--ink-mute); }
+
+.hm-inspector-empty {
+  text-align: center; padding: 26px 18px;
+  color: var(--ink-mute); font-family: var(--font-body); font-style: italic;
+  font-size: 14px; line-height: 1.5;
+}
+.hm-inspector-glyph {
+  font-family: var(--font-display); font-size: 38px;
+  display: block; color: var(--ink-soft); margin-bottom: 6px; font-style: italic;
+}
+
 .ds-note {
   background: var(--paper); border: 1px solid var(--rule);
   border-left: 3px solid var(--note-color, var(--accent-2));
@@ -743,4 +851,339 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
 .dungeon-scribe .cs-stat-mod       { font-size: 12px !important; }
 .dungeon-scribe .cs-info-rows      { font-size: 13px !important; }
 .dungeon-scribe .cs-gear-badge     { font-size: 11px !important; }
+
+/* ─── Hex Map shell ─── */
+.hm-body {
+  display: grid;
+  grid-template-columns: var(--toolbar-w, 64px) 1fr var(--side-panel-w, 360px);
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+}
+.hm-canvas-area {
+  position: relative; overflow: hidden;
+  background: var(--void);
+  transition: background .4s ease;
+  min-height: 0;
+}
+.hm-canvas-area.mode-blank {
+  background-color: #d4be90;
+  background-image:
+    radial-gradient(ellipse at 30% 20%, rgba(184,156,106,.32), transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(120,80,40,.26), transparent 60%),
+    repeating-linear-gradient(0deg,  rgba(58,46,34,.04) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(90deg, rgba(58,46,34,.04) 0 1px, transparent 1px 6px);
+}
+
+/* ─── Hex cell hover ─── */
+.hex-cell:hover .hex-cell-poly { filter: brightness(1.08); }
+
+/* ─── Hex topbar extras ─── */
+.hm-page-tabs {
+  display: flex; align-items: center; gap: 2px;
+}
+.hm-page-tab {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: rgba(237,225,199,.5);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: color .12s, background .12s;
+}
+.hm-page-tab:hover { color: rgba(237,225,199,.8); background: rgba(237,225,199,.06); }
+.hm-page-tab.active {
+  color: var(--paper);
+  background: rgba(237,225,199,.12);
+  border-color: rgba(237,225,199,.2);
+}
+.hm-mode-badge {
+  display: inline-flex; align-items: center; gap: 0;
+  border: 1px solid rgba(237,225,199,.22);
+  border-radius: 5px; overflow: hidden;
+  flex-shrink: 0;
+}
+.hm-mode-label {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--paper); padding: 5px 10px;
+}
+.hm-mode-badge[data-mode="fow"] .hm-mode-label { color: #a8c4d8; }
+.hm-mode-badge[data-mode="blank"] .hm-mode-label { color: #c8d98a; }
+.hm-switch-btn {
+  background: rgba(237,225,199,.1); color: rgba(237,225,199,.65);
+  border: none; border-left: 1px solid rgba(237,225,199,.18);
+  padding: 5px 9px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .08em; text-transform: uppercase;
+  transition: background .12s, color .12s;
+}
+.hm-switch-btn:hover { background: rgba(237,225,199,.18); color: var(--paper); }
+.hm-presence-count {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .08em;
+  color: rgba(237,225,199,.45);
+  margin-left: 8px;
+}
+.hm-session-edit {
+  background: transparent;
+  border: none; border-bottom: 1px solid rgba(237,225,199,.4);
+  color: var(--paper);
+  font-family: var(--font-display); font-style: italic; font-size: 18px;
+  outline: none; width: 180px;
+}
+
+/* ─── Setup screen (mode picker) ─── */
+.hm-setup-bg {
+  flex: 1; min-height: 0;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(184,156,106,.45), transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(60,30,10,.55), transparent 60%),
+    #1a0f06;
+  display: grid; place-items: center;
+  padding: 40px;
+  overflow-y: auto;
+}
+.hm-mode-picker {
+  width: min(960px, 100%);
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  box-shadow:
+    0 0 0 1px var(--paper-2) inset,
+    0 24px 60px rgba(0,0,0,.5),
+    0 8px 20px rgba(0,0,0,.3);
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(184,156,106,.18), transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(120,80,40,.14), transparent 55%);
+  padding: 32px;
+}
+.hm-mode-picker-head {
+  text-align: center;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 22px;
+  margin-bottom: 26px;
+}
+.hm-mode-picker-head h1 {
+  margin: 0 0 8px;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 32px;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: .01em;
+}
+.hm-mode-picker-head p {
+  margin: 0 auto;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  max-width: 580px;
+}
+.hm-mode-picker-head p b { color: var(--ink); }
+.hm-mode-picker-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.hm-mode-card {
+  background: var(--paper-2);
+  border: 1.5px solid var(--ink-2);
+  padding: 22px;
+  display: flex; flex-direction: column;
+  gap: 10px;
+  position: relative;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.hm-mode-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0,0,0,.25);
+  border-color: var(--accent);
+}
+.hm-mode-icon {
+  width: 56px; height: 56px;
+  display: grid; place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 50%;
+  margin-bottom: 4px;
+}
+.hm-mode-card h2 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--ink);
+}
+.hm-mode-tagline {
+  margin: 0 0 6px;
+  font-family: var(--font-zine);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.hm-mode-bullets {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+.hm-mode-bullets li { position: relative; padding-left: 18px; }
+.hm-mode-bullets li::before {
+  content: "✦";
+  position: absolute;
+  left: 0; top: -1px;
+  color: var(--accent-2);
+  font-family: var(--font-display);
+}
+.hm-mode-preview {
+  width: 100%; aspect-ratio: 1.4;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  overflow: hidden;
+  margin: 4px 0;
+  display: grid; place-items: center;
+}
+.hm-mode-preview img { width: 100%; height: 100%; object-fit: cover; }
+/* ─── Confirm modal ─── */
+.hm-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(13,10,7,.7);
+  z-index: 300;
+  display: grid; place-items: center;
+  backdrop-filter: blur(2px);
+}
+.hm-modal-card {
+  width: min(440px, calc(100% - 32px));
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  padding: 22px 24px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(184,156,106,.18), transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(120,80,40,.14), transparent 55%);
+}
+.hm-modal-card h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--ink);
+}
+.hm-modal-card p {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.hm-modal-card p b { color: var(--ink); }
+
+/* ─── Hex toolbar extras ─── */
+.hm-tool-label {
+  font-family: var(--font-zine); font-size: 9px;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-mute); margin: 0 0 2px;
+}
+/* ─── Hex map bottom contents bar ─── */
+.hm-contents-bar {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); border-radius: 6px;
+  padding: 6px 10px 6px 14px;
+  display: flex; align-items: center; gap: 6px;
+  max-width: calc(100% - 220px);
+  box-shadow: 0 8px 28px rgba(0,0,0,.55), 0 0 0 1px rgba(237,225,199,.08);
+  z-index: 20;
+  pointer-events: auto;
+}
+.hm-contents-bar-label {
+  font-family: var(--font-ui); font-size: 9px; letter-spacing: .12em;
+  text-transform: uppercase; color: rgba(237,225,199,.35);
+  white-space: nowrap; margin-right: 2px; flex-shrink: 0;
+}
+.hm-stamp-btn {
+  width: 38px; height: 38px; border-radius: 5px;
+  border: 1.5px solid rgba(255,255,255,.12);
+  color: var(--paper);
+  cursor: pointer; flex-shrink: 0;
+  position: relative; display: flex; align-items: center; justify-content: center;
+  transition: border-color .12s, box-shadow .12s, transform .1s, color .12s;
+}
+.hm-stamp-btn:hover {
+  border-color: rgba(255,255,255,.3);
+  transform: translateY(-1px);
+}
+.hm-stamp-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-2), 0 0 10px rgba(138,90,50,.4);
+  transform: translateY(-1px);
+}
+.hm-stamp-glyph {
+  width: 20px; height: 20px; flex-shrink: 0;
+}
+.hm-stamp-lbl {
+  position: absolute; bottom: calc(100% + 10px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink); color: var(--paper);
+  padding: 7px 12px; border-radius: 5px;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  white-space: nowrap; pointer-events: none; opacity: 0;
+  transition: opacity .12s; z-index: 200;
+  border: 1px solid rgba(237,225,199,.22);
+  box-shadow: 0 4px 18px rgba(0,0,0,.5);
+}
+.hm-stamp-lbl::after {
+  content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: var(--ink);
+}
+.hm-stamp-btn:hover .hm-stamp-lbl { opacity: 1; transition: opacity 0s; }
+
+.hm-marker-remove-btn {
+  width: 22px; height: 22px; border-radius: 3px;
+  border: 1px solid var(--rule-strong); background: none;
+  color: var(--ink-mute); cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1;
+  transition: color .1s, border-color .1s;
+}
+.hm-marker-remove-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+.hm-marker-add-btn {
+  flex: 1; height: 28px; border-radius: 4px;
+  border: 1px dashed var(--rule-strong); background: none;
+  color: var(--ink-mute); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em;
+  transition: color .1s, border-color .1s;
+}
+.hm-marker-add-btn:hover { color: var(--ink-2); border-color: var(--ink-mute); }
+
+/* ─── Hex map zoom controls ─── */
+.hm-zoom {
+  position: absolute; bottom: 16px; left: 16px; z-index: 10;
+  display: flex; flex-direction: column; gap: 1px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 5px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  overflow: hidden;
+}
+.hm-zoom-btn {
+  width: 32px; height: 30px;
+  display: grid; place-items: center;
+  background: transparent; border: none;
+  color: var(--ink-2); font-family: var(--font-mono); font-size: 14px;
+  transition: background .1s, color .1s;
+  cursor: default;
+}
+.hm-zoom-btn:hover { background: rgba(26,20,16,.08); color: var(--ink); }
+.hm-zoom-btn + .hm-zoom-btn { border-top: 1px solid var(--rule); }
 .dungeon-scribe .cs-form-label     { font-size: 11px !important; }

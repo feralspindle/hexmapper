@@ -68,6 +68,7 @@
         <div>
           <div class="ds-roll-who" :style="{ color: rollColor(entry.user_id) }">{{ gmName(entry.user_id, entry.display_name) }}</div>
           <div class="ds-roll-expr">{{ formatExpr(entry) }}</div>
+          <div v-if="entry.results?.length" class="ds-roll-breakdown">[<template v-for="(r, i) in entry.results" :key="i"><span :class="r.value === 20 && r.die === 'd20' ? 'result-crit' : r.value === 1 && r.die === 'd20' ? 'result-fumble' : ''">{{ r.value }}</span><span v-if="i < entry.results.length - 1" class="result-sep">, </span></template>]</div>
           <div v-if="entry.label" class="ds-roll-label">{{ entry.label }}</div>
           <div class="ds-roll-when">{{ timeAgo(entry.created_at) }}</div>
         </div>
@@ -154,3 +155,16 @@ function timeAgo(ts) {
   return `${Math.floor(diff / 3600000)}h ago`
 }
 </script>
+
+<style scoped>
+.ds-roll-breakdown {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  color: var(--ink-soft, #5a4a3a);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.result-crit   { color: var(--gold, #c8a827); font-weight: 700; }
+.result-fumble { color: var(--accent, #8a1c1c); font-weight: 700; }
+.result-sep    { color: var(--ink-mute, #8a7a68); }
+</style>

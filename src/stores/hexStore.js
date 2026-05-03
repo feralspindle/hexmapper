@@ -3,17 +3,33 @@ import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import router from '@/router/index.js'
 import { useMapStore } from '@/stores/mapStore.js'
+import { useSessionStore } from '@/stores/sessionStore.js'
 
-export const MARKER_COLORS = [
-  { id: 'red',    color: '#ef4444', label: 'Red'    },
-  { id: 'orange', color: '#f97316', label: 'Orange' },
-  { id: 'yellow', color: '#eab308', label: 'Yellow' },
-  { id: 'green',  color: '#22c55e', label: 'Green'  },
-  { id: 'teal',   color: '#14b8a6', label: 'Teal'   },
-  { id: 'blue',   color: '#3b82f6', label: 'Blue'   },
-  { id: 'purple', color: '#a855f7', label: 'Purple' },
-  { id: 'pink',   color: '#ec4899', label: 'Pink'   },
+export const MARKER_KINDS = [
+  { id: 'town',     label: 'Town'     },
+  { id: 'city',     label: 'City'     },
+  { id: 'dungeon',  label: 'Dungeon'  },
+  { id: 'landmark', label: 'Landmark' },
 ]
+
+export function parseMarkers(raw) {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(item =>
+      typeof item === 'string'
+        ? { id: crypto.randomUUID(), kind: item, label: '' }
+        : item
+    )
+  } catch {
+    return raw ? [{ id: crypto.randomUUID(), kind: raw, label: '' }] : []
+  }
+}
+
+export function serializeMarkers(markers) {
+  return markers.length ? JSON.stringify(markers) : null
+}
 
 export const TERRAIN_TYPES = [
   { id: 'plains',   label: 'Plains',   color: '#c8d98a' },
@@ -36,12 +52,14 @@ export const useHexStore = defineStore('hex', () => {
   const CLIENT_ID = crypto.randomUUID()
   const hexCells = ref(new Map())
   const selectedHex = ref(null)
+  const partyHex = ref(null)
   const hexDungeons = ref([])
   const dungeonsLoading = ref(false)
   const loading = ref(false)
   const currentSessionId = ref(null)
   const currentMapId = ref(null)
   let channel = null
+  let partyChannel = null
 
   const selectedCell = computed(() => {
     if (!selectedHex.value) return null
@@ -76,11 +94,52 @@ export const useHexStore = defineStore('hex', () => {
         handleRealtimeEvent,
       )
       .subscribe()
+
+    if (partyChannel) supabase.removeChannel(partyChannel)
+    partyChannel = supabase
+      .channel(`map:${mapId}:party`)
+      .on('broadcast', { event: 'party' }, ({ payload }) => {
+        partyHex.value = payload.q != null ? { q: payload.q, r: payload.r } : null
+        _savePartyHex()
+      })
+      .subscribe()
+
+    _loadPartyHex()
+  }
+
+  function _partyKey() {
+    return `party_hex_${currentSessionId.value}_${currentMapId.value}`
+  }
+  function _loadPartyHex() {
+    try {
+      const saved = localStorage.getItem(_partyKey())
+      partyHex.value = saved ? JSON.parse(saved) : null
+    } catch { partyHex.value = null }
+  }
+  function _savePartyHex() {
+    if (partyHex.value) localStorage.setItem(_partyKey(), JSON.stringify(partyHex.value))
+    else localStorage.removeItem(_partyKey())
+  }
+
+  function setPartyHex(q, r) {
+    partyHex.value = { q, r }
+    _savePartyHex()
+    partyChannel?.send({ type: 'broadcast', event: 'party', payload: { q, r } })
+  }
+
+  function clearPartyHex() {
+    partyHex.value = null
+    _savePartyHex()
+    partyChannel?.send({ type: 'broadcast', event: 'party', payload: { q: null, r: null } })
   }
 
   function handleRealtimeEvent({ eventType, new: row, old }) {
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
       if (row.source_client === CLIENT_ID) return
+      if (!useSessionStore().isGM && row.revealed === false) {
+        hexCells.value.delete(cellKey(row.q, row.r))
+        return
+      }
       hexCells.value.set(cellKey(row.q, row.r), row)
     } else if (eventType === 'DELETE') {
       hexCells.value.delete(cellKey(old.q, old.r))
@@ -115,7 +174,6 @@ export const useHexStore = defineStore('hex', () => {
       revealed: false,
       ...existing,
       ...patch,
-      // Always override with current context — existing/patch must not win here
       session_id: currentSessionId.value,
       map_id: currentMapId.value,
       q,
@@ -137,6 +195,24 @@ export const useHexStore = defineStore('hex', () => {
     } else if (data) {
       hexCells.value.set(key, data)
     }
+  }
+
+  async function addMarker(q, r, kind) {
+    const current = parseMarkers(hexCells.value.get(cellKey(q, r))?.marker_color)
+    const next = [...current, { id: crypto.randomUUID(), kind, label: '' }]
+    await upsertHex(q, r, { marker_color: serializeMarkers(next) })
+  }
+
+  async function removeMarker(q, r, markerId) {
+    const current = parseMarkers(hexCells.value.get(cellKey(q, r))?.marker_color)
+    const next = current.filter(m => m.id !== markerId)
+    await upsertHex(q, r, { marker_color: serializeMarkers(next) })
+  }
+
+  async function updateMarkerLabel(q, r, markerId, label) {
+    const current = parseMarkers(hexCells.value.get(cellKey(q, r))?.marker_color)
+    const next = current.map(m => m.id === markerId ? { ...m, label } : m)
+    await upsertHex(q, r, { marker_color: serializeMarkers(next) })
   }
 
   async function deleteHex(q, r) {
@@ -281,15 +357,19 @@ export const useHexStore = defineStore('hex', () => {
   function cleanup() {
     if (channel) supabase.removeChannel(channel)
     channel = null
+    if (partyChannel) supabase.removeChannel(partyChannel)
+    partyChannel = null
     currentMapId.value = null
     currentSessionId.value = null
     hexCells.value = new Map()
     selectedHex.value = null
+    partyHex.value = null
   }
 
   return {
     hexCells,
     selectedHex,
+    partyHex,
     selectedCell,
     hexDungeons,
     dungeonsLoading,
@@ -298,6 +378,9 @@ export const useHexStore = defineStore('hex', () => {
     selectHex,
     deselectHex,
     upsertHex,
+    addMarker,
+    removeMarker,
+    updateMarkerLabel,
     deleteHex,
     ensureCellExists,
     fetchDungeonsForHex,
@@ -307,6 +390,8 @@ export const useHexStore = defineStore('hex', () => {
     revealAll,
     hideAll,
     clearAll,
+    setPartyHex,
+    clearPartyHex,
     cleanup,
   }
 })

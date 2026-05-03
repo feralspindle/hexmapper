@@ -1,181 +1,111 @@
 <template>
-  <div class="h-screen flex flex-col bg-stone-900 overflow-hidden">
-    <AppNav :session-id="sessionId" v-model:char-open="charOpen" />
+  <div
+    class="dungeon-scribe"
+    :data-density="prefs.density"
+    :data-palette="prefs.palette"
+  >
+    <HexTopbar
+      :hex-mode="hexMode"
+      :char-open="charOpen"
+      @switch-mode="onSwitchMode"
+      @toggle-char="charOpen = !charOpen"
+    />
 
-    <div class="flex flex-1 overflow-hidden">
+    <div v-if="showModePicker" class="hm-setup-bg">
+      <HexModePicker @pick-fow="onPickFow" @pick-blank="onPickBlank" />
+    </div>
 
-      <div class="flex-1 relative overflow-hidden">
+    <div v-else class="hm-body">
 
-      <div class="absolute top-0 inset-x-0 h-10 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-[5]" />
-
-      <div
-        v-if="sessionStore.isGM && mapStore.gmMapId === sessionStore.activeMapId"
-        class="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 bg-stone-900/90 border border-red-700/60 rounded-full px-3 py-1 backdrop-blur"
-      >
-        <i class="fa-solid fa-tower-broadcast text-red-500 text-sm animate-pulse" />
-        <span class="text-sm font-semibold text-red-400 tracking-widest uppercase">Live</span>
-      </div>
-
-      <div class="absolute left-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-1 bg-stone-900/90 border border-stone-600 rounded-lg p-1.5 backdrop-blur">
-        <button
-          title="Zoom in (+)"
-          class="w-8 h-8 flex items-center justify-center text-stone-300 hover:text-parchment-200 hover:bg-stone-700 rounded transition-colors text-lg font-display leading-none"
-          @click="hexGridEl?.zoomIn()"
-        >+</button>
-        <button
-          title="Reset zoom"
-          class="w-8 h-8 flex items-center justify-center text-stone-400 hover:text-parchment-200 hover:bg-stone-700 rounded transition-colors text-sm font-mono"
-          @click="hexGridEl?.resetZoom()"
-        >1:1</button>
-        <button
-          title="Zoom out (-)"
-          class="w-8 h-8 flex items-center justify-center text-stone-300 hover:text-parchment-200 hover:bg-stone-700 rounded transition-colors text-lg font-display leading-none"
-          @click="hexGridEl?.zoomOut()"
-        >−</button>
-
-        <div class="border-t border-stone-700 my-0.5" />
-
-        <button
-          title="Pan mode (drag to scroll the map)"
-          :class="[
-            'w-8 h-8 flex items-center justify-center rounded transition-colors text-base',
-            hexGridEl?.panMode
-              ? 'bg-parchment-500 text-stone-900'
-              : 'text-stone-300 hover:text-parchment-200 hover:bg-stone-700',
-          ]"
-          @click="hexGridEl?.togglePanMode()"
-        >✥</button>
-
-        <template v-if="sessionStore.isGM && mapStore.gmMode === 'edit'">
-          <div class="border-t border-stone-700 my-0.5" />
-          <button
-            title="Map settings"
-            :class="[
-              'w-8 h-8 flex items-center justify-center rounded transition-colors text-sm',
-              showMapSettings
-                ? 'bg-parchment-500 text-stone-900'
-                : 'text-stone-300 hover:text-parchment-200 hover:bg-stone-700',
-            ]"
-            @click="showMapSettings = !showMapSettings"
-          >
-            <i class="fa-solid fa-map text-sm" />
-          </button>
-        </template>
-
-        <template v-if="sessionStore.isGM && mapStore.gmMapId !== sessionStore.activeMapId">
-          <div class="border-t border-stone-700 my-0.5" />
-          <button
-            title="Go Live — push this map to players"
-            class="w-8 h-8 flex items-center justify-center rounded transition-colors text-sm bg-red-900/60 text-red-400 hover:bg-red-800/80 hover:text-red-200"
-            @click="goLive"
-          >
-            <i class="fa-solid fa-tower-broadcast text-sm" />
-          </button>
-        </template>
-
-        <template v-if="sessionStore.isGM && mapStore.gmMapId === sessionStore.activeMapId && mapStore.hasDraft">
-          <div class="border-t border-stone-700 my-0.5" />
-          <button
-            title="Push Live — publish your changes to players"
-            class="w-8 h-8 flex items-center justify-center rounded transition-colors text-sm bg-amber-900/60 text-amber-400 hover:bg-amber-800/80 hover:text-amber-200"
-            @click="pushLive"
-          >
-            <i class="fa-solid fa-upload text-sm" />
-          </button>
-        </template>
-
-        <template v-if="sessionStore.isGM && mapStore.gmMapId === sessionStore.activeMapId">
-          <div class="border-t border-stone-700 my-0.5" />
-          <button
-            title="Edit mode — prepare the map before players see it"
-            :class="[
-              'w-8 h-8 flex items-center justify-center rounded transition-colors text-sm',
-              mapStore.gmMode === 'edit'
-                ? 'bg-parchment-500 text-stone-900'
-                : 'text-stone-400 hover:text-parchment-200 hover:bg-stone-700',
-            ]"
-            @click="mapStore.gmMode = 'edit'"
-          >
-            <i class="fa-solid fa-pencil text-sm" />
-          </button>
-          <button
-            title="Live mode — see what players see"
-            :class="[
-              'w-8 h-8 flex items-center justify-center rounded transition-colors text-sm',
-              mapStore.gmMode === 'live'
-                ? 'bg-green-700 text-green-100'
-                : 'text-stone-400 hover:text-parchment-200 hover:bg-stone-700',
-            ]"
-            @click="mapStore.gmMode = 'live'"
-          >
-            <span
-              v-if="mapStore.gmMode === 'live'"
-              class="w-1.5 h-1.5 rounded-full bg-green-300 animate-pulse"
-            />
-            <i v-else class="fa-solid fa-eye text-sm" />
-          </button>
-        </template>
-      </div>
-
-      <MapImageSettings
-        v-if="showMapSettings && sessionStore.isGM && mapStore.gmMode === 'edit'"
-        v-model:move-mode="moveMode"
-        @close="showMapSettings = false"
-      />
-
-      <HexGrid
-        ref="hexGridEl"
-        :session-id="sessionId"
-        :is-g-m="sessionStore.isGM && mapStore.gmMode === 'edit'"
-        :fog-mode="fogMode"
-        :image-mode="displayMapType === 'image'"
-        :map-image-url="displayImageUrl"
-        :map-hex-width="displayMapHexWidth"
-        :map-hex-height="displayMapHexHeight"
-        :map-image-rotation="displayMapImageRotation"
-        :map-grid-rotation="displayMapGridRotation"
-        :map-image-offset-x="displayMapImageOffsetX"
-        :map-image-offset-y="displayMapImageOffsetY"
-        :map-grid-offset-x="displayMapGridOffsetX"
-        :map-grid-offset-y="displayMapGridOffsetY"
-        :map-fog-reveal-all="displayMapFogRevealAll"
-        :move-mode="mapStore.gmMode === 'edit' ? moveMode : 'none'"
+      <HexLeftToolbar
+        v-if="hexMode"
+        :hex-mode="hexMode"
+        :active-tool="activeTool"
         :settings-open="showMapSettings"
-        class="absolute inset-0"
-        @hex-click="onHexClick"
-        @hex-context="onHexContext"
-        @image-offset-change="onImageOffsetChange"
-        @grid-offset-change="onGridOffsetChange"
+        @tool="setTool"
+        @reveal-all="hexStore.revealAll()"
+        @hide-all="hexStore.hideAll()"
+        @map-settings="showMapSettings = !showMapSettings"
       />
+      <!-- placeholder toolbar width when no mode selected yet -->
+      <div v-else style="width:var(--toolbar-w,64px);flex-shrink:0" />
 
       <div
-        v-if="fogMode && sessionStore.isGM"
-        class="absolute inset-0 pointer-events-none z-[4]"
-        style="box-shadow: inset 0 0 0 4px rgba(148,163,184,0.35), inset 0 0 80px rgba(100,116,139,0.18)"
-      />
+        class="hm-canvas-area"
+        :class="{ 'mode-blank': hexMode === 'blank' }"
+        :data-tool="activeTool"
+      >
+        <HexGrid
+          ref="hexGridEl"
+          :session-id="sessionId"
+          :is-g-m="sessionStore.isGM"
+          :fog-mode="hexMode === 'fow'"
+          :image-mode="hexMode === 'fow' && mapStore.mapType === 'image'"
+          :map-image-url="mapStore.activeMapImageUrl"
+          :map-hex-width="mapStore.mapHexWidth"
+          :map-hex-height="mapStore.mapHexHeight"
+          :map-image-rotation="mapStore.mapImageRotation"
+          :map-grid-rotation="mapStore.mapGridRotation"
+          :map-image-offset-x="mapStore.mapImageOffsetX"
+          :map-image-offset-y="mapStore.mapImageOffsetY"
+          :map-grid-offset-x="mapStore.mapGridOffsetX"
+          :map-grid-offset-y="mapStore.mapGridOffsetY"
+          :map-fog-reveal-all="hexMode === 'blank' || mapStore.mapFogRevealAll"
+          :pan-mode="activeTool === 'pan'"
+          :move-mode="moveMode"
+          :settings-open="showMapSettings"
+          style="position:absolute;inset:0"
+          @hex-click="onHexClick"
+          @hex-context="onHexContext"
+          @image-offset-change="onImageOffsetChange"
+          @grid-offset-change="onGridOffsetChange"
+        />
 
-      <HexControls
-        v-model:fog-mode="fogMode"
-        v-model:marker-color="activeMarkerColor"
-        :is-g-m="sessionStore.isGM"
-        class="absolute bottom-4 left-1/2 -translate-x-1/2"
-      />
 
-      <DiceRollToast />
+        <MapImageSettings
+          v-if="showMapSettings && sessionStore.isGM && hexMode === 'fow'"
+          v-model:move-mode="moveMode"
+          @close="showMapSettings = false"
+        />
 
-      <ChatToast />
+        <div class="hm-zoom">
+          <button class="hm-zoom-btn" title="Zoom in" @click="hexGridEl?.zoomIn()">+</button>
+          <button class="hm-zoom-btn" title="Reset zoom" @click="hexGridEl?.resetZoom()" style="font-size:9px;letter-spacing:.02em">1:1</button>
+          <button class="hm-zoom-btn" title="Zoom out" @click="hexGridEl?.zoomOut()">−</button>
+        </div>
 
-      <JoinToast />
 
+        <HexBottomBar
+          v-if="hexMode === 'blank'"
+          :active-tool="activeTool"
+          :active-terrain="activeTerrain"
+          :active-marker-color="activeMarkerColor"
+          @terrain="activeTerrain = $event"
+          @marker-color="activeMarkerColor = $event"
+        />
+
+        <DiceRollToast />
+        <ChatToast />
+        <JoinToast />
       </div>
 
-      <RightSidebar context="hex" />
+      <HexRightPanel />
+
     </div>
 
     <NewMapModal v-if="mapStore.newMapModalOpen" />
     <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
     <WelcomeModal v-if="showWelcome" @close="showWelcome = false" />
     <ConfirmDialog />
+
+    <CharacterDrawer
+      parchment
+      :open="charOpen"
+      :nav-height="48"
+      @close="charOpen = false"
+    />
+
+    <DungeonPartyPanel />
   </div>
 </template>
 
@@ -190,27 +120,36 @@ import { useDiceStore } from '@/stores/diceStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
 import { usePhotoStore } from '@/stores/photoStore.js'
-import AppNav from '@/components/common/AppNav.vue'
+import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
+import HexTopbar from '@/components/hex/HexTopbar.vue'
+import HexModePicker from '@/components/hex/HexModePicker.vue'
+import HexLeftToolbar from '@/components/hex/HexLeftToolbar.vue'
+import HexRightPanel from '@/components/hex/HexRightPanel.vue'
 import HexGrid from '@/components/hex/HexGrid.vue'
-import HexControls from '@/components/hex/HexControls.vue'
 import MapImageSettings from '@/components/hex/MapImageSettings.vue'
 import NewMapModal from '@/components/hex/NewMapModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DiceRollToast from '@/components/dungeon/DiceRollToast.vue'
 import ChatToast from '@/components/common/ChatToast.vue'
 import JoinToast from '@/components/common/JoinToast.vue'
-import RightSidebar from '@/components/common/RightSidebar.vue'
 import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
 import WelcomeModal from '@/components/common/WelcomeModal.vue'
+import CharacterDrawer    from '@/components/common/CharacterDrawer.vue'
+import DungeonPartyPanel  from '@/components/dungeon/DungeonPartyPanel.vue'
+import HexBottomBar       from '@/components/hex/HexBottomBar.vue'
 
-const hexGridEl         = ref(null)
-const charOpen          = ref(false)
-const fogMode           = ref(false)
-const activeMarkerColor = ref(null)
-const showMapSettings   = ref(false)
-const initialized       = ref(false)
-const moveMode          = ref('none')
-const showWelcome       = ref(false)
+const hexGridEl       = ref(null)
+const charOpen        = ref(false)
+const showMapSettings = ref(false)
+const moveMode        = ref('none')
+const showWelcome     = ref(false)
+
+// Mode + tool state
+const hexMode           = ref(null) // null = show picker, 'fow' | 'blank'
+const showModePicker    = ref(false)
+const activeTool        = ref('select')
+const activeTerrain     = ref('plains')
+const activeMarkerColor = ref('town')
 
 const route = useRoute()
 const sessionId = route.params.sessionId
@@ -223,49 +162,78 @@ const diceStore      = useDiceStore()
 const chatStore      = useChatStore()
 const characterStore = useCharacterStore()
 const photoStore     = usePhotoStore()
+const prefs          = useUserPrefsStore()
 
-const displayMapId = computed(() =>
-  sessionStore.isGM && mapStore.gmMode === 'edit' && mapStore.gmMapId
-    ? mapStore.gmMapId
-    : sessionStore.activeMapId
-)
 
-const displayMapType           = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapType          : mapStore.mapType)
-const displayImageUrl          = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapImageUrl       : mapStore.activeMapImageUrl)
-const displayMapHexWidth       = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapHexWidth       : mapStore.mapHexWidth)
-const displayMapHexHeight      = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapHexHeight      : mapStore.mapHexHeight)
-const displayMapImageRotation  = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapImageRotation  : mapStore.mapImageRotation)
-const displayMapGridRotation   = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapGridRotation   : mapStore.mapGridRotation)
-const displayMapImageOffsetX   = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapImageOffsetX   : mapStore.mapImageOffsetX)
-const displayMapImageOffsetY   = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapImageOffsetY   : mapStore.mapImageOffsetY)
-const displayMapGridOffsetX    = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapGridOffsetX    : mapStore.mapGridOffsetX)
-const displayMapGridOffsetY    = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapGridOffsetY    : mapStore.mapGridOffsetY)
-const displayMapFogRevealAll   = computed(() => mapStore.gmMode === 'edit' ? mapStore.gmMapFogRevealAll   : mapStore.mapFogRevealAll)
+const modeKey = computed(() => `hex_mode_${sessionId}`)
 
-async function goLive() {
-  if (!mapStore.gmMapOffsetLocked) {
-    await mapStore.updateActiveMap({ mapOffsetLocked: true })
+function loadMode() {
+  const saved = localStorage.getItem(modeKey.value)
+  if (saved === 'fow' || saved === 'blank') {
+    hexMode.value = saved
+    showModePicker.value = false
+  } else if (sessionStore.isGM) {
+    showModePicker.value = true
+  } else {
+    hexMode.value = 'fow'
+    showModePicker.value = false
   }
-  await mapStore.setActiveMap(mapStore.gmMapId)
-  mapStore.gmMode = 'live'
+}
+
+function onSwitchMode() {
+  if (!sessionStore.isGM) return
+  hexMode.value = null
+  showModePicker.value = true
   showMapSettings.value = false
-  moveMode.value = 'none'
-  fogMode.value  = false
+  localStorage.removeItem(modeKey.value)
+  activeTool.value = 'select'
 }
 
-async function pushLive() {
-  await mapStore.pushLiveDraft()
+async function onPickFow(file) {
+  showModePicker.value = false
+  hexMode.value = 'fow'
+  localStorage.setItem(modeKey.value, 'fow')
+  activeTool.value = 'select'
+  if (file) {
+    try {
+      const path = await mapStore.uploadMapImage(file)
+      await mapStore.updateActiveMap({ mapImagePath: path, mapType: 'image' })
+    } catch (e) {
+      console.error('Map upload failed:', e.message)
+    }
+  }
 }
 
-watch(fogMode, (val) => { if (val) hexStore.deselectHex() })
+function onPickBlank() {
+  showModePicker.value = false
+  hexMode.value = 'blank'
+  localStorage.setItem(modeKey.value, 'blank')
+  activeTool.value = 'select'
+}
+
+function setTool(tool) {
+  activeTool.value = tool
+}
+
+function onKeyDown(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+  const key = e.key.toUpperCase()
+  if (key === 'V') setTool('select')
+  else if (key === 'H') setTool('pan')
+  else if (key === 'R' && hexMode.value === 'fow') setTool('reveal')
+  else if (key === 'X' && hexMode.value === 'fow') setTool('hide')
+  else if (key === 'T' && hexMode.value === 'blank') setTool('paint')
+  else if (key === 'M' && hexMode.value === 'blank') setTool('marker')
+  else if (key === 'E' && hexMode.value === 'blank') setTool('erase')
+}
 
 watch(() => mapStore.maps.length, (newLen, oldLen) => {
-  if (initialized.value && oldLen === 0 && newLen > 0 && sessionStore.isGM) {
+  if (oldLen === 0 && newLen > 0 && sessionStore.isGM) {
     showMapSettings.value = true
   }
 })
 
-watch(displayMapId, async (newId) => {
+watch(() => sessionStore.activeMapId, async (newId) => {
   if (newId) {
     moveMode.value = 'none'
     await hexStore.init(sessionId, newId)
@@ -277,12 +245,11 @@ onMounted(async () => {
     await sessionStore.joinSession(sessionId)
   }
   await mapStore.init(sessionId)
-  initialized.value = true
 
   if (mapStore.maps.length === 0) {
     mapStore.newMapModalOpen = true
   } else {
-    const startMapId = displayMapId.value
+    const startMapId = sessionStore.activeMapId
     if (startMapId) await hexStore.init(sessionId, startMapId)
   }
 
@@ -293,6 +260,9 @@ onMounted(async () => {
   photoStore.init(sessionId)
 
   if (!authStore.user?.user_metadata?.welcome_seen) showWelcome.value = true
+
+  loadMode()
+  window.addEventListener('keydown', onKeyDown)
 })
 
 onUnmounted(() => {
@@ -301,39 +271,41 @@ onUnmounted(() => {
   chatStore.cleanup()
   mapStore.cleanup()
   sessionStore.cleanup()
+  window.removeEventListener('keydown', onKeyDown)
 })
 
 function onHexClick(q, r) {
-  if (fogMode.value && sessionStore.isGM) {
-    hexStore.toggleRevealed(q, r)
-  } else if (activeMarkerColor.value) {
-    hexStore.upsertHex(q, r, { marker_color: activeMarkerColor.value })
-    hexStore.selectHex(q, r)
-  } else {
-    hexStore.selectHex(q, r)
-    const cell = hexStore.hexCells.get(`${q}:${r}`)
-    activeMarkerColor.value = cell?.marker_color ?? null
+  if (hexMode.value === 'fow') {
+    if (activeTool.value === 'reveal') {
+      hexStore.upsertHex(q, r, { revealed: true })
+    } else if (activeTool.value === 'hide') {
+      hexStore.upsertHex(q, r, { revealed: false })
+    } else {
+      hexStore.selectHex(q, r)
+    }
+  } else if (hexMode.value === 'blank') {
+    if (activeTool.value === 'paint') {
+      hexStore.upsertHex(q, r, { terrain_type: activeTerrain.value })
+    } else if (activeTool.value === 'marker') {
+      hexStore.addMarker(q, r, activeMarkerColor.value)
+      hexStore.selectHex(q, r)
+    } else if (activeTool.value === 'erase') {
+      hexStore.deleteHex(q, r)
+    } else {
+      hexStore.selectHex(q, r)
+    }
   }
 }
-
-watch(activeMarkerColor, (color) => {
-  if (hexStore.selectedHex) {
-    const { q, r } = hexStore.selectedHex
-    hexStore.upsertHex(q, r, { marker_color: color ?? null })
-  }
-})
 
 function onHexContext(q, r) {
   hexStore.selectHex(q, r)
 }
 
 async function onImageOffsetChange(x, y) {
-  if (mapStore.gmMapOffsetLocked) return
   await mapStore.updateActiveMap({ mapImageOffsetX: x, mapImageOffsetY: y })
 }
 
 async function onGridOffsetChange(x, y) {
-  if (mapStore.gmMapOffsetLocked) return
   await mapStore.updateActiveMap({ mapGridOffsetX: x, mapGridOffsetY: y })
 }
 </script>

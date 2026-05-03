@@ -1,207 +1,183 @@
 <template>
-  <div class="absolute left-12 top-1/2 -translate-y-1/2 z-20 w-80 bg-stone-900 border border-stone-600 rounded-lg shadow-2xl p-4 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
-    <div class="flex items-center justify-between">
-      <div class="text-xs font-display text-parchment-200 uppercase tracking-wider">Map Settings</div>
-      <button
-        class="w-6 h-6 flex items-center justify-center text-stone-500 hover:text-stone-200 hover:bg-stone-700 rounded transition-colors"
-        title="Close"
-        @click="emit('close')"
-      ><i class="fa-solid fa-xmark text-sm" /></button>
+  <div class="map-settings-panel">
+
+    <div class="map-settings-header">
+      <span class="map-settings-title">Map Settings</span>
+      <button class="map-settings-close" title="Close" @click="emit('close')">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M1 1l10 10M11 1L1 11"/>
+        </svg>
+      </button>
     </div>
 
-    <div class="flex gap-2">
-      <button
-        :class="['flex-1 py-1.5 text-sm rounded transition-colors', mapStore.gmMapType === 'hex' ? 'bg-parchment-500 text-stone-900 font-semibold' : 'bg-stone-700 text-stone-400 hover:text-stone-200']"
-        @click="setMapType('hex')"
-      ><i class="fa-solid fa-border-all mr-1" />Standard Grid</button>
-      <button
-        :class="['flex-1 py-1.5 text-sm rounded transition-colors', mapStore.gmMapType === 'image' ? 'bg-parchment-500 text-stone-900 font-semibold' : 'bg-stone-700 text-stone-400 hover:text-stone-200']"
-        @click="setMapType('image')"
-      ><i class="fa-solid fa-image mr-1" />Custom Image</button>
+    <!-- Image upload -->
+    <div class="map-settings-section">
+      <div v-if="mapStore.gmMapImageUrl" class="map-preview">
+        <img :src="mapStore.gmMapImageUrl" alt="Map image" />
+      </div>
+      <div v-else class="map-preview-empty">No image uploaded</div>
+
+      <label class="map-upload-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+        </svg>
+        {{ mapStore.gmMap?.map_image_path ? 'Replace image' : 'Upload map image' }}
+        <input type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="handleUpload" />
+      </label>
+
+      <p v-if="uploadError" class="map-settings-error">{{ uploadError }}</p>
+      <p v-if="uploading" class="map-settings-hint">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite;display:inline-block">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        Uploading…
+      </p>
+      <p v-else class="map-settings-hint">JPEG, PNG, or WebP I guess if youre a fucking psychopath · max 50 MB</p>
     </div>
 
-    <template v-if="mapStore.gmMapType === 'image'">
+    <!-- Alignment controls (disabled when locked) -->
+    <div :class="['map-settings-section', isAlignmentLocked ? 'map-settings-locked' : '']">
 
-      <div>
-        <div v-if="mapStore.gmMapImageUrl" class="mb-2 rounded overflow-hidden border border-stone-600">
-          <img :src="mapStore.gmMapImageUrl" class="w-full h-24 object-cover block" alt="Map image" />
-        </div>
-        <div v-else class="mb-2 h-14 rounded border border-dashed border-stone-600 flex items-center justify-center text-sm text-stone-500">
-          No image uploaded
-        </div>
-
-        <label class="block w-full py-2 px-3 bg-stone-700 hover:bg-stone-600 text-sm text-stone-200 text-center rounded cursor-pointer transition-colors">
-          <i class="fa-solid fa-upload mr-1.5" />{{ mapStore.gmMap?.map_image_path ? 'Replace image' : 'Upload map image' }}
-          <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="handleUpload" />
-        </label>
-        <p class="text-sm text-stone-600 mt-1">JPEG, PNG, or WebP I guess if youre a fucking psychopath · max 50 MB</p>
-        <p v-if="uploadError" class="text-sm text-red-400 mt-1">{{ uploadError }}</p>
-        <div v-if="uploading" class="flex items-center gap-2 text-sm text-stone-400 mt-1">
-          <i class="fa-solid fa-spinner fa-spin" />Uploading…
-        </div>
-      </div>
-
-      <div :class="isAlignmentLocked ? 'opacity-40 pointer-events-none select-none' : ''">
-
-        <div class="mb-4">
-          <div class="text-sm text-stone-500 mb-2">Image rotation</div>
-          <div class="flex items-center gap-2">
-            <button class="w-8 h-8 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 flex items-center justify-center shrink-0 transition-colors" title="Rotate image 90° CCW" @click="rotateImageBy(-90)"><i class="fa-solid fa-rotate-left text-sm" /></button>
-            <div class="flex-1 relative">
-              <input v-model.number="imageRotationDraft" type="number" min="0" max="359"
-                class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-200 text-center focus:outline-none focus:border-parchment-400 [appearance:textfield]"
-                @change="saveImageRotation" />
-              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-stone-500 pointer-events-none">°</span>
-            </div>
-            <button class="w-8 h-8 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 flex items-center justify-center shrink-0 transition-colors" title="Rotate image 90° CW" @click="rotateImageBy(90)"><i class="fa-solid fa-rotate-right text-sm" /></button>
-          </div>
-        </div>
-
-        <div class="mb-4">
-          <div class="text-sm text-stone-500 mb-2">Grid rotation</div>
-          <div class="flex items-center gap-2">
-            <button class="w-8 h-8 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 flex items-center justify-center shrink-0 transition-colors" title="Rotate grid 90° CCW" @click="rotateGridBy(-90)"><i class="fa-solid fa-rotate-left text-sm" /></button>
-            <div class="flex-1 relative">
-              <input v-model.number="gridRotationDraft" type="number" min="0" max="359"
-                class="w-full bg-stone-700 border border-stone-600 rounded px-2 py-1.5 text-sm text-stone-200 text-center focus:outline-none focus:border-parchment-400 [appearance:textfield]"
-                @change="saveGridRotation" />
-              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-stone-500 pointer-events-none">°</span>
-            </div>
-            <button class="w-8 h-8 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 flex items-center justify-center shrink-0 transition-colors" title="Rotate grid 90° CW" @click="rotateGridBy(90)"><i class="fa-solid fa-rotate-right text-sm" /></button>
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-3 mb-1">
-          <div class="text-sm text-stone-500">Hex size</div>
-
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-sm text-stone-400">Width</span>
-              <div class="relative">
-                <input
-                  v-model.number="hexWidthDraft"
-                  type="number" min="20" max="300" step="1"
-                  class="w-20 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-sm text-stone-200 text-center focus:outline-none focus:border-parchment-400 [appearance:textfield] pr-7"
-                  @change="saveHexSizeDebounced"
-                />
-                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stone-500 pointer-events-none">px</span>
-              </div>
-            </div>
-            <input
-              v-model.number="hexWidthDraft"
-              type="range" min="20" max="300" step="1"
-              class="w-full accent-parchment-400"
-              @input="saveHexSizeDebounced"
-            />
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-sm text-stone-400">Height</span>
-              <div class="relative">
-                <input
-                  v-model.number="hexHeightDraftInput"
-                  type="number" min="20" max="300" step="1"
-                  class="w-20 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-sm text-stone-200 text-center focus:outline-none focus:border-parchment-400 [appearance:textfield] pr-7"
-                  @change="saveHexSizeDebounced"
-                />
-                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stone-500 pointer-events-none">px</span>
-              </div>
-            </div>
-            <input
-              v-model.number="hexHeightDraftInput"
-              type="range" min="20" max="300" step="1"
-              class="w-full accent-parchment-400"
-              @input="saveHexSizeDebounced"
-            />
-            <button
-              class="mt-1 text-sm text-stone-500 hover:text-stone-300 transition-colors"
-              @click="resetHeight"
-            >Reset to auto (√3 ratio)</button>
-          </div>
-        </div>
-
-        <p class="text-sm text-stone-600">Pan/zoom until the grid aligns with your image, then adjust width and height until hex outlines match.</p>
-
-        <div class="mt-4">
-          <div class="flex gap-1.5">
-            <button
-              :class="['flex-1 py-1.5 text-sm rounded transition-colors', moveMode === 'none' ? 'bg-parchment-500 text-stone-900 font-semibold' : 'bg-stone-700 text-stone-400 hover:text-stone-200']"
-              @click="emit('update:moveMode', 'none')"
-            >Off</button>
-            <button
-              :class="['flex-1 py-1.5 text-sm rounded transition-colors', moveMode === 'image' ? 'bg-parchment-500 text-stone-900 font-semibold' : 'bg-stone-700 text-stone-400 hover:text-stone-200']"
-              @click="emit('update:moveMode', 'image')"
-            ><i class="fa-solid fa-image mr-1" />Image</button>
-            <button
-              :class="['flex-1 py-1.5 text-sm rounded transition-colors', moveMode === 'grid' ? 'bg-parchment-500 text-stone-900 font-semibold' : 'bg-stone-700 text-stone-400 hover:text-stone-200']"
-              @click="emit('update:moveMode', 'grid')"
-            ><i class="fa-solid fa-border-all mr-1" />Grid</button>
-          </div>
-          <p class="text-sm text-stone-600 mt-1">Select Image or Grid, then drag on the canvas to reposition it.</p>
-        </div>
-
-      </div>
-
-      <div class="border-t border-stone-700 pt-3">
-
-        <template v-if="isAlignmentLocked && hasHexData">
-          <div class="flex items-start gap-2 text-sm text-amber-500/90 mb-2">
-            <i class="fa-solid fa-lock mt-0.5 shrink-0" />
-            <span>Alignment is permanently locked — this map has hex annotations. Moving or resizing the grid would misalign them with the image.</span>
-          </div>
-          <button
-            :disabled="cloning"
-            class="w-full py-1.5 text-sm rounded bg-stone-700 text-stone-300 hover:bg-stone-600 hover:text-stone-100 disabled:opacity-50 transition-colors"
-            @click="cloneForRealignment"
-          >
-            <i class="fa-solid fa-copy mr-1.5" />{{ cloning ? 'Cloning…' : 'Clone map for re-alignment' }}
+      <div class="map-settings-subsection">
+        <div class="map-settings-label">Image rotation</div>
+        <div class="map-rot-row">
+          <button class="map-rot-btn" title="Rotate image 90° CCW" @click="rotateImageBy(-90)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 109-9M3 3v4h4"/>
+            </svg>
           </button>
-          <p class="text-sm text-stone-600 mt-1">Creates a copy of this map with the same image and grid settings but no hex data, so you can adjust alignment freely.</p>
-        </template>
-
-        <template v-else-if="isAlignmentLocked">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-1.5 text-sm text-stone-400">
-              <i class="fa-solid fa-lock text-sm" />
-              <span>Alignment locked</span>
-            </div>
-            <button
-              title="Unlock alignment"
-              class="flex items-center gap-1.5 px-2 py-1 text-sm rounded bg-stone-700 text-stone-400 hover:text-stone-200 transition-colors"
-              @click="toggleLock"
-            >
-              Unlock
-            </button>
+          <div style="position:relative;flex:1">
+            <input
+              v-model.number="imageRotationDraft"
+              type="number" min="0" max="359"
+              class="map-rot-input"
+              @change="saveImageRotation"
+            />
+            <span class="map-rot-unit">°</span>
           </div>
-          <p class="text-sm text-stone-600 mt-1">Image and grid move together during panning.</p>
-        </template>
-
-        <template v-else>
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-stone-500">Lock alignment when done</span>
-            <button
-              title="Lock alignment — prevents accidental nudges"
-              class="flex items-center gap-1.5 px-2 py-1 text-sm rounded bg-stone-700 text-stone-400 hover:text-stone-200 transition-colors"
-              @click="toggleLock"
-            >
-              <i class="fa-solid fa-lock-open" />
-              Lock
-            </button>
-          </div>
-          <p class="text-sm text-stone-600">Locking is required before going live. It prevents the grid from shifting and misaligning hex annotations.</p>
-        </template>
-
+          <button class="map-rot-btn" title="Rotate image 90° CW" @click="rotateImageBy(90)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 11-9-9M21 3v4h-4"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
-    </template>
+      <div class="map-settings-subsection">
+        <div class="map-settings-label">Grid rotation</div>
+        <div class="map-rot-row">
+          <button class="map-rot-btn" title="Rotate grid 90° CCW" @click="rotateGridBy(-90)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 109-9M3 3v4h4"/>
+            </svg>
+          </button>
+          <div style="position:relative;flex:1">
+            <input
+              v-model.number="gridRotationDraft"
+              type="number" min="0" max="359"
+              class="map-rot-input"
+              @change="saveGridRotation"
+            />
+            <span class="map-rot-unit">°</span>
+          </div>
+          <button class="map-rot-btn" title="Rotate grid 90° CW" @click="rotateGridBy(90)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 11-9-9M21 3v4h-4"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="map-settings-subsection">
+        <div class="map-settings-label">Hex size</div>
+        <div class="map-size-row">
+          <span class="map-size-unit-label">W</span>
+          <input
+            v-model.number="hexWidthDraft"
+            type="number" min="20" max="300" step="1"
+            class="map-size-input"
+            @change="saveHexSizeDebounced"
+          />
+          <span class="map-size-px">px</span>
+        </div>
+        <input
+          v-model.number="hexWidthDraft"
+          type="range" min="20" max="300" step="1"
+          class="map-slider"
+          @input="saveHexSizeDebounced"
+        />
+        <div class="map-size-row" style="margin-top:6px">
+          <span class="map-size-unit-label">H</span>
+          <input
+            v-model.number="hexHeightDraftInput"
+            type="number" min="20" max="300" step="1"
+            class="map-size-input"
+            @change="saveHexSizeDebounced"
+          />
+          <span class="map-size-px">px</span>
+        </div>
+        <input
+          v-model.number="hexHeightDraftInput"
+          type="range" min="20" max="300" step="1"
+          class="map-slider"
+          @input="saveHexSizeDebounced"
+        />
+        <button class="map-reset-btn" @click="resetHeight">Reset H to auto (√3 ratio)</button>
+      </div>
+
+      <div class="map-settings-subsection">
+        <div class="map-settings-label">Drag to reposition</div>
+        <div class="map-move-row">
+          <button
+            :class="['map-move-btn', moveMode === 'none' ? 'active' : '']"
+            @click="emit('update:moveMode', 'none')"
+          >Off</button>
+          <button
+            :class="['map-move-btn', moveMode === 'image' ? 'active' : '']"
+            @click="emit('update:moveMode', 'image')"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+            </svg>
+            Image
+          </button>
+          <button
+            :class="['map-move-btn', moveMode === 'grid' ? 'active' : '']"
+            @click="emit('update:moveMode', 'grid')"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>
+            </svg>
+            Grid
+          </button>
+        </div>
+        <p class="map-settings-hint">Pan and zoom until aligned, then adjust hex size to fit.</p>
+      </div>
+
+    </div>
+
+    <!-- Lock toggle -->
+    <div class="map-settings-section map-lock-row">
+      <div class="map-lock-state">
+        <svg v-if="isAlignmentLocked" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+        <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/>
+        </svg>
+        <span>{{ isAlignmentLocked ? 'Alignment locked' : 'Alignment unlocked' }}</span>
+      </div>
+      <button class="map-lock-btn" @click="toggleLock">
+        {{ isAlignmentLocked ? 'Unlock' : 'Lock' }}
+      </button>
+    </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useMapStore } from '@/stores/mapStore.js'
-import { useHexStore } from '@/stores/hexStore.js'
 
 const props = defineProps({
   moveMode: { type: String, default: 'none' },
@@ -209,14 +185,11 @@ const props = defineProps({
 const emit = defineEmits(['update:moveMode', 'close'])
 
 const mapStore = useMapStore()
-const hexStore = useHexStore()
 
 const uploading   = ref(false)
 const uploadError = ref('')
-const cloning     = ref(false)
 
 const isAlignmentLocked = computed(() => mapStore.gmMapOffsetLocked)
-const hasHexData        = computed(() => hexStore.hexCells.size > 0)
 
 const hexWidthDraft      = ref(mapStore.gmMapHexWidth)
 const hexHeightDraft     = ref(mapStore.gmMapHexHeight)
@@ -238,14 +211,6 @@ const hexHeightDraftInput = computed({
   get: () => hexHeightDraft.value ?? Math.round(Math.sqrt(3) * hexWidthDraft.value / 2),
   set: (v) => { hexHeightDraft.value = v },
 })
-const displayHeight = computed(() =>
-  hexHeightDraft.value ?? Math.round(Math.sqrt(3) * hexWidthDraft.value / 2)
-)
-
-async function setMapType(type) {
-  uploadError.value = ''
-  await mapStore.updateActiveMap({ mapType: type })
-}
 
 async function handleUpload(event) {
   const file = event.target.files?.[0]
@@ -325,11 +290,299 @@ async function toggleLock() {
   if (locked) emit('update:moveMode', 'none')
   await mapStore.updateActiveMap({ mapOffsetLocked: locked })
 }
-
-async function cloneForRealignment() {
-  cloning.value = true
-  await mapStore.cloneMap(mapStore.gmMap?.id)
-  cloning.value = false
-  emit('update:moveMode', 'none')
-}
 </script>
+
+<style scoped>
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.map-settings-panel {
+  position: absolute;
+  left: 72px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: 272px;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  box-shadow: 0 6px 24px rgba(26,20,16,0.22), 0 1px 4px rgba(26,20,16,0.12);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--rule-strong);
+  flex-shrink: 0;
+}
+
+.map-settings-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.map-settings-close {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-mute);
+  border-radius: 2px;
+  transition: color .15s, background .15s;
+}
+.map-settings-close:hover { color: var(--ink); background: rgba(26,20,16,.08); }
+
+.map-settings-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.map-settings-section:last-child { border-bottom: none; }
+
+.map-settings-locked {
+  opacity: .4;
+  pointer-events: none;
+  user-select: none;
+}
+
+.map-settings-subsection + .map-settings-subsection {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule);
+}
+
+.map-settings-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.map-settings-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  margin-top: 4px;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.map-settings-error {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  margin-top: 4px;
+}
+
+/* Image preview */
+.map-preview {
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.map-preview img {
+  display: block;
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+}
+.map-preview-empty {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 2px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: .04em;
+}
+
+.map-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--ink-2);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.map-upload-btn:hover { background: var(--paper-3); color: var(--ink); }
+
+/* Rotation controls */
+.map-rot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-rot-btn {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  color: var(--ink-2);
+  transition: background .15s, color .15s;
+}
+.map-rot-btn:hover { background: var(--paper-3); color: var(--ink); }
+
+.map-rot-input {
+  width: 100%;
+  padding: 4px 24px 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-bottom: 2px solid var(--rule-strong);
+  border-radius: 2px;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.map-rot-input::-webkit-inner-spin-button,
+.map-rot-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.map-rot-input:focus { outline: none; border-color: var(--accent); }
+
+.map-rot-unit {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  pointer-events: none;
+}
+
+/* Hex size */
+.map-size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.map-size-unit-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  width: 10px;
+  flex-shrink: 0;
+}
+.map-size-input {
+  width: 64px;
+  padding: 4px 20px 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-bottom: 2px solid var(--rule-strong);
+  border-radius: 2px;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.map-size-input::-webkit-inner-spin-button,
+.map-size-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.map-size-input:focus { outline: none; border-color: var(--accent); }
+.map-size-px {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+}
+
+.map-slider {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  accent-color: var(--ink-2);
+}
+
+.map-reset-btn {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  transition: color .15s;
+}
+.map-reset-btn:hover { color: var(--ink-2); }
+
+/* Move mode */
+.map-move-row {
+  display: flex;
+  gap: 4px;
+}
+.map-move-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .03em;
+  color: var(--ink-mute);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.map-move-btn:hover { color: var(--ink-2); background: var(--paper-3); }
+.map-move-btn.active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* Lock toggle */
+.map-lock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.map-lock-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.map-lock-btn {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--ink-2);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.map-lock-btn:hover { background: var(--paper-3); color: var(--ink); }
+</style>

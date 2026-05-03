@@ -31,6 +31,7 @@
             :r="coord.r"
             :cell="hexStore.hexCells.get(`${coord.q}:${coord.r}`) ?? null"
             :is-selected="hexStore.selectedHex?.q === coord.q && hexStore.selectedHex?.r === coord.r"
+            :is-party="hexStore.partyHex?.q === coord.q && hexStore.partyHex?.r === coord.r"
             :is-g-m="isGM"
             :fog-mode="fogMode"
             :image-mode="imageMode"
@@ -67,6 +68,7 @@ const props = defineProps({
   mapGridOffsetX:   { type: Number,  default: 0     },
   mapGridOffsetY:   { type: Number,  default: 0     },
   moveMode:         { type: String,  default: 'none' },
+  panMode:          { type: Boolean, default: false },
   mapFogRevealAll:  { type: Boolean, default: false },
   settingsOpen:     { type: Boolean, default: false },
 })
@@ -81,7 +83,6 @@ const svgWidth = ref(800)
 const svgHeight = ref(600)
 const zoom = ref(1)
 const pan = ref({ x: 0, y: 0 })
-const panMode = ref(false)
 let panning = false
 let didPan = false
 let panStart = { x: 0, y: 0 }
@@ -152,7 +153,7 @@ const gridCols = computed(() => {
 const gridRows = computed(() => {
   const h = hexHProp.value ?? (Math.sqrt(3) * hexSize.value)
   if (props.imageMode && imageNaturalHeight.value > 0 && h > 0) {
-    return Math.ceil(imageNaturalHeight.value / h) + 4
+    return Math.ceil(imageNaturalHeight.value / h) + 6
   }
   return 40
 })
@@ -177,7 +178,7 @@ const visibleCoords = computed(() => {
 
 function onPanStart(e) {
   const inMoveMode = props.moveMode !== 'none'
-  if (!inMoveMode && !panMode.value && e.target !== svgEl.value && e.target.tagName !== 'svg') return
+  if (!inMoveMode && !props.panMode && e.target !== svgEl.value && e.target.tagName !== 'svg') return
   panning = true
   didPan = false
   panStart = { x: e.clientX, y: e.clientY }
@@ -226,9 +227,8 @@ function onWheel(e) {
 function zoomIn()    { zoom.value = Math.min(3, zoom.value * 1.2) }
 function zoomOut()   { zoom.value = Math.max(0.3, zoom.value / 1.2) }
 function resetZoom() { zoom.value = 1 }
-function togglePanMode() { panMode.value = !panMode.value }
 
-defineExpose({ zoomIn, zoomOut, resetZoom, panMode, togglePanMode })
+defineExpose({ zoomIn, zoomOut, resetZoom })
 
 const resizeObserver = new ResizeObserver(entries => {
   for (const entry of entries) {
