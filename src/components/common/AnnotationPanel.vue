@@ -360,6 +360,7 @@
 <script setup>
 import { ref, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
+import { useTimeAgo } from '@/composables/useTimeAgo.js'
 import { useHexStore, TERRAIN_TYPES, MARKER_COLORS } from '@/stores/hexStore.js'
 import { useD } from '@/stores/dungeonStore.js'
 import { useNotesStore } from '@/stores/notesStore.js'
@@ -378,15 +379,12 @@ const dungeonStore = useD()
 const notesStore = useNotesStore()
 const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
+const { timeAgo } = useTimeAgo()
 const sessionStore = useSessionStore()
 const mapStore = useMapStore()
 
 
-const isImageMap = computed(() =>
-  sessionStore.isGM
-    ? mapStore.gmMapType === 'image'
-    : mapStore.mapType === 'image'
-)
+const isImageMap = computed(() => mapStore.mapType === 'image')
 
 const hexLabel = ref('')
 const hexTerrain = ref(null)
@@ -609,13 +607,6 @@ function saveItemNotes(itemId, notes) {
 
 
 
-function timeAgo(ts) {
-  const diff = Date.now() - new Date(ts).getTime()
-  if (diff < 5000)    return 'just now'
-  if (diff < 60000)   return `${Math.floor(diff / 1000)}s ago`
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  return `${Math.floor(diff / 3600000)}h ago`
-}
 
 
 

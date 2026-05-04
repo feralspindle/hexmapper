@@ -22,6 +22,7 @@
         :hex-mode="hexMode"
         :active-tool="activeTool"
         :settings-open="showMapSettings"
+        :is-g-m="sessionStore.isGM"
         @tool="setTool"
         @reveal-all="hexStore.revealAll()"
         @hide-all="hexStore.hideAll()"
@@ -93,7 +94,6 @@
 
     </div>
 
-    <NewMapModal v-if="mapStore.newMapModalOpen" />
     <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
     <WelcomeModal v-if="showWelcome" @close="showWelcome = false" />
     <ConfirmDialog />
@@ -127,7 +127,6 @@ import HexLeftToolbar from '@/components/hex/HexLeftToolbar.vue'
 import HexRightPanel from '@/components/hex/HexRightPanel.vue'
 import HexGrid from '@/components/hex/HexGrid.vue'
 import MapImageSettings from '@/components/hex/MapImageSettings.vue'
-import NewMapModal from '@/components/hex/NewMapModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DiceRollToast from '@/components/dungeon/DiceRollToast.vue'
 import ChatToast from '@/components/common/ChatToast.vue'
@@ -247,7 +246,8 @@ onMounted(async () => {
   await mapStore.init(sessionId)
 
   if (mapStore.maps.length === 0) {
-    mapStore.newMapModalOpen = true
+    const map = await mapStore.createMap({ name: 'World Map', mapType: 'hex' })
+    if (map) await mapStore.setActiveMap(map.id)
   } else {
     const startMapId = sessionStore.activeMapId
     if (startMapId) await hexStore.init(sessionId, startMapId)

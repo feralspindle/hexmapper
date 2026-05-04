@@ -18,26 +18,7 @@
 <script setup>
 import { computed } from 'vue'
 import CharacterSheet from './CharacterSheet.vue'
-
-const HEX_MAP_THEME = {
-  '--paper':      '#1c1917',
-  '--paper-2':    '#292524',
-  '--paper-3':    '#3c3835',
-  '--paper-edge': '#57534e',
-  '--ink':        '#f5f5f4',
-  '--ink-2':      '#d6d3d1',
-  '--ink-soft':   '#a8a29e',
-  '--ink-mute':   '#78716c',
-  '--rule':       'rgba(255,255,255,.08)',
-  '--rule-strong':'rgba(255,255,255,.18)',
-  '--accent':     '#dca85a',
-  '--accent-2':   '#e8c488',
-  '--accent-3':   '#86efac',
-  '--font-body':  'ui-sans-serif, system-ui, sans-serif',
-  '--font-zine':  'ui-monospace, monospace',
-  '--font-mono':  'ui-monospace, monospace',
-  '--font-ui':    'ui-sans-serif, system-ui, sans-serif',
-}
+import { HEX_MAP_THEME } from '@/lib/theme.js'
 
 const props = defineProps({
   open:      { type: Boolean, default: false },

@@ -388,6 +388,7 @@ let skipNextDoorClick = false
 let cursorChannel = null
 let cursorRafQueued = false
 let pendingCursor = null
+let _stopCursorWatch = null
 
 function cursorColorFor(userId) {
   return playerColorFor(userId)
@@ -395,6 +396,7 @@ function cursorColorFor(userId) {
 
 function initCursorChannel(dungeonId) {
   if (cursorChannel) supabase.removeChannel(cursorChannel)
+  if (_stopCursorWatch) { _stopCursorWatch(); _stopCursorWatch = null }
   cursorChannel = supabase
     .channel(`dungeon:${dungeonId}:cursors`)
     .on('broadcast', { event: 'cursor' }, ({ payload }) => {
@@ -413,7 +415,7 @@ function initCursorChannel(dungeonId) {
     })
     .subscribe()
 
-  watch(() => prefs.showCursors, (visible) => {
+  _stopCursorWatch = watch(() => prefs.showCursors, (visible) => {
     if (!visible && cursorChannel && authStore.user?.id) {
       cursorChannel.send({ type: 'broadcast', event: 'cursor', payload: { userId: authStore.user.id, hidden: true } })
     }
@@ -948,7 +950,6 @@ function drawGrid(W, H) {
   const sx = -(viewport.value.offsetX % cs)
   const sy = -(viewport.value.offsetY % cs)
 
-  // Minor grid (every cell)
   ctx.strokeStyle = sc.grid
   ctx.lineWidth = mapStyle.value === 'blueprint' ? 0.7 : 0.5
   ctx.beginPath()
@@ -956,7 +957,7 @@ function drawGrid(W, H) {
   for (let y = sy; y < H; y += cs) { ctx.moveTo(0, y); ctx.lineTo(W, y) }
   ctx.stroke()
 
-  // Major grid (every 5 cells = 25 ft)
+  // 5-cell major grid = 25 ft interval
   const mcs = cs * 5
   const msx = -(viewport.value.offsetX % mcs)
   const msy = -(viewport.value.offsetY % mcs)
@@ -1858,6 +1859,7 @@ onUnmounted(() => {
   resizeObserver.disconnect()
   window.removeEventListener('keydown', onKeyDown)
   if (cursorChannel) supabase.removeChannel(cursorChannel)
+  if (_stopCursorWatch) _stopCursorWatch()
 })
 </script>
 

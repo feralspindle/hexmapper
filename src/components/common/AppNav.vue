@@ -133,6 +133,7 @@ import HexLegend from '@/components/hex/HexLegend.vue'
 import CharacterDrawer from './CharacterDrawer.vue'
 import CharacterPicker from './CharacterPicker.vue'
 import MapPicker from './MapPicker.vue'
+import { HEX_MAP_THEME as hexMapTheme } from '@/lib/theme.js'
 
 const props = defineProps({
   sessionId: String,
@@ -142,26 +143,6 @@ defineEmits(['update:charOpen'])
 
 const sessionStore = useSessionStore()
 const authStore = useAuthStore()
-
-const hexMapTheme = {
-  '--paper':      '#1c1917',
-  '--paper-2':    '#292524',
-  '--paper-3':    '#3c3835',
-  '--paper-edge': '#57534e',
-  '--ink':        '#f5f5f4',
-  '--ink-2':      '#d6d3d1',
-  '--ink-soft':   '#a8a29e',
-  '--ink-mute':   '#78716c',
-  '--rule':       'rgba(255,255,255,.08)',
-  '--rule-strong':'rgba(255,255,255,.18)',
-  '--accent':     '#dca85a',
-  '--accent-2':   '#e8c488',
-  '--accent-3':   '#86efac',
-  '--font-body':  'ui-sans-serif, system-ui, sans-serif',
-  '--font-zine':  'ui-monospace, monospace',
-  '--font-mono':  'ui-monospace, monospace',
-  '--font-ui':    'ui-sans-serif, system-ui, sans-serif',
-}
 
 const VIEWER_COLORS = ['bg-indigo-600', 'bg-purple-600', 'bg-rose-600', 'bg-amber-600', 'bg-teal-600', 'bg-sky-600', 'bg-emerald-600', 'bg-pink-600']
 function viewerColor(userId) {

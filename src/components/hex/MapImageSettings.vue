@@ -12,8 +12,8 @@
 
     <!-- Image upload -->
     <div class="map-settings-section">
-      <div v-if="mapStore.gmMapImageUrl" class="map-preview">
-        <img :src="mapStore.gmMapImageUrl" alt="Map image" />
+      <div v-if="mapStore.activeMapImageUrl" class="map-preview">
+        <img :src="mapStore.activeMapImageUrl" alt="Map image" />
       </div>
       <div v-else class="map-preview-empty">No image uploaded</div>
 
@@ -21,7 +21,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
         </svg>
-        {{ mapStore.gmMap?.map_image_path ? 'Replace image' : 'Upload map image' }}
+        {{ mapStore.activeMap?.map_image_path ? 'Replace image' : 'Upload map image' }}
         <input type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="handleUpload" />
       </label>
 
@@ -189,23 +189,23 @@ const mapStore = useMapStore()
 const uploading   = ref(false)
 const uploadError = ref('')
 
-const isAlignmentLocked = computed(() => mapStore.gmMapOffsetLocked)
+const isAlignmentLocked = computed(() => mapStore.mapOffsetLocked)
 
-const hexWidthDraft      = ref(mapStore.gmMapHexWidth)
-const hexHeightDraft     = ref(mapStore.gmMapHexHeight)
-const imageRotationDraft = ref(mapStore.gmMapImageRotation)
-const gridRotationDraft  = ref(mapStore.gmMapGridRotation)
+const hexWidthDraft      = ref(mapStore.mapHexWidth)
+const hexHeightDraft     = ref(mapStore.mapHexHeight)
+const imageRotationDraft = ref(mapStore.mapImageRotation)
+const gridRotationDraft  = ref(mapStore.mapGridRotation)
 
-watch(() => mapStore.gmMap?.id, () => {
-  hexWidthDraft.value      = mapStore.gmMapHexWidth
-  hexHeightDraft.value     = mapStore.gmMapHexHeight
-  imageRotationDraft.value = mapStore.gmMapImageRotation
-  gridRotationDraft.value  = mapStore.gmMapGridRotation
+watch(() => mapStore.activeMap?.id, () => {
+  hexWidthDraft.value      = mapStore.mapHexWidth
+  hexHeightDraft.value     = mapStore.mapHexHeight
+  imageRotationDraft.value = mapStore.mapImageRotation
+  gridRotationDraft.value  = mapStore.mapGridRotation
 })
-watch(() => mapStore.gmMapHexWidth,       v => { hexWidthDraft.value      = v })
-watch(() => mapStore.gmMapHexHeight,      v => { hexHeightDraft.value     = v })
-watch(() => mapStore.gmMapImageRotation,  v => { imageRotationDraft.value = v })
-watch(() => mapStore.gmMapGridRotation,   v => { gridRotationDraft.value  = v })
+watch(() => mapStore.mapHexWidth,       v => { hexWidthDraft.value      = v })
+watch(() => mapStore.mapHexHeight,      v => { hexHeightDraft.value     = v })
+watch(() => mapStore.mapImageRotation,  v => { imageRotationDraft.value = v })
+watch(() => mapStore.mapGridRotation,   v => { gridRotationDraft.value  = v })
 
 const hexHeightDraftInput = computed({
   get: () => hexHeightDraft.value ?? Math.round(Math.sqrt(3) * hexWidthDraft.value / 2),
@@ -286,7 +286,7 @@ async function resetHeight() {
 }
 
 async function toggleLock() {
-  const locked = !mapStore.gmMapOffsetLocked
+  const locked = !mapStore.mapOffsetLocked
   if (locked) emit('update:moveMode', 'none')
   await mapStore.updateActiveMap({ mapOffsetLocked: locked })
 }

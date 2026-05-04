@@ -184,6 +184,17 @@ const partyCards = computed(() => {
     })
   }
 
+  for (const user of sessionStore.onlineUsers) {
+    if (!user.user_id || seen.has(user.user_id)) continue
+    seen.add(user.user_id)
+    result.push({
+      userId:      user.user_id,
+      isGM:        false,
+      displayName: user.display_name ?? 'Adventurer',
+      char:        null,
+    })
+  }
+
   return result
 })
 

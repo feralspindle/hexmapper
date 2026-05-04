@@ -204,15 +204,17 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { DIE_ICONS } from '@/composables/useDiceIcons.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
+import { useTimeAgo } from '@/composables/useTimeAgo.js'
 
 const diceStore = useDiceStore()
 const authStore = useAuthStore()
 const { gmName } = useGMLabel()
+const { timeAgo } = useTimeAgo()
 
 const DICE = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
 
@@ -315,22 +317,7 @@ watch(() => diceStore.rolls[0], (newRoll) => {
 })
 
 
-const now = ref(Date.now())
-let tickInterval = null
-
-onMounted(() => {
-  tickInterval = setInterval(() => { now.value = Date.now() }, 10000)
-})
 onUnmounted(() => {
-  clearInterval(tickInterval)
   clearTimeout(glowTimer)
 })
-
-function timeAgo(ts) {
-  const diff = now.value - new Date(ts).getTime()
-  if (diff < 5000)    return 'just now'
-  if (diff < 60000)   return `${Math.floor(diff / 1000)}s ago`
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  return `${Math.floor(diff / 3600000)}h ago`
-}
 </script>

@@ -209,6 +209,14 @@ svg {
 .dungeon-scribe[data-panel-layout="left"] .ds-toolbar { order: 2; border-right: 0; border-left: 1px solid var(--rule-strong); }
 .ds-tool-group { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; align-items: center; }
 .ds-tool-group + .ds-tool-group { border-top: 1px solid var(--rule); margin-top: 4px; padding-top: 8px; }
+.ds-tool-label {
+  font-family: var(--font-zine);
+  font-size: 9px;
+  letter-spacing: .12em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  margin: 0 0 2px;
+}
 .ds-tool {
   position: relative;
   width: var(--tool-size,44px); height: var(--tool-size,44px);

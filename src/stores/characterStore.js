@@ -72,26 +72,21 @@ export const useCharacterStore = defineStore('character', () => {
     currentSessionId.value = sessionId
     loading.value = true
 
-    const { data, error } = await supabase
-      .from('characters')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
+    const [charsResult, membersResult] = await Promise.all([
+      supabase.from('characters').select('*').eq('session_id', sessionId).order('created_at', { ascending: true }),
+      supabase.from('session_members').select('user_id, active_character_id').eq('session_id', sessionId),
+    ])
 
     loading.value = false
 
-    if (error) { console.error('characterStore.loadAll:', error.message); return }
-    characters.value = data ?? []
+    if (charsResult.error) { console.error('characterStore.loadAll:', charsResult.error.message); return }
+    characters.value = charsResult.data ?? []
 
     _subscribeRealtime(sessionId)
 
-    const { data: members } = await supabase
-      .from('session_members')
-      .select('user_id, active_character_id')
-      .eq('session_id', sessionId)
-    if (members) {
-      memberSelections.value = members
-      await _fetchMissingChars(members.map(m => m.active_character_id))
+    if (membersResult.data) {
+      memberSelections.value = membersResult.data
+      await _fetchMissingChars(membersResult.data.map(m => m.active_character_id))
     }
 
     const storageKey = `char_active_${authStore.user.id}_${sessionId}`

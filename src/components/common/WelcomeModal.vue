@@ -112,7 +112,6 @@ function dismiss() {
 .ds-wm-overlay {
   position: fixed; inset: 0; z-index: 200;
   display: flex; align-items: center; justify-content: center;
-  /* DS tokens for teleported context */
   --ink: #1a1410; --ink-2: #3a2e22; --ink-soft: #5a4a3a; --ink-mute: #8a7a68;
   --paper: #ede1c7; --paper-2: #e3d4b3; --paper-3: #d8c69e;
   --rule: rgba(26,20,16,.18); --rule-strong: rgba(26,20,16,.42);

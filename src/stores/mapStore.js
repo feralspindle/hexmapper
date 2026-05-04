@@ -11,30 +11,18 @@ export const useMapStore = defineStore('map', () => {
   const maps   = ref([])
   const loading = ref(false)
 
-  const gmMapId = ref(null)
-  const gmMode  = ref('edit')
-
   const newMapModalOpen = ref(false)
-
-  const _draftsByMapId = ref({})
-  const gmDraft        = computed(() => _draftsByMapId.value[gmMapId.value] ?? {})
-  const hasDraft       = computed(() => Object.keys(gmDraft.value).length > 0)
 
   let mapChannel = null
   let _currentSessionId = null
-  const _localOverrides = {} // mapId -> { db_field: latestLocalValue }
+  const _localOverrides = {}
 
   const activeMap = computed(() => {
     const sessionStore = useSessionStore()
     return maps.value.find(m => m.id === sessionStore.activeMapId) ?? null
   })
 
-  const gmMap = computed(() =>
-    maps.value.find(m => m.id === gmMapId.value) ?? activeMap.value
-  )
-
   const activeMapImageUrl = ref(null)
-  const gmMapImageUrl     = ref(null)
   const _urlTimers = {}
 
   async function _refreshUrl(path, targetRef, key) {
@@ -59,7 +47,6 @@ export const useMapStore = defineStore('map', () => {
   }
 
   watch(() => activeMap.value?.map_image_path, p => _refreshUrl(p, activeMapImageUrl, 'active'), { immediate: false })
-  watch(() => gmMap.value?.map_image_path,     p => _refreshUrl(p, gmMapImageUrl, 'gm'),         { immediate: false })
 
   const mapType          = computed(() => activeMap.value?.map_type           ?? 'hex')
   const mapHexWidth      = computed(() => activeMap.value?.map_hex_width      ?? 96)
@@ -71,46 +58,21 @@ export const useMapStore = defineStore('map', () => {
   const mapGridOffsetX   = computed(() => activeMap.value?.map_grid_offset_x  ?? 0)
   const mapGridOffsetY   = computed(() => activeMap.value?.map_grid_offset_y  ?? 0)
   const mapOffsetLocked  = computed(() => activeMap.value?.map_offset_locked  ?? false)
-
-  const gmMapType          = computed(() => gmMap.value?.map_type           ?? 'hex')
-  const gmMapHexWidth      = computed(() => gmMap.value?.map_hex_width      ?? 96)
-  const gmMapHexHeight     = computed(() => gmMap.value?.map_hex_height     ?? null)
-  const gmMapImageRotation = computed(() => gmMap.value?.map_image_rotation ?? 0)
-  const gmMapGridRotation  = computed(() => gmMap.value?.map_grid_rotation  ?? 0)
-  const gmMapImageOffsetX  = computed(() => gmMap.value?.map_image_offset_x ?? 0)
-  const gmMapImageOffsetY  = computed(() => gmMap.value?.map_image_offset_y ?? 0)
-  const gmMapGridOffsetX   = computed(() => gmMap.value?.map_grid_offset_x  ?? 0)
-  const gmMapGridOffsetY   = computed(() => gmMap.value?.map_grid_offset_y  ?? 0)
-  const gmMapOffsetLocked    = computed(() => gmMap.value?.map_offset_locked  ?? false)
-  const gmMapFogRevealAll    = computed(() => gmMap.value?.fog_reveal_all     ?? false)
-  const mapFogRevealAll      = computed(() => activeMap.value?.fog_reveal_all ?? false)
+  const mapFogRevealAll  = computed(() => activeMap.value?.fog_reveal_all     ?? false)
 
   async function init(sessionId) {
     _currentSessionId = sessionId
     loading.value = true
 
-    const [{ data: mapRows, error }, { data: draftRows }] = await Promise.all([
-      supabase.from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true }),
-      supabase.from('map_drafts').select('map_id, draft_data').eq('session_id', sessionId),
-    ])
+    const { data: mapRows, error } = await supabase
+      .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
 
-    if (!error && mapRows) {
-      const byId = {}
-      draftRows?.forEach(d => { byId[d.map_id] = d.draft_data })
-      _draftsByMapId.value = byId
-
-      maps.value = mapRows.map(m => byId[m.id] ? { ...m, ...byId[m.id] } : m)
-    }
+    if (!error && mapRows) maps.value = mapRows
 
     loading.value = false
 
-    const sessionStore = useSessionStore()
-    if (!gmMapId.value) gmMapId.value = sessionStore.activeMapId
-
     const activeImgPath = activeMap.value?.map_image_path
-    const gmImgPath     = gmMap.value?.map_image_path
     if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
-    if (gmImgPath && gmImgPath !== activeImgPath) _refreshUrl(gmImgPath, gmMapImageUrl, 'gm')
 
     if (mapChannel) supabase.removeChannel(mapChannel)
     mapChannel = supabase
@@ -127,9 +89,8 @@ export const useMapStore = defineStore('map', () => {
           } else if (eventType === 'UPDATE') {
             maps.value = maps.value.map(m => {
               if (m.id !== row.id) return m
-              const draft = _draftsByMapId.value[row.id] ?? {}
               const local = _localOverrides[row.id] ?? {}
-              return { ...row, ...draft, ...local }
+              return { ...row, ...local }
             })
           } else if (eventType === 'DELETE') {
             maps.value = maps.value.filter(m => m.id !== old.id)
@@ -144,11 +105,7 @@ export const useMapStore = defineStore('map', () => {
     Object.values(_urlTimers).forEach(clearTimeout)
     Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
     activeMapImageUrl.value = null
-    gmMapImageUrl.value     = null
     maps.value = []
-    gmMapId.value = null
-    gmMode.value  = 'edit'
-    _draftsByMapId.value = {}
     _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
   }
@@ -175,20 +132,12 @@ export const useMapStore = defineStore('map', () => {
   async function deleteMap(mapId) {
     if (maps.value.length <= 1) return
     const { error } = await supabase.from('maps').delete().eq('id', mapId)
-    if (error) { console.error('deleteMap:', error.message); return }
-    const { [mapId]: _, ...rest } = _draftsByMapId.value
-    _draftsByMapId.value = rest
+    if (error) { console.error('deleteMap:', error.message) }
   }
 
   async function setActiveMap(mapId) {
     const sessionStore = useSessionStore()
-    gmMapId.value = mapId
     await sessionStore.setActiveMapId(mapId)
-  }
-
-  function selectGmMap(mapId) {
-    gmMapId.value = mapId
-    gmMode.value  = 'edit'
   }
 
   async function cloneMap(sourceMapId) {
@@ -216,12 +165,12 @@ export const useMapStore = defineStore('map', () => {
       .single()
 
     if (error) { console.error('cloneMap:', error.message); return null }
-    selectGmMap(data.id)
+    await setActiveMap(data.id)
     return data
   }
 
   function applyLocalPatch(patch) {
-    const map = gmMap.value
+    const map = activeMap.value
     if (!map) return
     const dbPatch = {}
     if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation = patch.mapImageRotation
@@ -233,7 +182,7 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function updateActiveMap(patch) {
-    const map = gmMap.value
+    const map = activeMap.value
     if (!map) return false
 
     const dbPatch = {}
@@ -249,27 +198,9 @@ export const useMapStore = defineStore('map', () => {
     if (patch.mapGridOffsetY   !== undefined) dbPatch.map_grid_offset_y  = patch.mapGridOffsetY
     if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked  = patch.mapOffsetLocked
 
-    const sessionStore = useSessionStore()
-    const editingLiveMap = map.id === sessionStore.activeMapId
-
-    if (editingLiveMap) {
-      const merged = { ...(_draftsByMapId.value[map.id] ?? {}), ...dbPatch }
-      _draftsByMapId.value = { ..._draftsByMapId.value, [map.id]: merged }
-
-      supabase.from('map_drafts').upsert(
-        { map_id: map.id, session_id: _currentSessionId, draft_data: merged, updated_at: new Date().toISOString() },
-        { onConflict: 'map_id' },
-      ).then(({ error }) => { if (error) console.error('saveDraft:', error.message) })
-
-      maps.value = maps.value.map(m => (m.id === map.id ? { ...m, ...dbPatch } : m))
-      return true
-    }
-
     const { error } = await supabase.from('maps').update(dbPatch).eq('id', map.id)
     if (error) { console.error('updateActiveMap:', error.message); return false }
 
-    // Clear overrides only for fields where the DB-confirmed value still matches
-    // the override — if the user has moved on, the override stays to protect newer edits.
     const overrides = _localOverrides[map.id]
     if (overrides) {
       for (const [field, val] of Object.entries(dbPatch)) {
@@ -287,7 +218,7 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function setFogRevealAll(value) {
-    const map = gmMap.value
+    const map = activeMap.value
     if (!map) return
     maps.value = maps.value.map(m => m.id === map.id ? { ...m, fog_reveal_all: value } : m)
     const { error } = await supabase.from('maps').update({ fog_reveal_all: value }).eq('id', map.id)
@@ -295,21 +226,6 @@ export const useMapStore = defineStore('map', () => {
       console.error('setFogRevealAll:', error.message)
       maps.value = maps.value.map(m => m.id === map.id ? { ...m, fog_reveal_all: !value } : m)
     }
-  }
-
-  async function pushLiveDraft() {
-    const map = gmMap.value
-    if (!map || !hasDraft.value) return false
-
-    const draft = gmDraft.value
-    const { error } = await supabase.from('maps').update(draft).eq('id', map.id)
-    if (error) { console.error('pushLiveDraft:', error.message); return false }
-
-    await supabase.from('map_drafts').delete().eq('map_id', map.id)
-
-    const { [map.id]: _, ...rest } = _draftsByMapId.value
-    _draftsByMapId.value = rest
-    return true
   }
 
   async function uploadMapImage(file) {
@@ -336,12 +252,8 @@ export const useMapStore = defineStore('map', () => {
     maps,
     loading,
     newMapModalOpen,
-    gmMapId,
-    gmMode,
     activeMap,
-    gmMap,
     activeMapImageUrl,
-    gmMapImageUrl,
     mapType,
     mapHexWidth,
     mapHexHeight,
@@ -352,19 +264,7 @@ export const useMapStore = defineStore('map', () => {
     mapGridOffsetX,
     mapGridOffsetY,
     mapOffsetLocked,
-    gmMapType,
-    gmMapHexWidth,
-    gmMapHexHeight,
-    gmMapImageRotation,
-    gmMapGridRotation,
-    gmMapImageOffsetX,
-    gmMapImageOffsetY,
-    gmMapGridOffsetX,
-    gmMapGridOffsetY,
-    gmMapOffsetLocked,
-    gmMapFogRevealAll,
     mapFogRevealAll,
-    hasDraft,
     init,
     cleanup,
     createMap,
@@ -372,10 +272,8 @@ export const useMapStore = defineStore('map', () => {
     renameMap,
     deleteMap,
     setActiveMap,
-    selectGmMap,
     cloneMap,
     updateActiveMap,
-    pushLiveDraft,
     setFogRevealAll,
     uploadMapImage,
   }

@@ -212,11 +212,11 @@ const polygonPoints = computed(() => {
 })
 
 const blankMode = computed(() => !props.fogMode && !props.imageMode)
-const isRevealed = computed(() =>
-  !props.fogMode
-    ? props.mapFogRevealAll
-    : props.cell != null ? props.cell.revealed : props.mapFogRevealAll
-)
+const isRevealed = computed(() => {
+  if (!props.fogMode) return props.mapFogRevealAll
+  if (props.cell != null) return props.cell.revealed
+  return props.mapFogRevealAll
+})
 
 const visibleToPlayer = computed(() => props.isGM || isRevealed.value)
 

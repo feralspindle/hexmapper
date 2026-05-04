@@ -132,7 +132,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useNotesStore } from '@/stores/notesStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
@@ -141,6 +141,7 @@ import { useActivityStore } from '@/stores/activityStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { useTimeAgo } from '@/composables/useTimeAgo.js'
 
 const dungeonStore   = useD()
 const notesStore     = useNotesStore()
@@ -148,6 +149,7 @@ const authStore      = useAuthStore()
 const sessionStore   = useSessionStore()
 const activityStore  = useActivityStore()
 const { confirm }    = useConfirmDialog()
+const { timeAgo }   = useTimeAgo()
 
 const open = ref(true)
 
@@ -207,11 +209,6 @@ function updateItem(itemId, patch) {
     if (selectedRoom.value) dungeonStore.updateRoomItem(selectedRoom.value.id, itemId, patch)
   }, 400))
 }
+onUnmounted(() => { _itemTimers.forEach(clearTimeout); _itemTimers.clear() })
 
-function timeAgo(ts) {
-  const diff = Date.now() - new Date(ts).getTime()
-  if (diff < 60000)   return `${Math.floor(diff / 1000)}s ago`
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  return `${Math.floor(diff / 3600000)}h ago`
-}
 </script>

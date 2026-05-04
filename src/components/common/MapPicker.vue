@@ -9,7 +9,7 @@
     >
       <i class="fa-solid fa-map text-sm shrink-0" />
       <i class="fa-solid fa-chevron-down text-sm shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" />
-      <span class="truncate">{{ mapStore.gmMap?.name ?? 'Maps' }}</span>
+      <span class="truncate">{{ mapStore.activeMap?.name ?? 'Maps' }}</span>
     </button>
 
     <Transition
@@ -53,11 +53,6 @@
               @click.stop
             />
             <span v-else class="flex-1 text-sm text-stone-200 truncate">{{ map.name }}</span>
-
-            <span
-              v-if="map.id === mapStore.gmMapId && map.id !== sessionStore.activeMapId"
-              class="text-[9px] px-1 py-0.5 rounded bg-parchment-700/40 text-parchment-400 font-display uppercase tracking-wide shrink-0"
-            >editing</span>
 
             <button
               v-if="renamingId !== map.id"
@@ -118,8 +113,8 @@ watch(open, (val) => {
 })
 onUnmounted(() => document.removeEventListener('click', onOutsideClick))
 
-function selectMap(id) {
-  mapStore.selectGmMap(id)
+async function selectMap(id) {
+  await mapStore.setActiveMap(id)
   open.value = false
 }
 
@@ -148,8 +143,6 @@ function confirmDelete(map) {
       const remaining = mapStore.maps.filter(m => m.id !== map.id)
       if (map.id === sessionStore.activeMapId && remaining.length) {
         await mapStore.setActiveMap(remaining[0].id)
-      } else if (map.id === mapStore.gmMapId && remaining.length) {
-        mapStore.selectGmMap(remaining[0].id)
       }
       await mapStore.deleteMap(map.id)
     },

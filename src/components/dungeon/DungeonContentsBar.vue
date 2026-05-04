@@ -26,7 +26,6 @@ const selectedStamp = ref(null)
 
 const emit = defineEmits(['select'])
 
-/* inline stamp SVG glyphs lifted from design icons.jsx */
 const make = (paths) => ({
   props: ['size'],
   render() {

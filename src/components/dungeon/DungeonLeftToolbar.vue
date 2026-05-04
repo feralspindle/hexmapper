@@ -92,7 +92,6 @@ const { confirm } = useConfirmDialog()
 
 const emit = defineEmits(['zoom-in', 'zoom-out', 'zoom-reset'])
 
-/* ── Inline SVG icon components ── */
 const CursorIcon  = { render: () => h('svg', { width:20,height:20,viewBox:'0 0 24 24',fill:'currentColor' }, [h('path',{d:'M5 3l5 16 2.5-6.5L19 10z'})]) }
 const HandIcon    = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M9 11V5.5a1.5 1.5 0 013 0V11'}),h('path',{d:'M12 11V4a1.5 1.5 0 013 0v7'}),h('path',{d:'M15 11V5.5a1.5 1.5 0 013 0V14'}),h('path',{d:'M9 11V8.5a1.5 1.5 0 00-3 0V15c0 3 2 6 6 6h2a4 4 0 004-4v-3'})]) }
 const RectIcon    = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('rect',{x:3,y:5,width:18,height:14})]) }

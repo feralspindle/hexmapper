@@ -3,14 +3,14 @@
 
     <div class="ds-tool-group">
       <span class="ds-tool-label">View</span>
-      <button class="ds-tool" :aria-pressed="activeTool === 'select'" @click="emit('tool', 'select')" title="Select hex">
+      <button class="ds-tool" :aria-pressed="activeTool === 'select'" @click="emit('tool', 'select')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
           <path d="M5 3l5 16 2.5-6.5L19 10z"/>
         </svg>
         <span class="ds-tool-key">V</span>
         <span class="ds-tip">Select hex <kbd>V</kbd></span>
       </button>
-      <button class="ds-tool" :aria-pressed="activeTool === 'pan'" @click="emit('tool', 'pan')" title="Pan map">
+      <button class="ds-tool" :aria-pressed="activeTool === 'pan'" @click="emit('tool', 'pan')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 11V5.5a1.5 1.5 0 013 0V11"/><path d="M12 11V4a1.5 1.5 0 013 0v7"/><path d="M15 11V5.5a1.5 1.5 0 013 0V14"/><path d="M9 11V8.5a1.5 1.5 0 00-3 0V15c0 3 2 6 6 6h2a4 4 0 004-4v-3"/>
         </svg>
@@ -19,7 +19,7 @@
       </button>
     </div>
 
-    <template v-if="hexMode === 'fow'">
+    <template v-if="hexMode === 'fow' && isGM">
       <div class="ds-tool-group">
         <span class="ds-tool-label">Reveal</span>
         <button class="ds-tool" :aria-pressed="activeTool === 'reveal'" @click="emit('tool', 'reveal')">
@@ -38,23 +38,24 @@
         </button>
       </div>
       <div class="ds-tool-group">
-        <span class="ds-tool-label">Actions</span>
-        <button class="ds-tool" title="Reveal all hexes" @click="emit('reveal-all')">
+        <span class="ds-tool-label">All</span>
+        <button class="ds-tool" @click="emit('reveal-all')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
           </svg>
           <span class="ds-tip">Reveal all hexes</span>
         </button>
-        <button class="ds-tool danger" title="Hide all hexes" @click="emit('hide-all')">
+        <button class="ds-tool danger" @click="emit('hide-all')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 004.2 4.2"/><path d="M9.9 4.2A10.5 10.5 0 0112 4c6.5 0 10 7 10 7a17 17 0 01-3.5 4.5M6.5 6.5A17 17 0 002 12s3.5 7 10 7c1.5 0 2.9-.4 4.2-1"/>
+            <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>
           </svg>
           <span class="ds-tip">Hide all hexes</span>
         </button>
       </div>
       <div class="ds-tool-group">
         <span class="ds-tool-label">Map</span>
-        <button class="ds-tool" :aria-pressed="settingsOpen" @click="emit('map-settings')" title="Map image settings">
+        <button class="ds-tool" :aria-pressed="settingsOpen" @click="emit('map-settings')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
           </svg>
@@ -102,6 +103,7 @@ const props = defineProps({
   hexMode:      { type: String,  default: null  },
   activeTool:   { type: String,  default: 'select' },
   settingsOpen: { type: Boolean, default: false },
+  isGM:         { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['tool', 'reveal-all', 'hide-all', 'map-settings'])

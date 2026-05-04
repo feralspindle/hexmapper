@@ -88,7 +88,7 @@
 
     <div
       class="ds-section-body"
-      :style="isGM ? 'border-top:1px solid var(--rule);padding-top:8px' : ''"
+      :style="sessionStore.isGM ? 'border-top:1px solid var(--rule);padding-top:8px' : ''"
     >
       <div style="font-family:var(--font-zine);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:6px">
         Revealed
