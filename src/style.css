@@ -457,7 +457,7 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;
   font-family: var(--font-ui); font-size: 11px;
 }
-.hm-note-author { font-weight: 600; color: var(--accent-2); letter-spacing: .02em; }
+.hm-note-author { font-weight: 600; color: var(--player-color, var(--accent-2)); letter-spacing: .02em; }
 .hm-note-time { color: var(--ink-mute); font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; }
 .hm-note-text { white-space: pre-wrap; word-break: break-word; }
 

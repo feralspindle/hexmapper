@@ -240,6 +240,7 @@ watch(() => sessionStore.activeMapId, async (newId) => {
 })
 
 onMounted(async () => {
+  await prefs.load()
   if (sessionStore.sessionId !== sessionId) {
     await sessionStore.joinSession(sessionId)
   }

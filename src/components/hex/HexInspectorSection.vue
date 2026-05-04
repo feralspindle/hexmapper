@@ -294,7 +294,7 @@
                         class="hm-note"
                     >
                         <div class="hm-note-meta">
-                            <span class="hm-note-author">{{
+                            <span class="hm-note-author" :style="{ '--player-color': playerColorFor(note.user_id) }">{{
                                 note.display_name
                             }}</span>
                             <span class="hm-note-time">{{
@@ -306,7 +306,7 @@
                 </div>
             </div>
 
-            <div>
+            <div v-if="sessionStore.isGM">
                 <span class="ds-field-label">Dungeons</span>
                 <div
                     v-if="hexStore.dungeonsLoading"
@@ -434,6 +434,7 @@ import { useNotesStore } from "@/stores/notesStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
+import { playerColorFor } from "@/composables/usePlayerColor.js";
 
 const hexStore = useHexStore();
 const notesStore = useNotesStore();
