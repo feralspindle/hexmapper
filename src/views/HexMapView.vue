@@ -105,7 +105,7 @@
       @close="charOpen = false"
     />
 
-    <DungeonPartyPanel />
+    <DungeonPartyPanel v-if="!showModePicker" />
   </div>
 </template>
 

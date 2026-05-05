@@ -126,7 +126,7 @@ svg {
 
 .ds-topbar {
   display: flex; align-items: center;
-  height: 48px;
+  height: var(--topbar-h);
   background: var(--ink); color: var(--paper);
   padding: 0 16px; gap: 0;
   border-bottom: 2px solid #000;
