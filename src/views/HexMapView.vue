@@ -64,7 +64,8 @@
 
 
         <MapImageSettings
-          v-if="showMapSettings && sessionStore.isGM && hexMode === 'fow'"
+          v-if="showMapSettings && sessionStore.isGM"
+          :hex-mode="hexMode"
           v-model:move-mode="moveMode"
           @close="showMapSettings = false"
         />

@@ -10,8 +10,38 @@
       </button>
     </div>
 
-    <!-- Image upload -->
+    <!-- Scale -->
     <div class="map-settings-section">
+      <div class="map-settings-subsection">
+        <div class="map-settings-label">Scale per hex</div>
+        <div class="map-scale-row">
+          <div style="position:relative;flex:1">
+            <input
+              v-model.number="scaleDraft"
+              type="number" min="0" step="any"
+              placeholder="e.g. 6"
+              class="map-rot-input"
+              style="padding-right:8px;text-align:left"
+              @change="saveScale"
+            />
+          </div>
+          <div class="map-scale-unit-toggle">
+            <button
+              :class="['map-scale-unit-btn', scaleUnitDraft === 'miles' ? 'active' : '']"
+              @click="setUnit('miles')"
+            >mi</button>
+            <button
+              :class="['map-scale-unit-btn', scaleUnitDraft === 'feet' ? 'active' : '']"
+              @click="setUnit('feet')"
+            >ft</button>
+          </div>
+        </div>
+        <p class="map-settings-hint">Leave blank to hide scale from players.</p>
+      </div>
+    </div>
+
+    <!-- Image upload -->
+    <div v-if="hexMode === 'fow'" class="map-settings-section">
       <div v-if="mapStore.activeMapImageUrl" class="map-preview">
         <img :src="mapStore.activeMapImageUrl" alt="Map image" />
       </div>
@@ -36,7 +66,7 @@
     </div>
 
     <!-- Alignment controls (disabled when locked) -->
-    <div :class="['map-settings-section', isAlignmentLocked ? 'map-settings-locked' : '']">
+    <div v-if="hexMode === 'fow'" :class="['map-settings-section', isAlignmentLocked ? 'map-settings-locked' : '']">
 
       <div class="map-settings-subsection">
         <div class="map-settings-label">Image rotation</div>
@@ -157,7 +187,7 @@
     </div>
 
     <!-- Lock toggle -->
-    <div class="map-settings-section map-lock-row">
+    <div v-if="hexMode === 'fow'" class="map-settings-section map-lock-row">
       <div class="map-lock-state">
         <svg v-if="isAlignmentLocked" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
@@ -181,6 +211,7 @@ import { useMapStore } from '@/stores/mapStore.js'
 
 const props = defineProps({
   moveMode: { type: String, default: 'none' },
+  hexMode:  { type: String, default: null },
 })
 const emit = defineEmits(['update:moveMode', 'close'])
 
@@ -195,17 +226,23 @@ const hexWidthDraft      = ref(mapStore.mapHexWidth)
 const hexHeightDraft     = ref(mapStore.mapHexHeight)
 const imageRotationDraft = ref(mapStore.mapImageRotation)
 const gridRotationDraft  = ref(mapStore.mapGridRotation)
+const scaleDraft         = ref(mapStore.mapScale)
+const scaleUnitDraft     = ref(mapStore.mapScaleUnit)
 
 watch(() => mapStore.activeMap?.id, () => {
   hexWidthDraft.value      = mapStore.mapHexWidth
   hexHeightDraft.value     = mapStore.mapHexHeight
   imageRotationDraft.value = mapStore.mapImageRotation
   gridRotationDraft.value  = mapStore.mapGridRotation
+  scaleDraft.value         = mapStore.mapScale
+  scaleUnitDraft.value     = mapStore.mapScaleUnit
 })
 watch(() => mapStore.mapHexWidth,       v => { hexWidthDraft.value      = v })
 watch(() => mapStore.mapHexHeight,      v => { hexHeightDraft.value     = v })
 watch(() => mapStore.mapImageRotation,  v => { imageRotationDraft.value = v })
 watch(() => mapStore.mapGridRotation,   v => { gridRotationDraft.value  = v })
+watch(() => mapStore.mapScale,          v => { scaleDraft.value         = v })
+watch(() => mapStore.mapScaleUnit,      v => { scaleUnitDraft.value     = v })
 
 const hexHeightDraftInput = computed({
   get: () => hexHeightDraft.value ?? Math.round(Math.sqrt(3) * hexWidthDraft.value / 2),
@@ -289,6 +326,16 @@ async function toggleLock() {
   const locked = !mapStore.mapOffsetLocked
   if (locked) emit('update:moveMode', 'none')
   await mapStore.updateActiveMap({ mapOffsetLocked: locked })
+}
+
+async function saveScale() {
+  const v = scaleDraft.value
+  await mapStore.updateActiveMap({ mapScale: (v === '' || v == null) ? null : Number(v) })
+}
+
+async function setUnit(unit) {
+  scaleUnitDraft.value = unit
+  await mapStore.updateActiveMap({ mapScaleUnit: unit })
 }
 </script>
 
@@ -556,6 +603,34 @@ async function toggleLock() {
   color: var(--paper);
   border-color: var(--ink);
 }
+
+/* Scale */
+.map-scale-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.map-scale-unit-toggle {
+  display: flex;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.map-scale-unit-btn {
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .03em;
+  color: var(--ink-mute);
+  background: var(--paper-2);
+  border: none;
+  border-right: 1px solid var(--rule-strong);
+  transition: background .15s, color .15s;
+}
+.map-scale-unit-btn:last-child { border-right: none; }
+.map-scale-unit-btn:hover { background: var(--paper-3); color: var(--ink-2); }
+.map-scale-unit-btn.active { background: var(--ink); color: var(--paper); }
 
 /* Lock toggle */
 .map-lock-row {

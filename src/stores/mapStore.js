@@ -59,6 +59,8 @@ export const useMapStore = defineStore('map', () => {
   const mapGridOffsetY   = computed(() => activeMap.value?.map_grid_offset_y  ?? 0)
   const mapOffsetLocked  = computed(() => activeMap.value?.map_offset_locked  ?? false)
   const mapFogRevealAll  = computed(() => activeMap.value?.fog_reveal_all     ?? false)
+  const mapScale         = computed(() => activeMap.value?.map_scale          ?? null)
+  const mapScaleUnit     = computed(() => activeMap.value?.map_scale_unit     ?? 'miles')
 
   async function init(sessionId) {
     _currentSessionId = sessionId
@@ -197,6 +199,8 @@ export const useMapStore = defineStore('map', () => {
     if (patch.mapGridOffsetX   !== undefined) dbPatch.map_grid_offset_x  = patch.mapGridOffsetX
     if (patch.mapGridOffsetY   !== undefined) dbPatch.map_grid_offset_y  = patch.mapGridOffsetY
     if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked  = patch.mapOffsetLocked
+    if (patch.mapScale         !== undefined) dbPatch.map_scale          = patch.mapScale
+    if (patch.mapScaleUnit     !== undefined) dbPatch.map_scale_unit     = patch.mapScaleUnit
 
     const { error } = await supabase.from('maps').update(dbPatch).eq('id', map.id)
     if (error) { console.error('updateActiveMap:', error.message); return false }
@@ -265,6 +269,8 @@ export const useMapStore = defineStore('map', () => {
     mapGridOffsetY,
     mapOffsetLocked,
     mapFogRevealAll,
+    mapScale,
+    mapScaleUnit,
     init,
     cleanup,
     createMap,
