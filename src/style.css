@@ -1194,4 +1194,26 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
 }
 .hm-zoom-btn:hover { background: rgba(26,20,16,.08); color: var(--ink); }
 .hm-zoom-btn + .hm-zoom-btn { border-top: 1px solid var(--rule); }
+.hm-body--player-hex { grid-template-columns: 0 1fr var(--side-panel-w, 360px); }
+.ds-toolbar-float {
+  position: absolute; top: 16px; left: 16px; z-index: 20;
+  display: flex; flex-direction: row; align-items: center; gap: 1px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.ds-toolbar-float .ds-tool { width: 36px; height: 36px; }
+.ds-toolbar-float .ds-tool .ds-tip {
+  left: 50%; top: calc(100% + 10px); transform: translateX(-50%);
+}
+.ds-toolbar-float .ds-tool .ds-tip::before {
+  right: auto; left: 50%; top: -10px; transform: translateX(-50%);
+  border-right-color: transparent; border-bottom-color: var(--ink);
+}
+.ds-float-sep {
+  width: 1px; height: 22px; background: var(--rule-strong);
+  margin: 0 3px; flex-shrink: 0;
+}
 .dungeon-scribe .cs-form-label     { font-size: 11px !important; }

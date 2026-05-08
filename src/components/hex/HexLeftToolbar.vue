@@ -1,5 +1,5 @@
 <template>
-  <aside class="ds-toolbar">
+  <aside v-if="!floating" class="ds-toolbar">
 
     <div class="ds-tool-group">
       <span class="ds-tool-label">View</span>
@@ -104,6 +104,43 @@
     </template>
 
   </aside>
+
+  <div v-else class="ds-toolbar-float">
+    <button class="ds-tool" :aria-pressed="activeTool === 'select'" @click="emit('tool', 'select')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <path d="M5 3l5 16 2.5-6.5L19 10z"/>
+      </svg>
+      <span class="ds-tip">Select <kbd>V</kbd></span>
+    </button>
+    <button class="ds-tool" :aria-pressed="activeTool === 'pan'" @click="emit('tool', 'pan')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11V5.5a1.5 1.5 0 013 0V11"/><path d="M12 11V4a1.5 1.5 0 013 0v7"/><path d="M15 11V5.5a1.5 1.5 0 013 0V14"/><path d="M9 11V8.5a1.5 1.5 0 00-3 0V15c0 3 2 6 6 6h2a4 4 0 004-4v-3"/>
+      </svg>
+      <span class="ds-tip">Pan <kbd>H</kbd></span>
+    </button>
+    <template v-if="hexMode === 'blank'">
+      <div class="ds-float-sep" />
+      <button class="ds-tool" :aria-pressed="activeTool === 'paint'" @click="emit('tool', 'paint')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 3l7 7-9 9-3 1-1-3z"/><path d="M5 17l-2 4 4-2"/>
+        </svg>
+        <span class="ds-tip">Paint terrain <kbd>T</kbd></span>
+      </button>
+      <div class="ds-float-sep" />
+      <button class="ds-tool" :aria-pressed="activeTool === 'marker'" @click="emit('tool', 'marker')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a6 6 0 00-6 6c0 5 6 12 6 12s6-7 6-12a6 6 0 00-6-6z"/><circle cx="12" cy="8" r="2.2"/>
+        </svg>
+        <span class="ds-tip">Drop marker <kbd>M</kbd></span>
+      </button>
+      <button class="ds-tool danger" :aria-pressed="activeTool === 'erase'" @click="emit('tool', 'erase')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 18l9-9 5 5-9 9H5l-2-3z"/><path d="M14 7l3-3 5 5-3 3"/>
+        </svg>
+        <span class="ds-tip">Erase <kbd>E</kbd></span>
+      </button>
+    </template>
+  </div>
 </template>
 
 <script setup>
@@ -113,6 +150,7 @@ const props = defineProps({
   activeTool:   { type: String,  default: 'select' },
   settingsOpen: { type: Boolean, default: false },
   isGM:         { type: Boolean, default: false },
+  floating:     { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['tool', 'reveal-all', 'hide-all', 'map-settings'])
