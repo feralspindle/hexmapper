@@ -306,7 +306,7 @@
                 </div>
             </div>
 
-            <div v-if="sessionStore.isGM">
+            <div v-if="sessionStore.isGM || hexStore.hexDungeons.length">
                 <span class="ds-field-label">Dungeons</span>
                 <div
                     v-if="hexStore.dungeonsLoading"
@@ -376,6 +376,7 @@
                     </div>
                 </div>
 
+                <template v-if="sessionStore.isGM">
                 <div
                     v-if="addingDungeon"
                     style="display: flex; gap: 6px; margin-top: 6px"
@@ -402,6 +403,7 @@
                 >
                     + Add Dungeon
                 </button>
+                </template>
             </div>
 
             <div style="padding-top: 4px; border-top: 1px solid var(--rule)">
