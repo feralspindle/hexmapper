@@ -11,7 +11,7 @@
       :points="polygonPoints"
       :fill="hexFill"
       :stroke="hexStroke"
-      :stroke-width="isSelected ? 2.5 / (size / 48) : 0.8 / (size / 48)"
+      :stroke-width="0.8 / (size / 48)"
       class="hex-cell-poly transition-colors duration-150"
     />
 
@@ -149,13 +149,6 @@
 
     <g v-if="isParty" class="pointer-events-none">
 
-      <polygon
-        :points="polygonPoints"
-        fill="none"
-        stroke="#7a1a1a"
-        :stroke-width="3 / (size / 48)"
-      />
-
       <g :transform="`translate(${-size * 0.3}, ${size * 0.1})`" style="filter: drop-shadow(0 3px 6px rgba(40,0,0,0.7)) drop-shadow(0 1px 3px rgba(0,0,0,0.5))">
   
         <path
@@ -239,7 +232,6 @@ const hexFill = computed(() => {
 })
 
 const hexStroke = computed(() => {
-  if (props.isSelected) return '#8a1c1c'
   if (props.imageMode) return props.settingsOpen ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.18)'
   return blankMode.value ? 'rgba(26,20,16,.55)' : '#374151'
 })

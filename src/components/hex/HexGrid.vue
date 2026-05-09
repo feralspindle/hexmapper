@@ -15,6 +15,7 @@
             :width="svgWidth"
             :height="svgHeight"
             class="block"
+            style="overflow: visible"
             @mousedown.left="onPanStart"
             @mousemove="onMouseMove"
             @mouseup="onPanEnd"
@@ -28,8 +29,8 @@
                         :href="mapImageUrl"
                         x="0"
                         y="0"
-                        :width="imageNaturalWidth"
-                        :height="imageNaturalHeight"
+                        :width="imageNaturalWidth * mapImageScale"
+                        :height="imageNaturalHeight * mapImageScale"
                         preserveAspectRatio="none"
                     />
                 </g>
@@ -68,6 +69,26 @@
                             !panMode && emit('hex-context', coord.q, coord.r)
                         "
                     />
+
+                    <g
+                        v-if="selectedGlowCenter"
+                        :transform="`translate(${selectedGlowCenter.x}, ${selectedGlowCenter.y})`"
+                        class="pointer-events-none"
+                    >
+                        <polygon :points="glowPoints" fill="none" stroke="rgba(200, 168, 107, 0.10)" :stroke-width="6 / (hexSize / 48)" />
+                        <polygon :points="glowPoints" fill="none" stroke="rgba(200, 168, 107, 0.28)" :stroke-width="3 / (hexSize / 48)" />
+                        <polygon :points="glowPoints" fill="none" stroke="rgba(200, 168, 107, 0.75)" :stroke-width="1.2 / (hexSize / 48)" />
+                    </g>
+
+                    <g
+                        v-if="partyGlowCenter"
+                        :transform="`translate(${partyGlowCenter.x}, ${partyGlowCenter.y})`"
+                        class="pointer-events-none"
+                    >
+                        <polygon :points="glowPoints" fill="none" stroke="rgba(200, 55, 55, 0.10)" :stroke-width="6 / (hexSize / 48)" />
+                        <polygon :points="glowPoints" fill="none" stroke="rgba(200, 55, 55, 0.28)" :stroke-width="3 / (hexSize / 48)" />
+                        <polygon :points="glowPoints" fill="none" stroke="rgba(200, 55, 55, 0.75)" :stroke-width="1.2 / (hexSize / 48)" />
+                    </g>
                 </g>
             </g>
         </svg>
@@ -77,7 +98,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useHexStore } from "@/stores/hexStore.js";
-import { HEX_SIZE } from "@/composables/useHexGeometry.js";
+import { HEX_SIZE, hexToPixel, hexCorners, cornersToPoints } from "@/composables/useHexGeometry.js";
 import HexCell from "./HexCell.vue";
 
 const props = defineProps({
@@ -93,6 +114,7 @@ const props = defineProps({
     mapImageOffsetY: { type: Number, default: 0 },
     mapGridOffsetX: { type: Number, default: 0 },
     mapGridOffsetY: { type: Number, default: 0 },
+    mapImageScale: { type: Number, default: 1 },
     moveMode: { type: String, default: "none" },
     panMode: { type: Boolean, default: false },
     mapFogRevealAll: { type: Boolean, default: false },
@@ -179,9 +201,23 @@ const hexSize = computed(() =>
 );
 const hexHProp = computed(() => (props.imageMode ? props.mapHexHeight : null));
 
+const glowPoints = computed(() =>
+    cornersToPoints(hexCorners(0, 0, hexSize.value, hexHProp.value))
+);
+const selectedGlowCenter = computed(() =>
+    hexStore.selectedHex
+        ? hexToPixel(hexStore.selectedHex.q, hexStore.selectedHex.r, hexSize.value, hexHProp.value)
+        : null
+);
+const partyGlowCenter = computed(() =>
+    hexStore.partyHex
+        ? hexToPixel(hexStore.partyHex.q, hexStore.partyHex.r, hexSize.value, hexHProp.value)
+        : null
+);
+
 const _pivot = computed(() => ({
-    cx: imageNaturalWidth.value / 2,
-    cy: imageNaturalHeight.value / 2,
+    cx: (imageNaturalWidth.value * props.mapImageScale) / 2,
+    cy: (imageNaturalHeight.value * props.mapImageScale) / 2,
 }));
 
 const imageTransform = computed(() => {

@@ -460,6 +460,13 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
 .hm-note-author { font-weight: 600; color: var(--player-color, var(--accent-2)); letter-spacing: .02em; }
 .hm-note-time { color: var(--ink-mute); font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; }
 .hm-note-text { white-space: pre-wrap; word-break: break-word; }
+.hm-note-del {
+  margin-left: auto; background: none; border: none; cursor: pointer; padding: 0 2px;
+  font-size: 14px; line-height: 1; color: var(--ink-mute);
+  opacity: 0; transition: opacity .15s, color .15s;
+}
+.hm-note:hover .hm-note-del { opacity: 1; }
+.hm-note-del:hover { color: #b91c1c; }
 
 .hm-note-add { display: flex; flex-direction: column; gap: 6px; }
 .hm-note-add-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

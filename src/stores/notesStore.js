@@ -9,64 +9,83 @@ export const useNotesStore = defineStore('notes', () => {
   const loading = ref(false)
   let channel = null
   let currentContextKey = null
+  let _pendingInit = null
 
   async function initForHex(hexCellId, sessionId) {
     const key = hexCellId ? `hex:${hexCellId}` : null
-    if (key && key === currentContextKey) return
+    if (key && key === currentContextKey) {
+      if (_pendingInit) await _pendingInit
+      return
+    }
     cleanup()
     if (!hexCellId) return
 
     currentContextKey = key
-    loading.value = true
-    const { data } = await supabase
-      .from('hex_notes')
-      .select('*')
-      .eq('hex_cell_id', hexCellId)
-      .order('created_at', { ascending: true })
-    loading.value = false
-    if (currentContextKey !== key) return
-    if (data) notes.value = data
+    _pendingInit = (async () => {
+      try {
+        loading.value = true
+        const { data } = await supabase
+          .from('hex_notes')
+          .select('*')
+          .eq('hex_cell_id', hexCellId)
+          .order('created_at', { ascending: true })
+        loading.value = false
+        if (currentContextKey !== key) return
+        if (data) notes.value = data
 
-    channel = supabase
-      .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'hex_notes',
-        filter: `hex_cell_id=eq.${hexCellId}`,
-      }, handleRealtimeEvent)
-      .subscribe()
-
-    channel._ctx = { type: 'hex', hexCellId, sessionId }
+        channel = supabase
+          .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'hex_notes',
+            filter: `hex_cell_id=eq.${hexCellId}`,
+          }, handleRealtimeEvent)
+          .subscribe()
+        channel._ctx = { type: 'hex', hexCellId, sessionId }
+      } finally {
+        if (currentContextKey === key) _pendingInit = null
+      }
+    })()
+    await _pendingInit
   }
 
   async function initForDungeonElement(elementId, elementType, sessionId) {
     const key = `dungeon:${elementId}`
-    if (key === currentContextKey) return
+    if (key === currentContextKey) {
+      if (_pendingInit) await _pendingInit
+      return
+    }
     cleanup()
 
     currentContextKey = key
-    loading.value = true
-    const { data } = await supabase
-      .from('dungeon_element_notes')
-      .select('*')
-      .eq('element_id', elementId)
-      .order('created_at', { ascending: true })
-    loading.value = false
-    if (currentContextKey !== key) return
-    if (data) notes.value = data
+    _pendingInit = (async () => {
+      try {
+        loading.value = true
+        const { data } = await supabase
+          .from('dungeon_element_notes')
+          .select('*')
+          .eq('element_id', elementId)
+          .order('created_at', { ascending: true })
+        loading.value = false
+        if (currentContextKey !== key) return
+        if (data) notes.value = data
 
-    channel = supabase
-      .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'dungeon_element_notes',
-        filter: `element_id=eq.${elementId}`,
-      }, handleRealtimeEvent)
-      .subscribe()
-
-    channel._ctx = { type: 'dungeon', elementId, elementType, sessionId }
+        channel = supabase
+          .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'dungeon_element_notes',
+            filter: `element_id=eq.${elementId}`,
+          }, handleRealtimeEvent)
+          .subscribe()
+        channel._ctx = { type: 'dungeon', elementId, elementType, sessionId }
+      } finally {
+        if (currentContextKey === key) _pendingInit = null
+      }
+    })()
+    await _pendingInit
   }
 
   function handleRealtimeEvent({ eventType, new: row, old }) {
@@ -131,7 +150,6 @@ export const useNotesStore = defineStore('notes', () => {
       console.error('addNote error:', error.message)
     } else {
       notes.value = notes.value.map(n => (n.id === optimisticId ? data : n))
-      const ctx = channel?._ctx
       const where = ctx?.type === 'hex' ? 'hex cell' : (ctx?.elementType ?? 'element')
       useActivityStore().record('added note to', where)
     }
@@ -178,6 +196,7 @@ export const useNotesStore = defineStore('notes', () => {
     }
     notes.value = []
     currentContextKey = null
+    _pendingInit = null
   }
 
   return { notes, loading, initForHex, initForDungeonElement, addNote, updateNote, deleteNote, cleanup }

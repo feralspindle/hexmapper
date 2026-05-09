@@ -61,6 +61,7 @@ export const useMapStore = defineStore('map', () => {
   const mapFogRevealAll  = computed(() => activeMap.value?.fog_reveal_all     ?? false)
   const mapScale         = computed(() => activeMap.value?.map_scale          ?? null)
   const mapScaleUnit     = computed(() => activeMap.value?.map_scale_unit     ?? 'miles')
+  const mapImageScale    = computed(() => activeMap.value?.map_image_scale    ?? 1)
 
   async function init(sessionId) {
     _currentSessionId = sessionId
@@ -162,6 +163,7 @@ export const useMapStore = defineStore('map', () => {
         map_grid_offset_x:  source.map_grid_offset_x,
         map_grid_offset_y:  source.map_grid_offset_y,
         map_offset_locked:  false,
+        map_image_scale:    source.map_image_scale ?? 1,
       })
       .select()
       .single()
@@ -179,6 +181,7 @@ export const useMapStore = defineStore('map', () => {
     if (patch.mapGridRotation  !== undefined) dbPatch.map_grid_rotation  = patch.mapGridRotation
     if (patch.mapHexWidth      !== undefined) dbPatch.map_hex_width      = patch.mapHexWidth
     if (patch.mapHexHeight     !== undefined) dbPatch.map_hex_height     = patch.mapHexHeight
+    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
     _localOverrides[map.id] = { ...(_localOverrides[map.id] ?? {}), ...dbPatch }
     maps.value = maps.value.map(m => (m.id === map.id ? { ...m, ...dbPatch } : m))
   }
@@ -201,6 +204,7 @@ export const useMapStore = defineStore('map', () => {
     if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked  = patch.mapOffsetLocked
     if (patch.mapScale         !== undefined) dbPatch.map_scale          = patch.mapScale
     if (patch.mapScaleUnit     !== undefined) dbPatch.map_scale_unit     = patch.mapScaleUnit
+    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
 
     const { error } = await supabase.from('maps').update(dbPatch).eq('id', map.id)
     if (error) { console.error('updateActiveMap:', error.message); return false }
@@ -271,6 +275,7 @@ export const useMapStore = defineStore('map', () => {
     mapFogRevealAll,
     mapScale,
     mapScaleUnit,
+    mapImageScale,
     init,
     cleanup,
     createMap,

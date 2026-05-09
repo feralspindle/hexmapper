@@ -49,6 +49,7 @@
 
         <ConfirmDialog />
         <DiceRollToast />
+        <LuckTokenToast />
         <ChatToast bottom-class="bottom-20" />
       </div>
 
@@ -97,6 +98,7 @@ import DungeonPartyPanel   from '@/components/dungeon/DungeonPartyPanel.vue'
 import CharacterDrawer     from '@/components/common/CharacterDrawer.vue'
 import ConfirmDialog       from '@/components/common/ConfirmDialog.vue'
 import DiceRollToast       from '@/components/dungeon/DiceRollToast.vue'
+import LuckTokenToast     from '@/components/common/LuckTokenToast.vue'
 import ChatToast           from '@/components/common/ChatToast.vue'
 import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
 

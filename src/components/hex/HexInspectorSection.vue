@@ -300,6 +300,12 @@
                             <span class="hm-note-time">{{
                                 timeAgo(note.created_at)
                             }}</span>
+                            <button
+                                v-if="note.user_id === authStore.user?.id || sessionStore.isGM"
+                                class="hm-note-del"
+                                title="Delete note"
+                                @click="confirm('Delete this note?', () => notesStore.deleteNote(note.id))"
+                            >×</button>
                         </div>
                         <div class="hm-note-text">{{ note.body }}</div>
                     </div>
@@ -434,6 +440,7 @@ import {
 } from "@/stores/hexStore.js";
 import { useNotesStore } from "@/stores/notesStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
+import { useAuthStore } from "@/stores/authStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
@@ -441,6 +448,7 @@ import { playerColorFor } from "@/composables/usePlayerColor.js";
 const hexStore = useHexStore();
 const notesStore = useNotesStore();
 const sessionStore = useSessionStore();
+const authStore = useAuthStore();
 const { confirm } = useConfirmDialog();
 const { timeAgo } = useTimeAgo();
 

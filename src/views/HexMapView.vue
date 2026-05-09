@@ -53,6 +53,7 @@
                     :map-image-offset-y="mapStore.mapImageOffsetY"
                     :map-grid-offset-x="mapStore.mapGridOffsetX"
                     :map-grid-offset-y="mapStore.mapGridOffsetY"
+                    :map-image-scale="mapStore.mapImageScale"
                     :map-fog-reveal-all="
                         hexMode === 'blank' || mapStore.mapFogRevealAll
                     "
@@ -121,6 +122,7 @@
                 />
 
                 <DiceRollToast />
+                <LuckTokenToast />
                 <ChatToast />
                 <JoinToast />
             </div>
@@ -163,6 +165,7 @@ import HexGrid from "@/components/hex/HexGrid.vue";
 import MapImageSettings from "@/components/hex/MapImageSettings.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import DiceRollToast from "@/components/dungeon/DiceRollToast.vue";
+import LuckTokenToast from "@/components/common/LuckTokenToast.vue";
 import ChatToast from "@/components/common/ChatToast.vue";
 import JoinToast from "@/components/common/JoinToast.vue";
 import PhotoBroadcastModal from "@/components/common/PhotoBroadcastModal.vue";

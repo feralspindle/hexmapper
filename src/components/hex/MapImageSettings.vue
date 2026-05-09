@@ -119,6 +119,26 @@
       </div>
 
       <div class="map-settings-subsection">
+        <div class="map-settings-label">Image scale</div>
+        <div class="map-size-row">
+          <input
+            v-model.number="imageScaleDraft"
+            type="number" min="25" max="400" step="1"
+            class="map-size-input"
+            @change="saveImageScaleDebounced"
+          />
+          <span class="map-size-px">%</span>
+        </div>
+        <input
+          v-model.number="imageScaleDraft"
+          type="range" min="25" max="400" step="1"
+          class="map-slider"
+          @input="saveImageScaleDebounced"
+        />
+        <p class="map-settings-hint">Scale the background image to match the hex grid.</p>
+      </div>
+
+      <div class="map-settings-subsection">
         <div class="map-settings-label">Hex size</div>
         <div class="map-size-row">
           <span class="map-size-unit-label">W</span>
@@ -228,6 +248,7 @@ const imageRotationDraft = ref(mapStore.mapImageRotation)
 const gridRotationDraft  = ref(mapStore.mapGridRotation)
 const scaleDraft         = ref(mapStore.mapScale)
 const scaleUnitDraft     = ref(mapStore.mapScaleUnit)
+const imageScaleDraft    = ref(Math.round((mapStore.mapImageScale ?? 1) * 100))
 
 watch(() => mapStore.activeMap?.id, () => {
   hexWidthDraft.value      = mapStore.mapHexWidth
@@ -236,6 +257,7 @@ watch(() => mapStore.activeMap?.id, () => {
   gridRotationDraft.value  = mapStore.mapGridRotation
   scaleDraft.value         = mapStore.mapScale
   scaleUnitDraft.value     = mapStore.mapScaleUnit
+  imageScaleDraft.value    = Math.round((mapStore.mapImageScale ?? 1) * 100)
 })
 watch(() => mapStore.mapHexWidth,       v => { hexWidthDraft.value      = v })
 watch(() => mapStore.mapHexHeight,      v => { hexHeightDraft.value     = v })
@@ -243,6 +265,7 @@ watch(() => mapStore.mapImageRotation,  v => { imageRotationDraft.value = v })
 watch(() => mapStore.mapGridRotation,   v => { gridRotationDraft.value  = v })
 watch(() => mapStore.mapScale,          v => { scaleDraft.value         = v })
 watch(() => mapStore.mapScaleUnit,      v => { scaleUnitDraft.value     = v })
+watch(() => mapStore.mapImageScale,     v => { imageScaleDraft.value    = Math.round((v ?? 1) * 100) })
 
 const hexHeightDraftInput = computed({
   get: () => hexHeightDraft.value ?? Math.round(Math.sqrt(3) * hexWidthDraft.value / 2),
@@ -302,6 +325,18 @@ async function rotateGridBy(delta) {
 function saveGridRotation() {
   gridRotationDraft.value = _clampDeg(gridRotationDraft.value)
   _scheduleGridRotSave()
+}
+
+let _imageScaleTimer = null
+function saveImageScaleDebounced() {
+  const pct = Math.max(25, Math.min(400, imageScaleDraft.value || 100))
+  imageScaleDraft.value = pct
+  const scale = pct / 100
+  mapStore.applyLocalPatch({ mapImageScale: scale })
+  clearTimeout(_imageScaleTimer)
+  _imageScaleTimer = setTimeout(() => {
+    mapStore.updateActiveMap({ mapImageScale: scale })
+  }, 250)
 }
 
 let _hexSizeTimer = null

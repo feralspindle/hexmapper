@@ -38,6 +38,7 @@ export const useCharacterStore = defineStore('character', () => {
   const currentSessionId = ref(null)
   // user_id → active_character_id, loaded from session_members
   const memberSelections = ref([])
+  const luckEvents = ref([])
 
   const activeCharacter = computed(() =>
     characters.value.find(c => c.id === activeId.value) ?? null
@@ -62,7 +63,11 @@ export const useCharacterStore = defineStore('character', () => {
   })
 
   function _augment(data) {
-    return { ...data, currentHp: data.currentHp ?? data.maxHitPoints ?? 0 }
+    return {
+      ...data,
+      currentHp:   data.currentHp ?? data.maxHitPoints ?? 0,
+      luckTokens:  data.luckTokens ?? { current: 1, max: 3 },
+    }
   }
 
   async function loadAll(sessionId) {
@@ -192,7 +197,7 @@ export const useCharacterStore = defineStore('character', () => {
     const newItem = {
       instanceId: crypto.randomUUID(),
       name: item.name,
-      slots: Number(item.slots) || 0,
+      slots: Math.round(Math.max(0, Number(item.slots) || 0)),
       quantity: Number(item.quantity) || 1,
       type: item.type ?? 'sundry',
       disabled: false,
@@ -210,6 +215,17 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
+  function moveGearItem(instanceId, direction) {
+    if (!character.value?.gear) return
+    const gear = [...character.value.gear]
+    const idx = gear.findIndex(item => item.instanceId === instanceId)
+    if (idx === -1) return
+    const next = idx + direction
+    if (next < 0 || next >= gear.length) return
+    ;[gear[idx], gear[next]] = [gear[next], gear[idx]]
+    updateField('gear', gear)
+  }
+
   function updateGearItem(instanceId, patch) {
     if (!character.value?.gear) return
     updateField('gear', character.value.gear.map(item =>
@@ -220,6 +236,16 @@ export const useCharacterStore = defineStore('character', () => {
   function deleteGearItem(instanceId) {
     if (!character.value?.gear) return
     updateField('gear', character.value.gear.filter(item => item.instanceId !== instanceId))
+  }
+
+  function addAttack(raw, damageDie = null) {
+    if (!character.value) return
+    updateField('attacks', [...(character.value.attacks ?? []), {
+      id: crypto.randomUUID(),
+      raw: raw.trim(),
+      damageDie: damageDie?.trim() || null,
+      disabled: false,
+    }])
   }
 
   function updateAttack(idx, patch) {
@@ -236,6 +262,37 @@ export const useCharacterStore = defineStore('character', () => {
   function deleteAttack(idx) {
     if (!character.value?.attacks) return
     updateField('attacks', character.value.attacks.filter((_, i) => i !== idx))
+  }
+
+  function spendLuckToken() {
+    if (!character.value) return
+    const luck = character.value.luckTokens ?? { current: 1, max: 3 }
+    if (luck.current <= 0) return
+    const characterName = character.value.name ?? 'Adventurer'
+    updateField('luckTokens', { ...luck, current: luck.current - 1 })
+    _pushLuckEvent({ characterName, characterId: activeId.value })
+    _realtimeChannel?.send({
+      type: 'broadcast',
+      event: 'luck_spent',
+      payload: { characterName, characterId: activeId.value },
+    })
+  }
+
+  function adjustLuck(delta) {
+    if (!character.value) return
+    const luck = character.value.luckTokens ?? { current: 1, max: 3 }
+    updateField('luckTokens', { ...luck, current: Math.max(0, Math.min(luck.max, luck.current + delta)) })
+  }
+
+  function setMaxLuck(max) {
+    if (!character.value) return
+    const luck = character.value.luckTokens ?? { current: 1, max: 3 }
+    const newMax = Math.max(0, max)
+    updateField('luckTokens', { current: Math.min(luck.current, newMax), max: newMax })
+  }
+
+  function _pushLuckEvent(payload) {
+    luckEvents.value = [...luckEvents.value, { id: crypto.randomUUID(), ...payload }]
   }
 
   async function _fetchMissingChars(ids) {
@@ -317,6 +374,9 @@ export const useCharacterStore = defineStore('character', () => {
       }, ({ old }) => {
         memberSelections.value = memberSelections.value.filter(m => m.user_id !== old.user_id)
       })
+      .on('broadcast', { event: 'luck_spent' }, ({ payload }) => {
+        _pushLuckEvent(payload)
+      })
       .subscribe()
   }
 
@@ -353,9 +413,11 @@ export const useCharacterStore = defineStore('character', () => {
     currentSessionId, canEditActiveCharacter, myCharacters, otherCharacters,
     memberSelections,
     loading, saving,
+    luckEvents,
     loadAll, setActive, importCharacter, deleteCharacter,
     updateField, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
-    addGearItem, updateGearItem, deleteGearItem, updateAttack, deleteAttack,
+    addGearItem, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
+    spendLuckToken, adjustLuck, setMaxLuck,
     cleanup,
   }
 })
