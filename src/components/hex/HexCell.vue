@@ -101,14 +101,40 @@
       >{{ firstMarker.label.slice(0, 16) }}</text>
     </g>
 
-    <g v-if="visibleToPlayer && cell?.has_dungeon" transform="translate(16, -20)" class="pointer-events-none">
-      <circle r="7" fill="#1c1522" stroke="#9b7bb5" stroke-width="1.5" />
-      <text text-anchor="middle" dy="4" font-size="9" fill="#c9a8e0">D</text>
+    <g
+      v-if="visibleToPlayer && cell?.has_dungeon"
+      :transform="`translate(${size * 0.42}, ${-size * 0.08})`"
+      class="pointer-events-none"
+      style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))"
+    >
+      <path :d="`M${-size*0.042},${-size*0.156} L0,0 L${size*0.042},${-size*0.156}Z`" fill="#5a2e7a" />
+      <circle :cy="-size*0.273" :r="size*0.13" fill="#5a2e7a" stroke="var(--paper, #f4e8cc)" :stroke-width="1.2 / (size / 48)" />
+      <text
+        text-anchor="middle"
+        :y="-size*0.273"
+        dominant-baseline="central"
+        :font-size="size * 0.12"
+        fill="var(--paper, #f4e8cc)"
+        style="font-family: var(--font-mono, monospace); font-weight: 700;"
+      >D</text>
     </g>
 
-    <g v-if="visibleToPlayer && hasChildMap" :transform="`translate(${cell?.has_dungeon ? -16 : 16}, -20)`" class="pointer-events-none">
-      <circle r="7" fill="#1a1c12" stroke="#8aad5b" stroke-width="1.5" />
-      <text text-anchor="middle" dy="4" font-size="9" fill="#b8d48a">M</text>
+    <g
+      v-if="visibleToPlayer && hasChildMap"
+      :transform="`translate(${-size * 0.42}, ${-size * 0.08})`"
+      class="pointer-events-none"
+      style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))"
+    >
+      <path :d="`M${-size*0.042},${-size*0.156} L0,0 L${size*0.042},${-size*0.156}Z`" fill="#2a5a1e" />
+      <circle :cy="-size*0.273" :r="size*0.13" fill="#2a5a1e" stroke="var(--paper, #f4e8cc)" :stroke-width="1.2 / (size / 48)" />
+      <text
+        text-anchor="middle"
+        :y="-size*0.273"
+        dominant-baseline="central"
+        :font-size="size * 0.12"
+        fill="var(--paper, #f4e8cc)"
+        style="font-family: var(--font-mono, monospace); font-weight: 700;"
+      >M</text>
     </g>
 
     <template v-if="visibleToPlayer && !imageMode">

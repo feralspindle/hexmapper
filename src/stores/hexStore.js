@@ -118,20 +118,18 @@ export const useHexStore = defineStore("hex", () => {
       })
       .subscribe();
 
-    // Also listen for database updates to the sessions table
-    await _setupSessionChannel(sessionId);
+    _setupMapPartyChannel(mapId);
   }
 
   async function _loadPartyHexFromDb() {
     const { data, error } = await supabase
-      .from("sessions")
+      .from("maps")
       .select("party_hex_q, party_hex_r")
-      .eq("id", currentSessionId.value)
+      .eq("id", currentMapId.value)
       .single();
 
     if (error) {
       console.error("_loadPartyHexFromDb error:", error.message);
-      // Fall back to localStorage
       _loadPartyHex();
       return;
     }
@@ -139,24 +137,23 @@ export const useHexStore = defineStore("hex", () => {
     if (data && (data.party_hex_q !== null || data.party_hex_r !== null)) {
       partyHex.value = { q: data.party_hex_q, r: data.party_hex_r };
     } else {
-      // Fall back to localStorage
       _loadPartyHex();
     }
   }
 
-  let sessionChannel = null;
+  let mapPartyChannel = null;
 
-  async function _setupSessionChannel(sessionId) {
-    if (sessionChannel) supabase.removeChannel(sessionChannel);
-    sessionChannel = supabase
-      .channel(`session:${sessionId}:party`)
+  function _setupMapPartyChannel(mapId) {
+    if (mapPartyChannel) supabase.removeChannel(mapPartyChannel);
+    mapPartyChannel = supabase
+      .channel(`map:${mapId}:party_db`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
-          table: "sessions",
-          filter: `id=eq.${sessionId}`,
+          table: "maps",
+          filter: `id=eq.${mapId}`,
         },
         ({ new: row }) => {
           if (row.party_hex_q !== undefined || row.party_hex_r !== undefined) {
@@ -194,13 +191,11 @@ export const useHexStore = defineStore("hex", () => {
   async function setPartyHex(q, r) {
     partyHex.value = { q, r };
     _savePartyHex();
-    // Persist to database for players who join after broadcast
     const { error } = await supabase
-      .from("sessions")
+      .from("maps")
       .update({ party_hex_q: q, party_hex_r: r })
-      .eq("id", currentSessionId.value);
+      .eq("id", currentMapId.value);
     if (error) console.error("setPartyHex db update error:", error.message);
-    // Broadcast for real-time sync with existing players
     partyChannel?.send({
       type: "broadcast",
       event: "party",
@@ -211,13 +206,11 @@ export const useHexStore = defineStore("hex", () => {
   async function clearPartyHex() {
     partyHex.value = null;
     _savePartyHex();
-    // Clear in database as well
     const { error } = await supabase
-      .from("sessions")
+      .from("maps")
       .update({ party_hex_q: null, party_hex_r: null })
-      .eq("id", currentSessionId.value);
+      .eq("id", currentMapId.value);
     if (error) console.error("clearPartyHex db update error:", error.message);
-    // Broadcast for real-time sync with existing players
     partyChannel?.send({
       type: "broadcast",
       event: "party",
@@ -505,8 +498,8 @@ export const useHexStore = defineStore("hex", () => {
     channel = null;
     if (partyChannel) supabase.removeChannel(partyChannel);
     partyChannel = null;
-    if (sessionChannel) supabase.removeChannel(sessionChannel);
-    sessionChannel = null;
+    if (mapPartyChannel) supabase.removeChannel(mapPartyChannel);
+    mapPartyChannel = null;
     currentMapId.value = null;
     currentSessionId.value = null;
     hexCells.value = new Map();

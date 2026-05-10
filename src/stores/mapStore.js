@@ -17,10 +17,28 @@ export const useMapStore = defineStore('map', () => {
   let _currentSessionId = null
   const _localOverrides = {}
 
-  const activeMap = computed(() => {
+  const localMapId = ref(null)
+
+  const effectiveMapId = computed(() => {
     const sessionStore = useSessionStore()
-    return maps.value.find(m => m.id === sessionStore.activeMapId) ?? null
+    return localMapId.value ?? sessionStore.activeMapId
   })
+
+  function _localViewKey() {
+    return `map_view_${_currentSessionId}`
+  }
+
+  watch(
+    () => useSessionStore().activeMapId,
+    (newId) => {
+      localMapId.value = null
+      if (newId && _currentSessionId) localStorage.setItem(_localViewKey(), newId)
+    },
+  )
+
+  const activeMap = computed(() =>
+    maps.value.find(m => m.id === effectiveMapId.value) ?? null
+  )
 
   const parentMap = computed(() => {
     if (!activeMap.value?.parent_map_id) return null
@@ -101,6 +119,27 @@ export const useMapStore = defineStore('map', () => {
 
     loading.value = false
 
+    // Restore the client's personal map view from localStorage.
+    // Falls back to sessionStore.activeMapId only when nothing is stored yet.
+    const saved = localStorage.getItem(_localViewKey())
+    if (saved && maps.value.find(m => m.id === saved)) {
+      localMapId.value = saved
+    } else {
+      // Legacy guard: if sessions.active_map_id somehow holds a child map (stale
+      // data from before this fix), navigate locally to the root rather than
+      // rewriting the DB.
+      const sessionStore = useSessionStore()
+      let cur = maps.value.find(m => m.id === sessionStore.activeMapId)
+      if (cur?.parent_map_id) {
+        while (cur.parent_map_id) {
+          const parent = maps.value.find(m => m.id === cur.parent_map_id)
+          if (!parent) break
+          cur = parent
+        }
+        localMapId.value = cur.id
+      }
+    }
+
     const activeImgPath = activeMap.value?.map_image_path
     if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
 
@@ -136,8 +175,14 @@ export const useMapStore = defineStore('map', () => {
     Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
     activeMapImageUrl.value = null
     maps.value = []
+    localMapId.value = null
     _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
+  }
+
+  function navigateLocal(mapId) {
+    localMapId.value = mapId
+    if (_currentSessionId) localStorage.setItem(_localViewKey(), mapId)
   }
 
   async function createChildMap(parentHexCellId, name) {
@@ -156,7 +201,7 @@ export const useMapStore = defineStore('map', () => {
     if (!maps.value.find(m => m.id === data.id)) {
       maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     }
-    await setActiveMap(data.id)
+    navigateLocal(data.id)
     return data
   }
 
@@ -308,6 +353,7 @@ export const useMapStore = defineStore('map', () => {
     loading,
     newMapModalOpen,
     activeMap,
+    effectiveMapId,
     parentMap,
     childMapsByHexId,
     ancestorChain,
@@ -330,6 +376,7 @@ export const useMapStore = defineStore('map', () => {
     cleanup,
     createMap,
     createChildMap,
+    navigateLocal,
     applyLocalPatch,
     renameMap,
     deleteMap,

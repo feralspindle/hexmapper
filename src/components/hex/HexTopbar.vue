@@ -46,7 +46,7 @@
         <button
           v-else
           style="background:none;border:none;cursor:pointer;color:rgba(237,225,199,.55);font-family:var(--font-mono);font-size:10px;letter-spacing:0.04em;padding:0;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1"
-          @click="mapStore.setActiveMap(segment.id)"
+          @click="mapStore.navigateLocal(segment.id)"
         >{{ segment.name }}</button>
       </template>
       <span style="opacity:.4;flex-shrink:0">/</span>

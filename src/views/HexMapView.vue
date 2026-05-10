@@ -147,7 +147,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
@@ -278,7 +278,7 @@ watch(
 );
 
 watch(
-    () => sessionStore.activeMapId,
+    () => mapStore.effectiveMapId,
     async (newId) => {
         if (newId) {
             moveMode.value = "none";
@@ -301,7 +301,7 @@ onMounted(async () => {
         });
         if (map) await mapStore.setActiveMap(map.id);
     } else {
-        const startMapId = sessionStore.activeMapId;
+        const startMapId = mapStore.effectiveMapId;
         if (startMapId) await hexStore.init(sessionId, startMapId);
     }
 
@@ -314,6 +314,10 @@ onMounted(async () => {
     if (!authStore.user?.user_metadata?.welcome_seen) showWelcome.value = true;
 
     loadMode();
+    await nextTick();
+    if (hexStore.partyHex) {
+        hexGridEl.value?.centerOnHex(hexStore.partyHex.q, hexStore.partyHex.r);
+    }
     window.addEventListener("keydown", onKeyDown);
 });
 

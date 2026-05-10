@@ -9,6 +9,7 @@
                   ? 'cursor-move'
                   : 'cursor-default'
         "
+        style="position: relative"
     >
         <svg
             ref="svgEl"
@@ -98,6 +99,27 @@
                 </g>
             </g>
         </svg>
+
+        <Transition name="hm-map-fade">
+            <div v-if="imageLoading" class="hm-map-loading-overlay">
+                <svg class="hm-map-spinner" width="52" height="52" viewBox="0 0 52 52" fill="none">
+                    <polygon
+                        points="26,3 47.7,15 47.7,37 26,49 4.3,37 4.3,15"
+                        stroke="#d4a74b"
+                        stroke-width="2"
+                        stroke-linejoin="round"
+                    />
+                    <polygon
+                        points="26,13 40.6,21 40.6,37 26,45 11.4,37 11.4,21"
+                        stroke="#d4a74b"
+                        stroke-width="1.2"
+                        stroke-linejoin="round"
+                        opacity="0.35"
+                    />
+                </svg>
+                <span class="hm-map-loading-label">Loading map…</span>
+            </div>
+        </Transition>
     </div>
 </template>
 
@@ -189,11 +211,9 @@ watch(
 watch(
     () => props.mapImageUrl,
     (url) => {
-        if (!url) {
-            imageNaturalWidth.value = 0;
-            imageNaturalHeight.value = 0;
-            return;
-        }
+        imageNaturalWidth.value = 0;
+        imageNaturalHeight.value = 0;
+        if (!url) return;
         const img = new Image();
         img.onload = () => {
             imageNaturalWidth.value = img.naturalWidth;
@@ -202,6 +222,10 @@ watch(
         img.src = url;
     },
     { immediate: true },
+);
+
+const imageLoading = computed(
+    () => props.imageMode && !!props.mapImageUrl && imageNaturalWidth.value === 0,
 );
 
 const hexSize = computed(() =>
@@ -356,8 +380,15 @@ function zoomOut() {
 function resetZoom() {
     zoom.value = 1;
 }
+function centerOnHex(q, r) {
+    const { x: hx, y: hy } = hexToPixel(q, r, hexSize.value, hexHProp.value);
+    pan.value = {
+        x: svgWidth.value / 2 - (hx + localGridOffsetX.value) * zoom.value,
+        y: svgHeight.value / 2 - (hy + localGridOffsetY.value) * zoom.value,
+    };
+}
 
-defineExpose({ zoomIn, zoomOut, resetZoom });
+defineExpose({ zoomIn, zoomOut, resetZoom, centerOnHex });
 
 const resizeObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
@@ -379,3 +410,46 @@ onUnmounted(() => {
     resizeObserver.disconnect();
 });
 </script>
+
+<style scoped>
+.hm-map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 12, 22, 0.72);
+    backdrop-filter: blur(3px);
+    z-index: 10;
+    gap: 16px;
+    pointer-events: none;
+}
+
+.hm-map-spinner {
+    animation: hm-hex-spin 2.4s linear infinite;
+    transform-origin: center;
+}
+
+@keyframes hm-hex-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.hm-map-loading-label {
+    font-family: 'Cinzel', 'Cormorant Garamond', Georgia, serif;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(212, 167, 75, 0.7);
+}
+
+.hm-map-fade-enter-active,
+.hm-map-fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+.hm-map-fade-enter-from,
+.hm-map-fade-leave-to {
+    opacity: 0;
+}
+</style>

@@ -465,7 +465,7 @@
                                     flex-shrink: 0;
                                     white-space: nowrap;
                                 "
-                                @click="mapStore.setActiveMap(m.id)"
+                                @click="mapStore.navigateLocal(m.id)"
                             >
                                 Enter →
                             </button>
