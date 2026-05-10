@@ -57,12 +57,38 @@
         </div>
 
         <div v-if="!collapsed" class="ds-party-body ds-inv-body">
-            <div v-if="!allGear.length" class="ds-inv-empty">No gear in the party</div>
-            <div v-for="(item, i) in allGear" :key="i" class="ds-inv-row">
-                <span class="ds-inv-name">{{ item.itemName }}</span>
-                <span class="ds-inv-qty">{{ item.totalQty > 1 ? `×${item.totalQty}` : '' }}</span>
-                <span class="ds-inv-char">{{ item.ownerLabel }}</span>
+            <div class="ds-inv-section-head">Wealth</div>
+            <div v-if="partyMoney.length" class="ds-inv-money-rows">
+                <div v-for="row in partyMoney" :key="row.charId" class="ds-inv-money-row">
+                    <span class="ds-inv-money-name">{{ row.name }}</span>
+                    <span class="ds-inv-money-coins">
+                        <span v-if="row.gold">{{ row.gold }}gp</span>
+                        <span v-if="row.silver">{{ row.silver }}sp</span>
+                        <span v-if="row.copper">{{ row.copper }}cp</span>
+                        <span v-if="!row.gold && !row.silver && !row.copper">—</span>
+                    </span>
+                </div>
+                <div class="ds-inv-money-row ds-inv-money-total">
+                    <span class="ds-inv-money-name">Total</span>
+                    <span class="ds-inv-money-coins">
+                        <span v-if="moneyTotal.gold">{{ moneyTotal.gold }}gp</span>
+                        <span v-if="moneyTotal.silver">{{ moneyTotal.silver }}sp</span>
+                        <span v-if="moneyTotal.copper">{{ moneyTotal.copper }}cp</span>
+                        <span v-if="!moneyTotal.gold && !moneyTotal.silver && !moneyTotal.copper">—</span>
+                    </span>
+                </div>
             </div>
+            <div v-else class="ds-inv-empty ds-inv-empty-sm">No active characters</div>
+
+            <div class="ds-inv-section-head ds-inv-section-head--gear">Gear</div>
+            <div v-if="allGear.length">
+                <div v-for="(item, i) in allGear" :key="i" class="ds-inv-row">
+                    <span class="ds-inv-name">{{ item.itemName }}</span>
+                    <span class="ds-inv-qty">{{ item.totalQty > 1 ? `×${item.totalQty}` : '' }}</span>
+                    <span class="ds-inv-char">{{ item.ownerLabel }}</span>
+                </div>
+            </div>
+            <div v-else class="ds-inv-empty ds-inv-empty-sm">No gear in the party</div>
         </div>
     </div>
 </template>
@@ -119,9 +145,14 @@ onUnmounted(() => {
     window.removeEventListener('mouseup', onDragUp)
 })
 
+const activeCharacters = computed(() => {
+    const activeIds = new Set(characterStore.memberSelections.map(m => m.active_character_id).filter(Boolean))
+    return characterStore.characters.filter(c => activeIds.has(c.id))
+})
+
 const allGear = computed(() => {
     const map = new Map()
-    for (const char of characterStore.characters) {
+    for (const char of activeCharacters.value) {
         const charName = char.data?.name || 'Unknown'
         for (const item of (char.data?.gear ?? [])) {
             if (item.disabled) continue
@@ -142,4 +173,20 @@ const allGear = computed(() => {
                 .join(' · '),
         }))
 })
+
+const partyMoney = computed(() =>
+    activeCharacters.value.map(c => ({
+        charId: c.id,
+        name: c.data?.name || 'Unknown',
+        gold: c.data?.gold ?? 0,
+        silver: c.data?.silver ?? 0,
+        copper: c.data?.copper ?? 0,
+    }))
+)
+
+const moneyTotal = computed(() => ({
+    gold:   partyMoney.value.reduce((sum, c) => sum + c.gold,   0),
+    silver: partyMoney.value.reduce((sum, c) => sum + c.silver, 0),
+    copper: partyMoney.value.reduce((sum, c) => sum + c.copper, 0),
+}))
 </script>
