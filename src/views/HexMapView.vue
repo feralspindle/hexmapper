@@ -142,6 +142,7 @@
         />
 
         <DungeonPartyPanel v-if="!showModePicker" />
+        <GroupInventoryPanel v-if="!showModePicker" />
     </div>
 </template>
 
@@ -172,6 +173,7 @@ import PhotoBroadcastModal from "@/components/common/PhotoBroadcastModal.vue";
 import WelcomeModal from "@/components/common/WelcomeModal.vue";
 import CharacterDrawer from "@/components/common/CharacterDrawer.vue";
 import DungeonPartyPanel from "@/components/dungeon/DungeonPartyPanel.vue";
+import GroupInventoryPanel from "@/components/common/GroupInventoryPanel.vue";
 import HexBottomBar from "@/components/hex/HexBottomBar.vue";
 import MapScale from "@/components/hex/MapScale.vue";
 

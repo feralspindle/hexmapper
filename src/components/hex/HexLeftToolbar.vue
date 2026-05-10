@@ -103,6 +103,16 @@
       </div>
     </template>
 
+    <div class="ds-tool-group">
+      <span class="ds-tool-label">Party</span>
+      <button class="ds-tool" :aria-pressed="inventoryVisible ? 'true' : 'false'" @click="toggleInventory()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 9V7a3 3 0 016 0v2"/><rect x="4" y="9" width="16" height="12" rx="2"/>
+        </svg>
+        <span class="ds-tip">Party inventory</span>
+      </button>
+    </div>
+
   </aside>
 
   <div v-else class="ds-toolbar-float">
@@ -117,6 +127,13 @@
         <path d="M9 11V5.5a1.5 1.5 0 013 0V11"/><path d="M12 11V4a1.5 1.5 0 013 0v7"/><path d="M15 11V5.5a1.5 1.5 0 013 0V14"/><path d="M9 11V8.5a1.5 1.5 0 00-3 0V15c0 3 2 6 6 6h2a4 4 0 004-4v-3"/>
       </svg>
       <span class="ds-tip">Pan <kbd>H</kbd></span>
+    </button>
+    <div class="ds-float-sep" />
+    <button class="ds-tool" :aria-pressed="inventoryVisible ? 'true' : 'false'" @click="toggleInventory()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 9V7a3 3 0 016 0v2"/><rect x="4" y="9" width="16" height="12" rx="2"/>
+      </svg>
+      <span class="ds-tip">Party inventory</span>
     </button>
     <template v-if="hexMode === 'blank'">
       <div class="ds-float-sep" />
@@ -144,6 +161,7 @@
 </template>
 
 <script setup>
+import { useGroupInventory } from '@/composables/useGroupInventory.js'
 
 const props = defineProps({
   hexMode:      { type: String,  default: null  },
@@ -154,4 +172,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['tool', 'reveal-all', 'hide-all', 'map-settings'])
+
+const { visible: inventoryVisible, toggle: toggleInventory } = useGroupInventory()
 </script>

@@ -58,7 +58,7 @@
 
 
     <DungeonPartyPanel />
-
+    <GroupInventoryPanel />
 
     <CharacterDrawer parchment :open="charOpen" :nav-height="topbarHeight" @close="charOpen = false" />
 
@@ -95,6 +95,7 @@ import DungeonCanvas       from '@/components/dungeon/DungeonCanvas.vue'
 import DungeonContentsBar  from '@/components/dungeon/DungeonContentsBar.vue'
 import DungeonRightPanel   from '@/components/dungeon/DungeonRightPanel.vue'
 import DungeonPartyPanel   from '@/components/dungeon/DungeonPartyPanel.vue'
+import GroupInventoryPanel from '@/components/common/GroupInventoryPanel.vue'
 import CharacterDrawer     from '@/components/common/CharacterDrawer.vue'
 import ConfirmDialog       from '@/components/common/ConfirmDialog.vue'
 import DiceRollToast       from '@/components/dungeon/DiceRollToast.vue'

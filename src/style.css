@@ -819,6 +819,20 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
 }
 .ds-party-reopen:hover { transform: translateY(-1px); }
 
+/* group inventory panel */
+.ds-inv-panel { width: 280px; }
+.ds-inv-body { padding: 4px 0 8px; }
+.ds-inv-row {
+  display: grid; grid-template-columns: 1fr auto auto;
+  align-items: baseline; gap: 6px; padding: 5px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.ds-inv-row:last-child { border-bottom: none; }
+.ds-inv-name { font-family: var(--font-body); font-size: 13px; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-inv-qty { font-family: var(--font-mono); font-size: 11px; color: var(--ink-mute); white-space: nowrap; min-width: 28px; text-align: right; }
+.ds-inv-char { font-family: var(--font-mono); font-size: 10px; color: var(--ink-mute); letter-spacing: .04em; white-space: nowrap; }
+.ds-inv-empty { font-family: var(--font-body); font-style: italic; font-size: 13px; color: var(--ink-mute); text-align: center; padding: 20px 0; }
+
 /* ─── Hex-map nav: restyle ds-tb-btn to match native AppNav buttons ─── */
 .hm-nav .ds-tb-btn {
   color: #dca85a !important;
