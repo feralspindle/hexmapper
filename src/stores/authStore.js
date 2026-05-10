@@ -11,6 +11,7 @@ import { useChatStore }      from '@/stores/chatStore.js'
 import { useNotesStore }     from '@/stores/notesStore.js'
 import { usePhotoStore }     from '@/stores/photoStore.js'
 import { useActivityStore }  from '@/stores/activityStore.js'
+import { useMacroStore }     from '@/stores/macroStore.js'
 
 function cleanupAllStores() {
   try { useSessionStore().cleanup()   } catch { /* */ }
@@ -21,6 +22,7 @@ function cleanupAllStores() {
   try { useNotesStore().cleanup()     } catch { /* */ }
   try { usePhotoStore().cleanup()     } catch { /* */ }
   try { useActivityStore().cleanup()  } catch { /* */ }
+  try { useMacroStore().cleanup()     } catch { /* */ }
 }
 
 export const useAuthStore = defineStore('auth', () => {

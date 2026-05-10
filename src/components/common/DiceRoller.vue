@@ -24,44 +24,50 @@
       </div>
     </div>
 
-    <div class="px-3 pb-3 shrink-0 bg-stone-950/40 space-y-2">
+    <div class="px-3 pt-1 pb-3 shrink-0 bg-stone-950/40">
 
-      <div
-        class="rounded bg-stone-800 border border-stone-700 px-2 py-1.5 text-sm font-mono min-h-[32px] flex items-center"
-        :class="hasDice ? 'text-parchment-200' : 'text-stone-600 italic'"
-      >
-        {{ formula || 'tap dice to add...' }}
+      <div class="relative mb-2.5 group/formula">
+        <div
+          class="font-mono text-base py-2 pr-6 border-b transition-colors duration-150 select-none"
+          :class="hasDice ? 'text-parchment-200 border-parchment-500/30' : 'text-stone-600 italic border-stone-700/60'"
+        >{{ formula || 'tap dice to add…' }}</div>
+        <button
+          v-if="hasAnything"
+          v-tooltip="'Clear dice and modifier'"
+          class="absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-stone-600 hover:text-stone-300 transition-colors text-xs select-none"
+          @click="clear"
+        ><i class="fa-solid fa-trash-can" /></button>
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-stone-500 text-sm uppercase tracking-wider shrink-0">Mod</span>
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-0.5">
           <button
-            v-tooltip.left="'Decrease roll modifier'"
-            class="w-7 h-7 rounded bg-stone-800 border border-stone-700 text-stone-300 hover:bg-stone-700 hover:text-parchment-200 transition-colors text-sm font-bold flex items-center justify-center select-none"
+            v-tooltip.left="'Decrease modifier'"
+            class="w-6 h-6 rounded bg-stone-800 border border-stone-700 text-stone-400 hover:text-parchment-200 hover:border-stone-500 transition-colors text-sm flex items-center justify-center select-none"
             @click="modifier--"
           >−</button>
           <span
-            v-tooltip="'Flat bonus or penalty added to every die roll'"
-            class="w-10 text-center text-sm font-mono select-none"
-            :class="modifier !== 0 ? 'text-parchment-300' : 'text-stone-500'"
+            v-tooltip="'Flat bonus or penalty added to the roll'"
+            class="w-9 text-center text-sm font-mono tabular-nums select-none"
+            :class="modifier !== 0 ? 'text-parchment-300' : 'text-stone-600'"
           >{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
           <button
-            v-tooltip.right="'Increase roll modifier'"
-            class="w-7 h-7 rounded bg-stone-800 border border-stone-700 text-stone-300 hover:bg-stone-700 hover:text-parchment-200 transition-colors text-sm font-bold flex items-center justify-center select-none"
+            v-tooltip.right="'Increase modifier'"
+            class="w-6 h-6 rounded bg-stone-800 border border-stone-700 text-stone-400 hover:text-parchment-200 hover:border-stone-500 transition-colors text-sm flex items-center justify-center select-none"
             @click="modifier++"
           >+</button>
         </div>
-        <div class="ml-auto flex gap-2">
+        <span class="text-stone-600 text-[10px] uppercase tracking-widest select-none">mod</span>
+        <div class="ml-auto flex items-center gap-1.5">
           <button
-            v-if="hasAnything"
-            v-tooltip="'Clear all selected dice and the modifier'"
-            class="text-stone-500 hover:text-stone-300 text-sm transition-colors select-none"
-            @click="clear"
-          >Clear</button>
+            v-if="hasDice && !savingMacro"
+            v-tooltip="'Save as named macro'"
+            class="w-7 h-7 flex items-center justify-center text-stone-600 hover:text-stone-300 transition-colors select-none"
+            @click="startSaveMacro"
+          ><i class="fa-solid fa-floppy-disk text-xs" /></button>
           <button
-            v-tooltip="hasDice ? 'Roll the selected dice and broadcast to the table' : 'Select at least one die to roll'"
-            class="px-4 h-8 rounded font-display text-sm transition-all select-none"
+            v-tooltip="hasDice ? 'Roll and broadcast to the table' : 'Select at least one die to roll'"
+            class="px-4 h-7 rounded font-display text-sm transition-all select-none"
             :class="hasDice && !diceStore.pendingRoll
               ? 'bg-parchment-500 hover:bg-parchment-400 text-stone-950 active:scale-95'
               : 'bg-stone-800 text-stone-600 cursor-not-allowed border border-stone-700'"
@@ -69,6 +75,37 @@
             @click="roll"
           >{{ diceStore.pendingRoll ? 'Rolling…' : 'Roll!' }}</button>
         </div>
+      </div>
+    </div>
+
+    <div v-if="macroStore.macros.length || savingMacro" class="px-3 pt-2 pb-2 bg-stone-950/40 border-t border-stone-800 shrink-0 space-y-1">
+      <div v-if="savingMacro" class="flex items-center gap-1">
+        <input
+          ref="macroLabelInput"
+          v-model="macroLabel"
+          type="text"
+          placeholder="Macro label…"
+          maxlength="40"
+          class="flex-1 min-w-0 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-parchment-400"
+          @keydown.enter.prevent="confirmSaveMacro"
+          @keydown.escape="cancelSaveMacro"
+        />
+        <button class="text-parchment-400 hover:text-parchment-200 text-sm px-1 transition-colors" @click="confirmSaveMacro"><i class="fa-solid fa-check" /></button>
+        <button class="text-stone-500 hover:text-stone-300 text-sm px-1 transition-colors leading-none" @click="cancelSaveMacro">&times;</button>
+      </div>
+      <div v-for="macro in macroStore.macros" :key="macro.id" class="flex items-center gap-1 group/macro">
+        <button
+          class="flex-1 min-w-0 flex items-baseline gap-2 px-2 py-1 rounded bg-stone-800 border border-stone-700 hover:border-stone-500 hover:bg-stone-750 transition-colors text-left select-none"
+          :disabled="!!diceStore.pendingRoll"
+          @click="fireMacro(macro)"
+        >
+          <span class="text-parchment-300 text-sm font-display truncate">{{ macro.label }}</span>
+          <span class="text-stone-500 text-xs font-mono shrink-0 ml-auto">{{ formatMacroExpr(macro) }}</span>
+        </button>
+        <button
+          class="text-stone-600 hover:text-red-400 text-xs px-1 transition-colors shrink-0"
+          @click="macroStore.deleteMacro(macro.id)"
+        ><i class="fa-solid fa-trash-can" /></button>
       </div>
     </div>
     <div ref="scrollContainer" class="flex-1 overflow-y-auto min-h-0 border-t-2 border-stone-600 bg-stone-950/40" @scroll="onScroll">
@@ -204,17 +241,21 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { DIE_ICONS } from '@/composables/useDiceIcons.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
+import { useMacroStore } from '@/stores/macroStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
 import { useTimeAgo } from '@/composables/useTimeAgo.js'
 
 const diceStore = useDiceStore()
 const authStore = useAuthStore()
+const macroStore = useMacroStore()
 const { gmName } = useGMLabel()
 const { timeAgo } = useTimeAgo()
+
+onMounted(() => macroStore.init())
 
 const DICE = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
 
@@ -249,6 +290,38 @@ function roll() {
   clear()
 }
 
+const savingMacro = ref(false)
+const macroLabel = ref('')
+const macroLabelInput = ref(null)
+
+function startSaveMacro() {
+  savingMacro.value = true
+  macroLabel.value = ''
+  nextTick(() => macroLabelInput.value?.focus())
+}
+
+function cancelSaveMacro() {
+  savingMacro.value = false
+  macroLabel.value = ''
+}
+
+async function confirmSaveMacro() {
+  const label = macroLabel.value.trim()
+  cancelSaveMacro()
+  if (label) await macroStore.saveMacro(label, { ...pending.value }, modifier.value)
+}
+
+function fireMacro(macro) {
+  diceStore.rollDice({ ...macro.pending }, macro.modifier, macro.label)
+}
+
+function formatMacroExpr(macro) {
+  const parts = DICE.filter(d => (macro.pending[d] ?? 0) > 0).map(d => `${macro.pending[d]}${d}`)
+  const joined = parts.join('+')
+  if (macro.modifier > 0) return joined ? `${joined}+${macro.modifier}` : `+${macro.modifier}`
+  if (macro.modifier < 0) return joined ? `${joined}−${Math.abs(macro.modifier)}` : `${macro.modifier}`
+  return joined || '?'
+}
 
 function formatExpression(entry) {
   const parts = DICE

@@ -33,14 +33,65 @@
       </div>
 
 
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">Mod</span>
+      <div style="position:relative;margin-bottom:6px">
+        <div
+          style="font-family:var(--font-mono);font-size:14px;padding:4px 20px 4px 0;border-bottom:1px solid;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color 0.15s,border-color 0.15s"
+          :style="hasDice
+            ? 'color:var(--ink);border-color:color-mix(in srgb, var(--gold) 45%, transparent)'
+            : 'color:var(--ink-mute);border-color:var(--rule);font-style:italic'"
+        >{{ formula || 'tap dice to add…' }}</div>
+        <button
+          v-if="hasAnything"
+          title="Clear"
+          style="position:absolute;right:0;top:50%;transform:translateY(-50%);background:none;border:none;padding:0 4px;font-size:11px;line-height:1;color:var(--ink-mute);cursor:pointer;transition:color 0.15s"
+          @mouseenter="e => e.target.style.color='var(--ink)'"
+          @mouseleave="e => e.target.style.color='var(--ink-mute)'"
+          @click="clear"
+        ><i class="fa-solid fa-trash-can" /></button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
         <button class="ds-btn tiny ghost" @click="modifier--">−</button>
-        <span style="font-family:var(--font-mono);font-size:13px;min-width:24px;text-align:center;color:var(--ink-2)">{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
+        <span style="font-family:var(--font-mono);font-size:13px;min-width:24px;text-align:center" :style="modifier !== 0 ? 'color:var(--ink-2)' : 'color:var(--ink-mute)'">{{ modifier >= 0 ? '+' + modifier : modifier }}</span>
         <button class="ds-btn tiny ghost" @click="modifier++">+</button>
-        <div style="flex:1;min-width:0;font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ formula || '—' }}</div>
-        <button v-if="hasAnything" class="ds-btn tiny ghost" @click="clear" style="font-size:10px">Clear</button>
+        <span style="font-family:var(--font-zine);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute);opacity:0.6">mod</span>
+        <div style="flex:1" />
+        <button v-if="hasDice && !savingMacro" class="ds-btn tiny ghost" @click="startSaveMacro" style="padding-left:6px;padding-right:6px" title="Save as macro"><i class="fa-solid fa-floppy-disk" /></button>
         <button class="ds-btn tiny" :disabled="!hasDice" @click="roll">Roll!</button>
+      </div>
+
+      <div v-if="macroStore.macros.length || savingMacro" style="margin-bottom:4px">
+        <div v-if="savingMacro" style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
+          <input
+            ref="macroLabelInput"
+            v-model="macroLabel"
+            type="text"
+            placeholder="Macro label…"
+            maxlength="40"
+            style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--rule);border-radius:3px;padding:2px 6px;font-size:12px;color:var(--ink);outline:none"
+            @keydown.enter.prevent="confirmSaveMacro"
+            @keydown.escape="cancelSaveMacro"
+          />
+          <button class="ds-btn tiny" @click="confirmSaveMacro">✓</button>
+          <button class="ds-btn tiny ghost" @click="cancelSaveMacro" style="font-size:14px;line-height:1">&times;</button>
+        </div>
+        <div
+          v-for="macro in macroStore.macros"
+          :key="macro.id"
+          style="display:flex;align-items:center;gap:4px;margin-bottom:2px"
+          class="ds-macro-row"
+        >
+          <button
+            class="ds-btn tiny ghost ds-macro-btn"
+            style="flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;text-align:left;overflow:hidden"
+            :disabled="!!diceStore.pendingRoll"
+            @click="fireMacro(macro)"
+          >
+            <span style="font-family:var(--font-zine);font-size:11px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ macro.label }}</span>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--ink-mute);flex-shrink:0;margin-left:auto">{{ formatMacroExpr(macro) }}</span>
+          </button>
+          <button class="ds-macro-delete" @click="macroStore.deleteMacro(macro.id)"><i class="fa-solid fa-trash-can" /></button>
+        </div>
       </div>
     </div>
 
@@ -79,16 +130,20 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { DIE_ICONS } from '@/composables/useDiceIcons.js'
 import { useDiceStore } from '@/stores/diceStore.js'
+import { useMacroStore } from '@/stores/macroStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { useTimeAgo } from '@/composables/useTimeAgo.js'
 
 const diceStore = useDiceStore()
+const macroStore = useMacroStore()
 const { gmName } = useGMLabel()
 const { timeAgo } = useTimeAgo()
+
+onMounted(() => macroStore.init())
 
 const open = ref(true)
 
@@ -112,6 +167,39 @@ function addDie(die) { pending.value[die]++ }
 function removeDie(die) { if (pending.value[die] > 0) pending.value[die]-- }
 function clear() { DICE.forEach(d => { pending.value[d] = 0 }); modifier.value = 0 }
 function roll() { if (!hasDice.value) return; diceStore.rollDice({ ...pending.value }, modifier.value); clear() }
+
+const savingMacro = ref(false)
+const macroLabel = ref('')
+const macroLabelInput = ref(null)
+
+function startSaveMacro() {
+  savingMacro.value = true
+  macroLabel.value = ''
+  nextTick(() => macroLabelInput.value?.focus())
+}
+
+function cancelSaveMacro() {
+  savingMacro.value = false
+  macroLabel.value = ''
+}
+
+async function confirmSaveMacro() {
+  const label = macroLabel.value.trim()
+  cancelSaveMacro()
+  if (label) await macroStore.saveMacro(label, { ...pending.value }, modifier.value)
+}
+
+function fireMacro(macro) {
+  diceStore.rollDice({ ...macro.pending }, macro.modifier, macro.label)
+}
+
+function formatMacroExpr(macro) {
+  const parts = DICE.filter(d => (macro.pending[d] ?? 0) > 0).map(d => `${macro.pending[d]}${d}`)
+  const joined = parts.join('+')
+  if (macro.modifier > 0) return joined ? `${joined}+${macro.modifier}` : `+${macro.modifier}`
+  if (macro.modifier < 0) return joined ? `${joined}−${Math.abs(macro.modifier)}` : `${macro.modifier}`
+  return joined || '?'
+}
 
 function formatExpr(entry) {
   const parts = DICE.filter(d => (entry.pending?.[d] ?? 0) > 0).map(d => `${entry.pending[d]}${d}`)
@@ -147,6 +235,25 @@ watch(() => diceStore.rolls[0], (r) => {
 </script>
 
 <style scoped>
+.ds-macro-btn:hover {
+  background: var(--gold) !important;
+  border-color: var(--gold) !important;
+  color: var(--ink) !important;
+}
+.ds-macro-delete {
+  background: none;
+  border: none;
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink-mute);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s, opacity 0.15s;
+}
+.ds-macro-delete:hover {
+  color: var(--accent, #8a1c1c);
+}
 .ds-roll-breakdown {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 10px;
