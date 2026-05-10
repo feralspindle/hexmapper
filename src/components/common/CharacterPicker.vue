@@ -20,7 +20,7 @@
     >
       <div v-if="open" class="cp-menu" @click.stop>
 
-        <template v-if="!importMode">
+        <template v-if="!importMode && !existingMode">
           <div v-if="characterStore.loading" class="cp-empty">Loading…</div>
 
           <template v-else>
@@ -68,10 +68,41 @@
             <i class="fa-solid fa-user-plus" />
             New trashbag
           </button>
+          <button class="cp-row cp-row--muted" @click="openExisting">
+            <i class="fa-solid fa-box-archive" />
+            Use trashbag from another campaign
+          </button>
           <button class="cp-row cp-row--muted" @click="importMode = true">
             <i class="fa-solid fa-file-import" />
             Import trashbag
           </button>
+        </template>
+
+        <template v-else-if="existingMode">
+          <div class="cp-import-head" style="padding: 8px 12px 6px">
+            <button class="cp-back" @click="existingMode = false">
+              <i class="fa-solid fa-arrow-left" />
+            </button>
+            <span class="cp-import-title">From another campaign</span>
+          </div>
+          <div v-if="existingLoading" class="cp-empty">Loading…</div>
+          <div v-else-if="!existingChars.length" class="cp-empty">No trashbags in other campaigns</div>
+          <div v-else class="cp-existing-list">
+            <template v-for="group in existingBySession" :key="group.sessionId">
+              <div class="cp-section-head cp-section-head--ruled">{{ group.sessionName }}</div>
+              <button
+                v-for="char in group.chars"
+                :key="char.id"
+                class="cp-row"
+                @click="adoptChar(char)"
+              >
+                <div style="flex: 1; min-width: 0">
+                  <div class="cp-name">{{ char.data?.name ?? 'Unnamed' }}</div>
+                  <div v-if="charRole(char)" class="cp-sub">{{ charRole(char) }}</div>
+                </div>
+              </button>
+            </template>
+          </div>
         </template>
 
         <template v-else>
@@ -102,23 +133,45 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useAuthStore } from '@/stores/authStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { activeNavDropdown } from '@/composables/useNavDropdown.js'
+import { supabase } from '@/lib/supabase.js'
 import NewCharacterModal from './NewCharacterModal.vue'
 
 const characterStore = useCharacterStore()
 const sessionStore = useSessionStore()
+const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
 
 const open = ref(false)
 const importMode = ref(false)
+const existingMode = ref(false)
+const existingChars = ref([])
+const existingLoading = ref(false)
 const newCharOpen = ref(false)
 const pasteText = ref('')
 const importError = ref('')
 const wrapperEl = ref(null)
+
+const existingBySession = computed(() => {
+  const groups = []
+  const seen = new Map()
+  for (const char of existingChars.value) {
+    const key = char.session_id
+    const name = char.sessionName ?? 'Unknown Campaign'
+    if (!seen.has(key)) {
+      const group = { sessionId: key, sessionName: name, chars: [] }
+      seen.set(key, group)
+      groups.push(group)
+    }
+    seen.get(key).chars.push(char)
+  }
+  return groups
+})
 
 function onOutsideClick(e) {
   if (!wrapperEl.value?.contains(e.target)) open.value = false
@@ -147,6 +200,46 @@ function confirmDelete(char) {
     `Delete "${char.data?.name ?? 'this character'}"? This cannot be undone.`,
     () => characterStore.deleteCharacter(char.id),
   )
+}
+
+async function openExisting() {
+  existingMode.value = true
+  existingLoading.value = true
+  existingChars.value = []
+
+  const { data: chars } = await supabase
+    .from('characters')
+    .select('id, data, session_id')
+    .eq('user_id', authStore.user?.id)
+    .not('session_id', 'is', null)
+    .neq('session_id', characterStore.currentSessionId)
+    .order('created_at', { ascending: false })
+
+  if (chars?.length) {
+    const sessionIds = [...new Set(chars.map(c => c.session_id))]
+    const { data: sessions } = await supabase
+      .from('sessions')
+      .select('id, name')
+      .in('id', sessionIds)
+    const nameById = Object.fromEntries((sessions ?? []).map(s => [s.id, s.name]))
+    existingChars.value = chars.map(c => ({ ...c, sessionName: nameById[c.session_id] ?? 'Unknown Campaign' }))
+  }
+
+  existingLoading.value = false
+}
+
+async function adoptChar(char) {
+  await characterStore.importCharacter(char.data)
+  existingMode.value = false
+  open.value = false
+}
+
+function charRole(char) {
+  const d = char.data
+  if (!d) return ''
+  const parts = [d.ancestry, d.class ?? d.characterClass].filter(Boolean)
+  if (d.level) parts.push(`Lvl ${d.level}`)
+  return parts.join(' · ')
 }
 
 function parseJson(text) {
@@ -280,4 +373,16 @@ async function handleFile(event) {
 .cp-textarea::placeholder { color: var(--ink-mute, #8a7a68); }
 .cp-error { font-size: 11px; color: var(--accent, #8a1c1c); margin: 0; }
 .cp-import-btns { display: flex; gap: 6px; }
+.cp-existing-list { max-height: 260px; overflow-y: auto; }
+.cp-sub {
+  font-family: var(--font-zine, "Special Elite", monospace);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-mute, #8a7a68);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
 </style>

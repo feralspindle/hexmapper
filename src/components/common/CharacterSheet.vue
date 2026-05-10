@@ -285,6 +285,68 @@
                     </div>
                 </div>
 
+                <div class="cs-initiative-block">
+                    <div class="cs-initiative-row">
+                        <span class="cs-section-label">Initiative</span>
+                        <template v-if="editingInitiative && canEdit">
+                            <input
+                                ref="initiativeInputRef"
+                                v-model.number="initiativeDraft"
+                                type="number"
+                                class="cs-input"
+                                style="
+                                    width: 52px;
+                                    text-align: center;
+                                    font-family: var(--font-mono);
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                "
+                                @keyup.enter="saveInitiative"
+                                @keyup.escape="editingInitiative = false"
+                                @blur="saveInitiative"
+                            />
+                        </template>
+                        <span v-else class="cs-initiative-val">{{
+                            char.initiative ?? "—"
+                        }}</span>
+                        <div
+                            v-if="canEdit && !editingInitiative"
+                            class="cs-initiative-actions"
+                        >
+                            <button
+                                class="cs-btn primary"
+                                style="font-size: 11px; padding: 3px 8px"
+                                @click="rollInitiative"
+                            >
+                                Roll Initiative (d20{{ dexMod >= 0 ? "+" : ""
+                                }}{{ dexMod }})
+                            </button>
+                            <button
+                                class="cs-icon-btn"
+                                title="Enter manually"
+                                @click="startEditInitiative"
+                            >
+                                <svg
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                >
+                                    <path
+                                        d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                                    />
+                                    <path
+                                        d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="cs-luck-block">
                     <div class="cs-luck-header">
                         <span class="cs-section-label">Luck</span>
@@ -1212,120 +1274,34 @@
                 </div>
 
                 <div class="cs-list">
-                    <TransitionGroup name="gear-move" tag="div" class="cs-list-inner">
-                    <div
-                        v-for="(item, gearIdx) in sortedGear"
-                        :key="item.instanceId"
-                        class="cs-list-item"
-                        :class="{ disabled: item.disabled }"
+                    <TransitionGroup
+                        name="gear-move"
+                        tag="div"
+                        class="cs-list-inner"
                     >
-                        <template v-if="editingGearId !== item.instanceId">
-                            <div
-                                style="display: flex; align-items: stretch"
-                                class="cs-list-group"
-                            >
-                                <div v-if="canEdit" class="cs-gear-move-col">
-                                    <button
-                                        class="cs-gear-move-btn"
-                                        title="Move up"
-                                        :disabled="gearIdx === 0"
-                                        @click="
-                                            characterStore.moveGearItem(
-                                                item.instanceId,
-                                                -1,
-                                            )
-                                        "
-                                    >
-                                        <svg
-                                            width="10"
-                                            height="10"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2.5"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                        >
-                                            <path d="M18 15l-6-6-6 6" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        class="cs-gear-move-btn"
-                                        title="Move down"
-                                        :disabled="
-                                            gearIdx === sortedGear.length - 1
-                                        "
-                                        @click="
-                                            characterStore.moveGearItem(
-                                                item.instanceId,
-                                                1,
-                                            )
-                                        "
-                                    >
-                                        <svg
-                                            width="10"
-                                            height="10"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2.5"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                        >
-                                            <path d="M6 9l6 6 6-6" />
-                                        </svg>
-                                    </button>
-                                </div>
+                        <div
+                            v-for="(item, gearIdx) in sortedGear"
+                            :key="item.instanceId"
+                            class="cs-list-item"
+                            :class="{ disabled: item.disabled }"
+                        >
+                            <template v-if="editingGearId !== item.instanceId">
                                 <div
-                                    style="
-                                        flex: 1;
-                                        display: flex;
-                                        align-items: flex-start;
-                                        gap: 8px;
-                                        padding: 6px 8px;
-                                    "
+                                    style="display: flex; align-items: stretch"
+                                    class="cs-list-group"
                                 >
-                                    <div style="flex: 1; min-width: 0">
-                                        <div
-                                            class="cs-list-title"
-                                            :class="{
-                                                strikethrough: item.disabled,
-                                            }"
-                                        >
-                                            {{ item.name }}
-                                        </div>
-                                        <div class="cs-list-sub">
-                                            {{ item.slots }} slot{{
-                                                item.slots !== 1 ? "s" : ""
-                                            }}<span v-if="item.quantity > 1">
-                                                · ×{{ item.quantity }}</span
-                                            >
-                                        </div>
-                                    </div>
-                                    <span
-                                        class="cs-gear-badge"
-                                        :class="item.type"
-                                        >{{ item.type }}</span
-                                    >
                                     <div
                                         v-if="canEdit"
-                                        class="cs-list-controls"
-                                        style="opacity: 0"
+                                        class="cs-gear-move-col"
                                     >
                                         <button
-                                            class="cs-icon-btn"
-                                            :title="
-                                                item.disabled
-                                                    ? 'Enable'
-                                                    : 'Disable'
-                                            "
+                                            class="cs-gear-move-btn"
+                                            title="Move up"
+                                            :disabled="gearIdx === 0"
                                             @click="
-                                                characterStore.updateGearItem(
+                                                characterStore.moveGearItem(
                                                     item.instanceId,
-                                                    {
-                                                        disabled:
-                                                            !item.disabled,
-                                                    },
+                                                    -1,
                                                 )
                                             "
                                         >
@@ -1335,47 +1311,24 @@
                                                 viewBox="0 0 24 24"
                                                 fill="none"
                                                 stroke="currentColor"
-                                                stroke-width="2"
+                                                stroke-width="2.5"
                                                 stroke-linecap="round"
+                                                stroke-linejoin="round"
                                             >
-                                                <path
-                                                    d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-                                                />
-                                                <circle cx="12" cy="12" r="3" />
+                                                <path d="M18 15l-6-6-6 6" />
                                             </svg>
                                         </button>
                                         <button
-                                            class="cs-icon-btn"
-                                            title="Edit"
-                                            @click="startGearEdit(item)"
-                                        >
-                                            <svg
-                                                width="10"
-                                                height="10"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                                stroke-linecap="round"
-                                            >
-                                                <path
-                                                    d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
-                                                />
-                                                <path
-                                                    d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
-                                                />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            class="cs-icon-btn danger"
-                                            title="Delete"
+                                            class="cs-gear-move-btn"
+                                            title="Move down"
+                                            :disabled="
+                                                gearIdx ===
+                                                sortedGear.length - 1
+                                            "
                                             @click="
-                                                confirm(
-                                                    'Delete this item?',
-                                                    () =>
-                                                        characterStore.deleteGearItem(
-                                                            item.instanceId,
-                                                        ),
+                                                characterStore.moveGearItem(
+                                                    item.instanceId,
+                                                    1,
                                                 )
                                             "
                                         >
@@ -1385,79 +1338,215 @@
                                                 viewBox="0 0 24 24"
                                                 fill="none"
                                                 stroke="currentColor"
-                                                stroke-width="2"
+                                                stroke-width="2.5"
                                                 stroke-linecap="round"
+                                                stroke-linejoin="round"
                                             >
-                                                <polyline
-                                                    points="3 6 5 6 21 6"
-                                                />
-                                                <path
-                                                    d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
-                                                />
+                                                <path d="M6 9l6 6 6-6" />
                                             </svg>
                                         </button>
                                     </div>
-                                </div>
-                            </div>
-                        </template>
-                        <template v-else>
-                            <div class="cs-form-stack" style="padding: 8px">
-                                <input
-                                    v-model="editGearDraft.name"
-                                    placeholder="Item name"
-                                    class="cs-input"
-                                />
-                                <div style="display: flex; gap: 6px">
-                                    <label class="cs-form-label" style="flex: 1"
-                                        >Slots<input
-                                            v-model.number="editGearDraft.slots"
-                                            type="number"
-                                            min="0"
-                                            step="1"
-                                            class="cs-input"
-                                    /></label>
-                                    <label class="cs-form-label" style="flex: 1"
-                                        >Qty<input
-                                            v-model.number="
-                                                editGearDraft.quantity
-                                            "
-                                            type="number"
-                                            min="1"
-                                            class="cs-input"
-                                    /></label>
-                                    <label class="cs-form-label" style="flex: 1"
-                                        >Type
-                                        <select
-                                            v-model="editGearDraft.type"
-                                            class="cs-input"
+                                    <div
+                                        style="
+                                            flex: 1;
+                                            display: flex;
+                                            align-items: flex-start;
+                                            gap: 8px;
+                                            padding: 6px 8px;
+                                        "
+                                    >
+                                        <div style="flex: 1; min-width: 0">
+                                            <div
+                                                class="cs-list-title"
+                                                :class="{
+                                                    strikethrough:
+                                                        item.disabled,
+                                                }"
+                                            >
+                                                {{ item.name }}
+                                            </div>
+                                            <div class="cs-list-sub">
+                                                {{ item.slots }} slot{{
+                                                    item.slots !== 1 ? "s" : ""
+                                                }}<span
+                                                    v-if="item.quantity > 1"
+                                                >
+                                                    · ×{{ item.quantity }}</span
+                                                >
+                                            </div>
+                                        </div>
+                                        <span
+                                            class="cs-gear-badge"
+                                            :class="item.type"
+                                            >{{ item.type }}</span
                                         >
-                                            <option value="weapon">
-                                                Weapon
-                                            </option>
-                                            <option value="armor">Armor</option>
-                                            <option value="sundry">
-                                                Sundry
-                                            </option>
-                                        </select>
-                                    </label>
+                                        <div
+                                            v-if="canEdit"
+                                            class="cs-list-controls"
+                                            style="opacity: 0"
+                                        >
+                                            <button
+                                                class="cs-icon-btn"
+                                                :title="
+                                                    item.disabled
+                                                        ? 'Enable'
+                                                        : 'Disable'
+                                                "
+                                                @click="
+                                                    characterStore.updateGearItem(
+                                                        item.instanceId,
+                                                        {
+                                                            disabled:
+                                                                !item.disabled,
+                                                        },
+                                                    )
+                                                "
+                                            >
+                                                <svg
+                                                    width="10"
+                                                    height="10"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                >
+                                                    <path
+                                                        d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                                                    />
+                                                    <circle
+                                                        cx="12"
+                                                        cy="12"
+                                                        r="3"
+                                                    />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                class="cs-icon-btn"
+                                                title="Edit"
+                                                @click="startGearEdit(item)"
+                                            >
+                                                <svg
+                                                    width="10"
+                                                    height="10"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                >
+                                                    <path
+                                                        d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                                                    />
+                                                    <path
+                                                        d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                                                    />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                class="cs-icon-btn danger"
+                                                title="Delete"
+                                                @click="
+                                                    confirm(
+                                                        'Delete this item?',
+                                                        () =>
+                                                            characterStore.deleteGearItem(
+                                                                item.instanceId,
+                                                            ),
+                                                    )
+                                                "
+                                            >
+                                                <svg
+                                                    width="10"
+                                                    height="10"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                >
+                                                    <polyline
+                                                        points="3 6 5 6 21 6"
+                                                    />
+                                                    <path
+                                                        d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="cs-form-actions">
-                                    <button
-                                        class="cs-btn primary"
-                                        @click="saveGearEdit(item.instanceId)"
-                                    >
-                                        Save
-                                    </button>
-                                    <button
-                                        class="cs-btn ghost"
-                                        @click="editingGearId = null"
-                                    >
-                                        Cancel
-                                    </button>
+                            </template>
+                            <template v-else>
+                                <div class="cs-form-stack" style="padding: 8px">
+                                    <input
+                                        v-model="editGearDraft.name"
+                                        placeholder="Item name"
+                                        class="cs-input"
+                                    />
+                                    <div style="display: flex; gap: 6px">
+                                        <label
+                                            class="cs-form-label"
+                                            style="flex: 1"
+                                            >Slots<input
+                                                v-model.number="
+                                                    editGearDraft.slots
+                                                "
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                class="cs-input"
+                                        /></label>
+                                        <label
+                                            class="cs-form-label"
+                                            style="flex: 1"
+                                            >Qty<input
+                                                v-model.number="
+                                                    editGearDraft.quantity
+                                                "
+                                                type="number"
+                                                min="1"
+                                                class="cs-input"
+                                        /></label>
+                                        <label
+                                            class="cs-form-label"
+                                            style="flex: 1"
+                                            >Type
+                                            <select
+                                                v-model="editGearDraft.type"
+                                                class="cs-input"
+                                            >
+                                                <option value="weapon">
+                                                    Weapon
+                                                </option>
+                                                <option value="armor">
+                                                    Armor
+                                                </option>
+                                                <option value="sundry">
+                                                    Sundry
+                                                </option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <div class="cs-form-actions">
+                                        <button
+                                            class="cs-btn primary"
+                                            @click="
+                                                saveGearEdit(item.instanceId)
+                                            "
+                                        >
+                                            Save
+                                        </button>
+                                        <button
+                                            class="cs-btn ghost"
+                                            @click="editingGearId = null"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        </template>
-                    </div>
+                            </template>
+                        </div>
                     </TransitionGroup>
                     <button
                         v-if="canEdit"
@@ -2089,6 +2178,36 @@ function removeMagicItem(idx) {
     );
 }
 
+const dexMod = computed(() => {
+    const dex = char.value?.stats?.DEX;
+    return dex !== undefined ? statMod(dex) : 0;
+});
+
+const editingInitiative = ref(false);
+const initiativeDraft = ref(0);
+const initiativeInputRef = ref(null);
+
+function startEditInitiative() {
+    initiativeDraft.value = char.value?.initiative ?? 0;
+    editingInitiative.value = true;
+    nextTick(() => initiativeInputRef.value?.focus());
+}
+function saveInitiative() {
+    characterStore.updateField("initiative", Number(initiativeDraft.value));
+    editingInitiative.value = false;
+}
+async function rollInitiative() {
+    const result = await diceStore.rollDice(
+        { d20: 1 },
+        dexMod.value,
+        "Initiative",
+        characterStore.activeId,
+    );
+    if (result?.total != null) {
+        characterStore.updateField("initiative", result.total);
+    }
+}
+
 const STAT_NAMES = {
     STR: "Strength",
     DEX: "Dexterity",
@@ -2407,7 +2526,9 @@ button.cs-stat-val:hover {
     background: var(--paper-2, #e4d8c0);
     border: 1px solid var(--rule, #d4c4a8);
     overflow: hidden;
-    transition: opacity 0.12s, transform 0.18s ease;
+    transition:
+        opacity 0.12s,
+        transform 0.18s ease;
 }
 .cs-list-item.disabled {
     opacity: 0.45;
@@ -2764,5 +2885,29 @@ button.cs-clickable:hover {
 .cs-gear-move-btn:disabled {
     color: var(--rule-strong, #c8baa0);
     cursor: default;
+}
+
+.cs-initiative-block {
+    padding: 8px 0 4px;
+    border-bottom: 1px solid var(--rule, #d4c4a8);
+    margin-bottom: 4px;
+}
+.cs-initiative-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.cs-initiative-val {
+    font-family: var(--font-mono, monospace);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ink, #1a1410);
+    min-width: 28px;
+}
+.cs-initiative-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
 }
 </style>

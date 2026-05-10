@@ -28,8 +28,8 @@ export function parseAttack(str) {
 }
 
 export const useCharacterStore = defineStore('character', () => {
-  // Keyed save timers so editing char A then switching to char B doesn't cancel A's save
   const _saveTimers = new Map()
+  const _broadcastTimers = new Map()
   let _realtimeChannel = null
 
   const characters = ref([])
@@ -117,7 +117,11 @@ export const useCharacterStore = defineStore('character', () => {
       const existing = memberSelections.value.find(m => m.user_id === userId)
       if (existing) existing.active_character_id = id ?? null
       else memberSelections.value = [...memberSelections.value, { user_id: userId, active_character_id: id ?? null }]
-      // Persist to DB so other players see this user's selection
+      _realtimeChannel?.send({
+        type: 'broadcast',
+        event: 'active_character_changed',
+        payload: { userId, characterId: id ?? null },
+      })
       supabase.from('session_members').upsert(
         { session_id: currentSessionId.value, user_id: userId, active_character_id: id ?? null },
         { onConflict: 'session_id,user_id' },
@@ -166,6 +170,7 @@ export const useCharacterStore = defineStore('character', () => {
       c.id === activeId.value ? { ...c, data: { ...c.data, [field]: value } } : c
     )
     _scheduleSave(activeId.value)
+    _scheduleBroadcast(activeId.value)
   }
 
   function adjustHp(delta) {
@@ -286,6 +291,21 @@ export const useCharacterStore = defineStore('character', () => {
     updateField('luckTokens', { ...luck, current: Math.max(0, Math.min(luck.max, luck.current + delta)) })
   }
 
+  async function clearAllInitiative() {
+    if (!currentSessionId.value) return
+    characters.value = characters.value.map(c => ({
+      ...c,
+      data: { ...c.data, initiative: null },
+    }))
+    _realtimeChannel?.send({
+      type: 'broadcast',
+      event: 'initiative_cleared',
+      payload: {},
+    })
+    const { error } = await supabase.rpc('clear_initiative', { p_session_id: currentSessionId.value })
+    if (error) console.error('clearAllInitiative:', error.message)
+  }
+
   function setMaxLuck(max) {
     if (!character.value) return
     const luck = character.value.luckTokens ?? { current: 1, max: 3 }
@@ -330,9 +350,13 @@ export const useCharacterStore = defineStore('character', () => {
         filter: `session_id=eq.${sessionId}`,
       }, ({ new: updated }) => {
         if (updated.id === activeId.value) return  // we're the source of truth for our own
-        characters.value = characters.value.map(c =>
-          c.id === updated.id ? { ...c, data: _augment(updated.data) } : c
-        )
+        if (characters.value.some(c => c.id === updated.id)) {
+          characters.value = characters.value.map(c =>
+            c.id === updated.id ? { ...c, data: _augment(updated.data) } : c
+          )
+        } else {
+          characters.value = [...characters.value, { ...updated, data: _augment(updated.data) }]
+        }
       })
       .on('postgres_changes', {
         event: 'DELETE',
@@ -380,6 +404,31 @@ export const useCharacterStore = defineStore('character', () => {
         _pushLuckEvent(payload)
         playLuckSound()
       })
+      .on('broadcast', { event: 'character_updated' }, ({ payload }) => {
+        const { characterId, data } = payload
+        if (characterId === activeId.value) return
+        if (characters.value.some(c => c.id === characterId)) {
+          characters.value = characters.value.map(c =>
+            c.id === characterId ? { ...c, data: _augment(data) } : c
+          )
+        } else {
+          characters.value = [...characters.value, { id: characterId, data: _augment(data) }]
+        }
+      })
+      .on('broadcast', { event: 'initiative_cleared' }, () => {
+        characters.value = characters.value.map(c => ({
+          ...c,
+          data: { ...c.data, initiative: null },
+        }))
+      })
+      .on('broadcast', { event: 'active_character_changed' }, async ({ payload }) => {
+        const { userId, characterId } = payload
+        const idx = memberSelections.value.findIndex(m => m.user_id === userId)
+        const entry = { user_id: userId, active_character_id: characterId }
+        if (idx !== -1) memberSelections.value[idx] = entry
+        else memberSelections.value = [...memberSelections.value, entry]
+        await _fetchMissingChars([characterId])
+      })
       .subscribe()
   }
 
@@ -401,9 +450,25 @@ export const useCharacterStore = defineStore('character', () => {
     _saveTimers.set(charId, setTimeout(() => _saveCharacter(charId), 800))
   }
 
+  function _scheduleBroadcast(charId) {
+    if (_broadcastTimers.has(charId)) clearTimeout(_broadcastTimers.get(charId))
+    _broadcastTimers.set(charId, setTimeout(() => {
+      const char = characters.value.find(c => c.id === charId)
+      if (!char) return
+      _realtimeChannel?.send({
+        type: 'broadcast',
+        event: 'character_updated',
+        payload: { characterId: charId, data: char.data },
+      })
+      _broadcastTimers.delete(charId)
+    }, 100))
+  }
+
   function cleanup() {
     for (const timer of _saveTimers.values()) clearTimeout(timer)
     _saveTimers.clear()
+    for (const timer of _broadcastTimers.values()) clearTimeout(timer)
+    _broadcastTimers.clear()
     if (_realtimeChannel) { supabase.removeChannel(_realtimeChannel); _realtimeChannel = null }
     characters.value = []
     activeId.value = null
@@ -420,7 +485,7 @@ export const useCharacterStore = defineStore('character', () => {
     loadAll, setActive, importCharacter, deleteCharacter,
     updateField, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
     addGearItem, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
-    spendLuckToken, adjustLuck, setMaxLuck,
+    spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative,
     cleanup,
   }
 })

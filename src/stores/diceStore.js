@@ -99,6 +99,7 @@ export const useDiceStore = defineStore('dice', () => {
 
       rolls.value = [data, ...rolls.value].slice(0, HISTORY_LIMIT)
       playDiceSound()
+      return data
     } finally {
       pendingRoll.value = null
     }

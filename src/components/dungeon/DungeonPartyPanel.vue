@@ -62,6 +62,16 @@
         </div>
 
         <div v-if="!collapsed" class="ds-party-body">
+            <div v-if="hasInitiative" class="ds-initiative-bar">
+                <span>Initiative order</span>
+                <button
+                    v-if="isGM"
+                    class="ds-clear-initiative"
+                    @click="characterStore.clearAllInitiative()"
+                >
+                    Clear
+                </button>
+            </div>
             <div
                 v-if="!partyCards.length"
                 style="
@@ -77,7 +87,7 @@
             </div>
             <div class="ds-party-grid">
                 <div
-                    v-for="card in partyCards"
+                    v-for="card in sortedPartyCards"
                     :key="card.userId"
                     class="ds-player-card"
                     :class="{ me: card.userId === authStore.user?.id }"
@@ -86,12 +96,17 @@
                     <div style="display: flex; align-items: center; gap: 6px">
                         <div class="ds-pc-dot" />
                         <span class="ds-pc-name">{{ card.displayName }}</span>
-                        <div
-                            v-if="isOnline(card.userId)"
-                            class="ds-online-dot"
-                            style="margin-left: auto"
-                            title="Online"
-                        />
+                        <div style="display: flex; align-items: center; gap: 4px; margin-left: auto">
+                            <span
+                                v-if="hasInitiative && card.char?.data?.initiative != null"
+                                class="ds-initiative-score"
+                            >{{ card.char.data.initiative }}</span>
+                            <div
+                                v-if="isOnline(card.userId)"
+                                class="ds-online-dot"
+                                title="Online"
+                            />
+                        </div>
                     </div>
                     <div v-if="card.char?.data?.name" class="ds-pc-role">
                         {{ card.char.data.name }}
@@ -151,6 +166,7 @@ import { playerColorFor } from "@/composables/usePlayerColor.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 
 const characterStore = useCharacterStore();
+
 const sessionStore = useSessionStore();
 const authStore = useAuthStore();
 
@@ -201,6 +217,21 @@ function onDragUp() {
 onUnmounted(() => {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragUp);
+});
+
+const isGM = computed(() => authStore.user?.id === sessionStore.sessionOwnerId);
+
+const hasInitiative = computed(() =>
+    partyCards.value.some((c) => c.char?.data?.initiative != null),
+);
+
+const sortedPartyCards = computed(() => {
+    if (!hasInitiative.value) return partyCards.value;
+    return [...partyCards.value].sort((a, b) => {
+        const ai = a.char?.data?.initiative ?? -Infinity;
+        const bi = b.char?.data?.initiative ?? -Infinity;
+        return bi - ai;
+    });
 });
 
 const onlineUserIds = computed(

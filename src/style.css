@@ -683,6 +683,10 @@ textarea.ds-input { font-family: var(--font-body); font-style: normal; font-size
 .ds-hp-row { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
 .ds-hp-bar { flex: 1; height: 4px; background: var(--paper-3); position: relative; overflow: hidden; }
 .ds-hp-bar > span { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #6b3a2a, var(--player-color, var(--accent))); display: block; transition: width .3s; }
+.ds-initiative-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; background: var(--paper-2); border-bottom: 1px solid var(--rule); font-family: var(--font-zine); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
+.ds-clear-initiative { font-family: var(--font-zine); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-mute); background: none; border: 1px solid var(--rule); border-radius: 3px; padding: 1px 6px; cursor: pointer; transition: color .1s, border-color .1s; }
+.ds-clear-initiative:hover { color: var(--ink); border-color: var(--ink-soft); }
+.ds-initiative-score { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--player-color, var(--ink)); min-width: 18px; text-align: right; }
 
 /* tweaks panel */
 .ds-tweaks-panel {
