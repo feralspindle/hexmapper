@@ -989,7 +989,9 @@
                             margin-bottom: 5px;
                         "
                     >
-                        <span class="cs-section-label">Gear Slots</span>
+                        <span class="cs-section-label" style="color: var(--ink)"
+                            >Gear Slots</span
+                        >
                         <div
                             style="
                                 display: flex;
@@ -1057,29 +1059,38 @@
                             }"
                         />
                     </div>
-                    <button
-                        v-if="canEdit"
-                        class="cs-add-btn"
-                        style="margin-top: 8px"
-                        @click="showAddGear = !showAddGear"
-                    >
-                        + Add Gear
-                    </button>
                 </div>
 
                 <div
                     style="padding-top: 10px; border-top: 1px solid var(--rule)"
                 >
-                    <span
-                        class="cs-section-label"
-                        style="display: inline; margin-bottom: 6px"
-                        >Rations<template v-if="rationSlots">
+                    <div
+                        style="
+                            font-family: var(
+                                --font-zine,
+                                &quot;Special Elite&quot;,
+                                serif
+                            );
+                            font-size: 11px;
+                            letter-spacing: 0.08em;
+                            text-transform: uppercase;
+                            color: var(--ink);
+                            margin-bottom: 8px;
+                        "
+                    >
+                        Rations<template v-if="rationSlots">
                             — {{ rationSlots }} slot{{
                                 rationSlots !== 1 ? "s" : ""
                             }}</template
-                        ></span
+                        >
+                    </div>
+                    <div
+                        style="
+                            display: flex;
+
+                            gap: 6px;
+                        "
                     >
-                    <div style="display: flex; align-items: center; gap: 6px">
                         <button
                             v-if="canEdit"
                             class="cs-adj-btn"
@@ -1099,7 +1110,7 @@
                                 min-width: 20px;
                                 text-align: center;
                             "
-                            >{{ char.rations ?? 0 }}</span
+                            >{{ char.rations ?? 0 }} 🍫</span
                         >
                         <button
                             v-if="canEdit"
@@ -1124,6 +1135,19 @@
                             >(3 per slot)</span
                         >
                     </div>
+                    <button
+                        v-if="canEdit"
+                        class="cs-add-btn"
+                        style="margin-top: 6px font-size: 12px;"
+                        @click="
+                            characterStore.updateField(
+                                'rations',
+                                (char.rations ?? 0) + 3,
+                            )
+                        "
+                    >
+                        + Add 3-pack of rations
+                    </button>
                 </div>
 
                 <div v-if="showAddGear && canEdit" class="cs-info-block">
@@ -1433,6 +1457,14 @@
                             </div>
                         </template>
                     </div>
+                    <button
+                        v-if="canEdit"
+                        class="cs-add-btn"
+                        style="margin-top: 8px"
+                        @click="showAddGear = !showAddGear"
+                    >
+                        + Add Gear
+                    </button>
                 </div>
 
                 <div v-if="char.treasures?.length || canEdit">
