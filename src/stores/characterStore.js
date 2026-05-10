@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
+import { playLuckSound } from '@/lib/diceSound.js'
 
 export function statMod(value) {
   return Math.floor((value - 10) / 2)
@@ -270,6 +271,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (luck.current <= 0) return
     const characterName = character.value.name ?? 'Adventurer'
     updateField('luckTokens', { ...luck, current: luck.current - 1 })
+    playLuckSound()
     _pushLuckEvent({ characterName, characterId: activeId.value })
     _realtimeChannel?.send({
       type: 'broadcast',
@@ -376,6 +378,7 @@ export const useCharacterStore = defineStore('character', () => {
       })
       .on('broadcast', { event: 'luck_spent' }, ({ payload }) => {
         _pushLuckEvent(payload)
+        playLuckSound()
       })
       .subscribe()
   }

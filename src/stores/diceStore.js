@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
+import { playDiceSound } from '@/lib/diceSound.js'
 
 const DICE_ORDER = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
 const HISTORY_LIMIT = 60
@@ -97,6 +98,7 @@ export const useDiceStore = defineStore('dice', () => {
       }
 
       rolls.value = [data, ...rolls.value].slice(0, HISTORY_LIMIT)
+      playDiceSound()
     } finally {
       pendingRoll.value = null
     }

@@ -21,7 +21,7 @@
             </svg>
 
             <h4>Party Inventory</h4>
-            <span class="ds-party-meta">{{ allGear.length }} items</span>
+            <span class="ds-party-meta">{{ allGear.length }} {{ allGear.length === 1 ? 'item' : 'items' }}</span>
 
             <button
                 class="ds-panel-action"
@@ -60,8 +60,8 @@
             <div v-if="!allGear.length" class="ds-inv-empty">No gear in the party</div>
             <div v-for="(item, i) in allGear" :key="i" class="ds-inv-row">
                 <span class="ds-inv-name">{{ item.itemName }}</span>
-                <span class="ds-inv-qty">{{ item.quantity > 1 ? `×${item.quantity}` : '' }}</span>
-                <span class="ds-inv-char">{{ item.characterName }}</span>
+                <span class="ds-inv-qty">{{ item.totalQty > 1 ? `×${item.totalQty}` : '' }}</span>
+                <span class="ds-inv-char">{{ item.ownerLabel }}</span>
             </div>
         </div>
     </div>
@@ -120,20 +120,26 @@ onUnmounted(() => {
 })
 
 const allGear = computed(() => {
-    const items = []
+    const map = new Map()
     for (const char of characterStore.characters) {
         const charName = char.data?.name || 'Unknown'
         for (const item of (char.data?.gear ?? [])) {
             if (item.disabled) continue
-            items.push({
-                itemName: item.name,
-                characterName: charName,
-                quantity: item.quantity ?? 1,
-            })
+            const key = item.name.trim().toLowerCase()
+            const qty = item.quantity ?? 1
+            if (!map.has(key)) map.set(key, { itemName: item.name, totalQty: 0, owners: [] })
+            const entry = map.get(key)
+            entry.totalQty += qty
+            entry.owners.push({ name: charName, quantity: qty })
         }
     }
-    return items.sort((a, b) =>
-        a.itemName.localeCompare(b.itemName, undefined, { sensitivity: 'base' })
-    )
+    return [...map.values()]
+        .sort((a, b) => a.itemName.localeCompare(b.itemName, undefined, { sensitivity: 'base' }))
+        .map(entry => ({
+            ...entry,
+            ownerLabel: entry.owners
+                .map(o => o.quantity > 1 ? `${o.name} ×${o.quantity}` : o.name)
+                .join(' · '),
+        }))
 })
 </script>

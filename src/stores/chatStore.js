@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
+import { playChatSound } from '@/lib/diceSound.js'
 
 export const useChatStore = defineStore('chat', () => {
   const messages      = ref([])
@@ -33,6 +34,7 @@ export const useChatStore = defineStore('chat', () => {
           messages.value = [...messages.value, row]
           if (messages.value.length > 100) messages.value = messages.value.slice(-100)
           latestMessage.value = row
+          playChatSound()
         },
       )
       .subscribe()
@@ -70,6 +72,7 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       messages.value = messages.value.map(m => m.id === tempId ? data : m)
       latestMessage.value = data
+      playChatSound()
     }
   }
 
