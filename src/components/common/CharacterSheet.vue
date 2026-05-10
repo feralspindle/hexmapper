@@ -1212,6 +1212,7 @@
                 </div>
 
                 <div class="cs-list">
+                    <TransitionGroup name="gear-move" tag="div" class="cs-list-inner">
                     <div
                         v-for="(item, gearIdx) in sortedGear"
                         :key="item.instanceId"
@@ -1457,6 +1458,7 @@
                             </div>
                         </template>
                     </div>
+                    </TransitionGroup>
                     <button
                         v-if="canEdit"
                         class="cs-add-btn"
@@ -2396,11 +2398,16 @@ button.cs-stat-val:hover {
     flex-direction: column;
     gap: 4px;
 }
+.cs-list-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
 .cs-list-item {
     background: var(--paper-2, #e4d8c0);
     border: 1px solid var(--rule, #d4c4a8);
     overflow: hidden;
-    transition: opacity 0.12s;
+    transition: opacity 0.12s, transform 0.18s ease;
 }
 .cs-list-item.disabled {
     opacity: 0.45;
