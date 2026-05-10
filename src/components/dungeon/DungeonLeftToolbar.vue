@@ -83,6 +83,14 @@
       <span class="ds-tool-label">Party</span>
       <button
         class="ds-tool"
+        :aria-pressed="partyVisible ? 'true' : 'false'"
+        @click="toggleParty()"
+      >
+        <component :is="PartyIcon" :size="18" />
+        <span class="ds-tip">Party panel</span>
+      </button>
+      <button
+        class="ds-tool"
         :aria-pressed="inventoryVisible ? 'true' : 'false'"
         @click="toggleInventory()"
       >
@@ -99,10 +107,12 @@ import { h } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { useGroupInventory } from '@/composables/useGroupInventory.js'
+import { usePartyPanel } from '@/composables/usePartyPanel.js'
 
 const dungeonStore = useD()
 const { confirm } = useConfirmDialog()
 const { visible: inventoryVisible, toggle: toggleInventory } = useGroupInventory()
+const { visible: partyVisible, toggle: toggleParty } = usePartyPanel()
 
 const emit = defineEmits(['zoom-in', 'zoom-out', 'zoom-reset'])
 
@@ -119,6 +129,7 @@ const MoveIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24
 const TrashIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'})]) }
 const UndoIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polyline',{points:'9 14 4 9 9 4'}),h('path',{d:'M20 20v-7a4 4 0 0 0-4-4H4'})]) }
 const BagIcon     = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M9 9V7a3 3 0 016 0v2'}),h('rect',{x:4,y:9,width:16,height:12,rx:2})]) }
+const PartyIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2'}),h('circle',{cx:9,cy:7,r:4}),h('path',{d:'M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75'})]) }
 
 const selectionTools = [
   { mode: 'select',   icon: CursorIcon,   label: 'Select',   key: 'V' },

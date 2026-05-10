@@ -1,30 +1,6 @@
 <template>
-    <button
-        v-if="hidden"
-        class="ds-party-reopen"
-        :style="{ left: `${pos.x}px`, top: `${pos.y + 32}px` }"
-        @mousedown.stop="startDrag"
-        @click="reopenClick"
-    >
-        <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-        >
-            <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-        </svg>
-        Party · {{ onlineCount }}
-    </button>
-
     <div
-        v-else
+        v-if="partyVisible"
         class="ds-party-panel"
         :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
     >
@@ -70,7 +46,7 @@
                 </svg>
             </button>
 
-            <button class="ds-panel-action" @click.stop="hidden = true">
+            <button class="ds-panel-action" @click.stop="closeParty()">
                 <svg
                     width="10"
                     height="10"
@@ -172,17 +148,19 @@ import { useCharacterStore } from "@/stores/characterStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
+import { usePartyPanel } from "@/composables/usePartyPanel.js";
 
 const characterStore = useCharacterStore();
 const sessionStore = useSessionStore();
 const authStore = useAuthStore();
+
+const { visible: partyVisible, close: closeParty } = usePartyPanel();
 
 const STORAGE_KEY = "dm.partyPanel.pos";
 const DEFAULT_POS = { x: 80, y: 88 };
 
 const pos = ref({ ...DEFAULT_POS });
 const collapsed = ref(false);
-const hidden = ref(false);
 
 onMounted(() => {
     try {
@@ -196,10 +174,8 @@ function persistPos() {
 }
 
 let dragStart = null;
-let didDrag = false;
 
 function startDrag(e) {
-    didDrag = false;
     dragStart = {
         mx: e.clientX,
         my: e.clientY,
@@ -211,8 +187,6 @@ function startDrag(e) {
 }
 function onDragMove(e) {
     if (!dragStart) return;
-    if (Math.hypot(e.clientX - dragStart.mx, e.clientY - dragStart.my) > 3)
-        didDrag = true;
     pos.value = {
         x: Math.max(0, dragStart.px + (e.clientX - dragStart.mx)),
         y: Math.max(0, dragStart.py + (e.clientY - dragStart.my)),
@@ -223,13 +197,6 @@ function onDragUp() {
     persistPos();
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragUp);
-}
-function reopenClick() {
-    if (didDrag) {
-        didDrag = false;
-        return;
-    }
-    hidden.value = false;
 }
 onUnmounted(() => {
     window.removeEventListener("mousemove", onDragMove);
