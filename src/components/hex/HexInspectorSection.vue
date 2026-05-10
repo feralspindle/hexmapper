@@ -412,6 +412,97 @@
                 </template>
             </div>
 
+            <div v-if="sessionStore.isGM || childMapsForSelectedHex.length">
+                <span class="ds-field-label">Child Maps</span>
+                <div
+                    style="
+                        display: flex;
+                        flex-direction: column;
+                        gap: 4px;
+                        margin-top: 4px;
+                    "
+                >
+                    <div
+                        v-for="m in childMapsForSelectedHex"
+                        :key="m.id"
+                        class="hm-content-card"
+                    >
+                        <div class="hm-content-card-head">
+                            <div class="hm-stamp">
+                                <svg
+                                    width="13"
+                                    height="13"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.6"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />
+                                </svg>
+                            </div>
+                            <span
+                                style="
+                                    font-family: var(--font-body);
+                                    font-size: 13px;
+                                    color: var(--ink-2);
+                                    flex: 1;
+                                    overflow: hidden;
+                                    text-overflow: ellipsis;
+                                    white-space: nowrap;
+                                "
+                            >{{ m.name }}</span>
+                            <button
+                                style="
+                                    font-family: var(--font-mono);
+                                    font-size: 10px;
+                                    letter-spacing: 0.06em;
+                                    color: var(--accent-2);
+                                    background: none;
+                                    border: none;
+                                    cursor: pointer;
+                                    flex-shrink: 0;
+                                    white-space: nowrap;
+                                "
+                                @click="mapStore.setActiveMap(m.id)"
+                            >
+                                Enter →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <template v-if="sessionStore.isGM">
+                    <div
+                        v-if="addingChildMap"
+                        style="display: flex; gap: 6px; margin-top: 6px"
+                    >
+                        <input
+                            ref="childMapNameEl"
+                            v-model="newChildMapName"
+                            type="text"
+                            placeholder="Map name…"
+                            class="ds-input"
+                            style="flex: 1; font-size: 13px"
+                            @keyup.enter="confirmNewChildMap"
+                            @keyup.escape="addingChildMap = false"
+                        />
+                        <button class="ds-btn" @click="confirmNewChildMap">
+                            Add
+                        </button>
+                    </div>
+                    <button
+                        v-else
+                        class="hm-dashed-btn"
+                        style="margin-top: 6px"
+                        @click="startAddChildMap"
+                    >
+                        + Add Child Map
+                    </button>
+                </template>
+            </div>
+
             <div style="padding-top: 4px; border-top: 1px solid var(--rule)">
                 <button
                     class="hm-ghost-btn hm-ghost-btn--danger"
@@ -438,6 +529,7 @@ import {
     MARKER_KINDS,
     parseMarkers,
 } from "@/stores/hexStore.js";
+import { useMapStore } from "@/stores/mapStore.js";
 import { useNotesStore } from "@/stores/notesStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
@@ -446,6 +538,7 @@ import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
 
 const hexStore = useHexStore();
+const mapStore = useMapStore();
 const notesStore = useNotesStore();
 const sessionStore = useSessionStore();
 const authStore = useAuthStore();
@@ -462,6 +555,9 @@ const addingDungeon = ref(false);
 const newDungeonName = ref("");
 const dungeonNameEl = ref(null);
 const notesLogEl = ref(null);
+const addingChildMap = ref(false);
+const newChildMapName = ref("");
+const childMapNameEl = ref(null);
 
 const panelTitle = computed(() => {
     if (!hexStore.selectedHex) return "Hex Inspector";
@@ -484,6 +580,7 @@ watch(
         hexTerrain.value = cell?.terrain_type ?? null;
         hexMarkers.value = parseMarkers(cell?.marker_color);
         addingDungeon.value = false;
+        addingChildMap.value = false;
         hexStore.fetchDungeonsForHex(cell?.id ?? null);
         notesStore.initForHex(cell?.id ?? null, sessionStore.sessionId);
         if (cell) open.value = true;
@@ -580,6 +677,34 @@ function confirmNewDungeon() {
     const name = newDungeonName.value.trim() || "Unnamed Dungeon";
     addingDungeon.value = false;
     hexStore.createDungeon(q, r, name);
+}
+
+const childMapsForSelectedHex = computed(() => {
+    const cellId = hexStore.selectedCell?.id;
+    if (!cellId) return [];
+    return mapStore.childMapsByHexId.get(cellId) ?? [];
+});
+
+async function startAddChildMap() {
+    addingChildMap.value = true;
+    newChildMapName.value = "";
+    await nextTick();
+    childMapNameEl.value?.focus();
+}
+
+async function confirmNewChildMap() {
+    if (!hexStore.selectedHex) return;
+    const { q, r } = hexStore.selectedHex;
+    const name = newChildMapName.value.trim() || "Unnamed Map";
+    addingChildMap.value = false;
+
+    let cellId = hexStore.selectedCell?.id;
+    if (!cellId) {
+        cellId = await hexStore.ensureCellExists(q, r);
+    }
+    if (!cellId) return;
+
+    await mapStore.createChildMap(cellId, name);
 }
 
 onUnmounted(() => notesStore.cleanup());

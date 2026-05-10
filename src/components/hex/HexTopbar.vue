@@ -32,6 +32,27 @@
       <button class="hm-switch-btn" @click="$emit('switch-mode')">Switch</button>
     </div>
 
+    <nav
+      v-if="visibleAncestors.length"
+      :title="fullBreadcrumbPath"
+      style="display:flex;align-items:center;gap:4px;margin-left:8px;font-family:var(--font-mono);font-size:10px;letter-spacing:0.04em;color:rgba(237,225,199,.45);min-width:0;overflow:hidden"
+    >
+      <template v-for="(segment, i) in visibleAncestors" :key="segment.id ?? segment.ellipsis">
+        <span v-if="i > 0" style="opacity:.4;flex-shrink:0">/</span>
+        <span
+          v-if="segment.ellipsis"
+          style="opacity:.4;flex-shrink:0"
+        >…</span>
+        <button
+          v-else
+          style="background:none;border:none;cursor:pointer;color:rgba(237,225,199,.55);font-family:var(--font-mono);font-size:10px;letter-spacing:0.04em;padding:0;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1"
+          @click="mapStore.setActiveMap(segment.id)"
+        >{{ segment.name }}</button>
+      </template>
+      <span style="opacity:.4;flex-shrink:0">/</span>
+      <span style="color:rgba(237,225,199,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;flex-shrink:1">{{ mapStore.activeMap?.name }}</span>
+    </nav>
+
     <div style="flex:1" />
 
     <div class="ds-presence" style="margin-right:12px">
@@ -104,6 +125,7 @@ import { ref, computed, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
+import { useMapStore } from '@/stores/mapStore.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import ShareModal from '@/components/common/ShareModal.vue'
 import BugReportButton from '@/components/common/BugReportButton.vue'
@@ -118,6 +140,7 @@ const emit = defineEmits(['switch-mode', 'toggle-char'])
 
 const sessionStore = useSessionStore()
 const authStore    = useAuthStore()
+const mapStore     = useMapStore()
 
 const editing     = ref(false)
 const nameInput   = ref('')
@@ -131,6 +154,18 @@ function playerColor(userId) {
 const visibleOnlineUsers = computed(() =>
   sessionStore.onlineUsers.slice(0, 6)
 )
+
+const visibleAncestors = computed(() => {
+  const chain = mapStore.ancestorChain()
+  if (chain.length <= 2) return chain
+  return [chain[0], { ellipsis: true }, chain[chain.length - 1]]
+})
+
+const fullBreadcrumbPath = computed(() => {
+  const parts = mapStore.ancestorChain().map(a => a.name)
+  parts.push(mapStore.activeMap?.name ?? '')
+  return parts.join(' / ')
+})
 
 function startEdit() {
   nameInput.value = sessionStore.sessionName

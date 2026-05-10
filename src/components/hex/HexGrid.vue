@@ -53,6 +53,12 @@
                             hexStore.partyHex?.q === coord.q &&
                             hexStore.partyHex?.r === coord.r
                         "
+                        :has-child-map="
+                            !!hexStore.hexCells.get(`${coord.q}:${coord.r}`)?.id &&
+                            mapStore.childMapsByHexId.has(
+                                hexStore.hexCells.get(`${coord.q}:${coord.r}`)?.id
+                            )
+                        "
                         :is-g-m="isGM"
                         :fog-mode="fogMode"
                         :image-mode="imageMode"
@@ -98,6 +104,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useHexStore } from "@/stores/hexStore.js";
+import { useMapStore } from "@/stores/mapStore.js";
 import { HEX_SIZE, hexToPixel, hexCorners, cornersToPoints } from "@/composables/useHexGeometry.js";
 import HexCell from "./HexCell.vue";
 
@@ -129,6 +136,7 @@ const emit = defineEmits([
 ]);
 
 const hexStore = useHexStore();
+const mapStore = useMapStore();
 
 const containerEl = ref(null);
 const svgEl = ref(null);

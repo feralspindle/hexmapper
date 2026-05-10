@@ -28,50 +28,51 @@
         <div v-if="mapStore.loading" class="px-3 py-3 text-sm text-stone-500">Loading…</div>
 
         <template v-else>
-          <button
-            v-for="map in mapStore.maps"
-            :key="map.id"
-            class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-stone-700 transition-colors text-left group"
-            @click="selectMap(map.id)"
-          >
-            <span
-              :title="map.id === sessionStore.activeMapId ? 'Live — players see this map' : ''"
-              :class="[
-                'w-2 h-2 rounded-full shrink-0 transition-colors',
-                map.id === sessionStore.activeMapId ? 'bg-green-400' : 'bg-stone-600',
-              ]"
+          <template v-for="map in rootMaps" :key="map.id">
+            <MapPickerRow
+              :map="map"
+              :renaming-id="renamingId"
+              :rename-draft="renameDraft"
+              :can-delete="mapStore.maps.length > 1"
+              :indent="0"
+              @select="selectMap(map.id)"
+              @start-rename="startRename(map)"
+              @commit-rename="commitRename(map.id)"
+              @cancel-rename="renamingId = null"
+              @update-draft="renameDraft = $event"
+              @delete="confirmDelete(map)"
             />
-
-            <input
-              v-if="renamingId === map.id"
-              ref="renameInputEl"
-              v-model="renameDraft"
-              class="flex-1 bg-stone-600 border border-parchment-500 rounded px-1.5 py-0.5 text-sm text-stone-100 focus:outline-none"
-              @keydown.enter="commitRename(map.id)"
-              @keydown.escape="renamingId = null"
-              @blur="commitRename(map.id)"
-              @click.stop
-            />
-            <span v-else class="flex-1 text-sm text-stone-200 truncate">{{ map.name }}</span>
-
-            <button
-              v-if="renamingId !== map.id"
-              class="opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center text-stone-500 hover:text-stone-200 transition-colors shrink-0"
-              title="Rename"
-              @click.stop="startRename(map)"
-            >
-              <i class="fa-solid fa-pencil text-[9px]" />
-            </button>
-
-            <button
-              v-if="mapStore.maps.length > 1 && renamingId !== map.id"
-              class="opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center text-stone-500 hover:text-red-400 transition-colors shrink-0"
-              title="Delete map"
-              @click.stop="confirmDelete(map)"
-            >
-              <i class="fa-solid fa-trash text-[9px]" />
-            </button>
-          </button>
+            <template v-for="child in childrenOf(map.id)" :key="child.id">
+              <MapPickerRow
+                :map="child"
+                :renaming-id="renamingId"
+                :rename-draft="renameDraft"
+                :can-delete="mapStore.maps.length > 1"
+                :indent="1"
+                @select="selectMap(child.id)"
+                @start-rename="startRename(child)"
+                @commit-rename="commitRename(child.id)"
+                @cancel-rename="renamingId = null"
+                @update-draft="renameDraft = $event"
+                @delete="confirmDelete(child)"
+              />
+              <template v-for="grandchild in childrenOf(child.id)" :key="grandchild.id">
+                <MapPickerRow
+                  :map="grandchild"
+                  :renaming-id="renamingId"
+                  :rename-draft="renameDraft"
+                  :can-delete="mapStore.maps.length > 1"
+                  :indent="2"
+                  @select="selectMap(grandchild.id)"
+                  @start-rename="startRename(grandchild)"
+                  @commit-rename="commitRename(grandchild.id)"
+                  @cancel-rename="renamingId = null"
+                  @update-draft="renameDraft = $event"
+                  @delete="confirmDelete(grandchild)"
+                />
+              </template>
+            </template>
+          </template>
 
           <div class="border-t border-stone-700" />
 
@@ -89,14 +90,21 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { useMapStore } from '@/stores/mapStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
+import MapPickerRow from './MapPickerRow.vue'
 
 const mapStore     = useMapStore()
 const sessionStore = useSessionStore()
 const { confirm }  = useConfirmDialog()
+
+const rootMaps = computed(() => mapStore.maps.filter(m => !m.parent_map_id))
+
+function childrenOf(parentId) {
+  return mapStore.maps.filter(m => m.parent_map_id === parentId)
+}
 
 const open          = ref(false)
 const renamingId    = ref(null)

@@ -22,6 +22,33 @@ export const useMapStore = defineStore('map', () => {
     return maps.value.find(m => m.id === sessionStore.activeMapId) ?? null
   })
 
+  const parentMap = computed(() => {
+    if (!activeMap.value?.parent_map_id) return null
+    return maps.value.find(m => m.id === activeMap.value.parent_map_id) ?? null
+  })
+
+  const childMapsByHexId = computed(() => {
+    const m = new Map()
+    for (const map of maps.value) {
+      if (!map.parent_hex_id) continue
+      const existing = m.get(map.parent_hex_id) ?? []
+      m.set(map.parent_hex_id, [...existing, map])
+    }
+    return m
+  })
+
+  function ancestorChain() {
+    const chain = []
+    let cur = activeMap.value
+    while (cur?.parent_map_id) {
+      const parent = maps.value.find(m => m.id === cur.parent_map_id)
+      if (!parent) break
+      chain.unshift(parent)
+      cur = parent
+    }
+    return chain
+  }
+
   const activeMapImageUrl = ref(null)
   const _urlTimers = {}
 
@@ -111,6 +138,26 @@ export const useMapStore = defineStore('map', () => {
     maps.value = []
     _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
+  }
+
+  async function createChildMap(parentHexCellId, name) {
+    const { data, error } = await supabase
+      .from('maps')
+      .insert({
+        session_id:    _currentSessionId,
+        name,
+        map_type:      'hex',
+        parent_map_id: activeMap.value?.id ?? null,
+        parent_hex_id: parentHexCellId,
+      })
+      .select()
+      .single()
+    if (error) { console.error('createChildMap:', error.message); return null }
+    if (!maps.value.find(m => m.id === data.id)) {
+      maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    }
+    await setActiveMap(data.id)
+    return data
   }
 
   async function createMap({ name = 'New Map', mapType = 'hex' } = {}) {
@@ -261,6 +308,9 @@ export const useMapStore = defineStore('map', () => {
     loading,
     newMapModalOpen,
     activeMap,
+    parentMap,
+    childMapsByHexId,
+    ancestorChain,
     activeMapImageUrl,
     mapType,
     mapHexWidth,
@@ -279,6 +329,7 @@ export const useMapStore = defineStore('map', () => {
     init,
     cleanup,
     createMap,
+    createChildMap,
     applyLocalPatch,
     renameMap,
     deleteMap,

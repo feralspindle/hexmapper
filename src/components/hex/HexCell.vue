@@ -106,6 +106,11 @@
       <text text-anchor="middle" dy="4" font-size="9" fill="#c9a8e0">D</text>
     </g>
 
+    <g v-if="visibleToPlayer && hasChildMap" :transform="`translate(${cell?.has_dungeon ? -16 : 16}, -20)`" class="pointer-events-none">
+      <circle r="7" fill="#1a1c12" stroke="#8aad5b" stroke-width="1.5" />
+      <text text-anchor="middle" dy="4" font-size="9" fill="#b8d48a">M</text>
+    </g>
+
     <template v-if="visibleToPlayer && !imageMode">
       <text
         v-if="blankMode"
@@ -191,6 +196,7 @@ const props = defineProps({
   settingsOpen:    { type: Boolean, default: false },
   mapFogRevealAll: { type: Boolean, default: false },
   isParty:         { type: Boolean, default: false },
+  hasChildMap:     { type: Boolean, default: false },
   size: { type: Number, default: HEX_SIZE },
   hexH: { type: Number, default: null },
 })
