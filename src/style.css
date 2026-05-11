@@ -1404,6 +1404,8 @@ textarea.ds-input {
     transition: border-color 0.12s;
     border-left: 3px solid;
     border-color: var(--player-color, var(--ink-2));
+    min-width: 0;
+    overflow: hidden;
 }
 .ds-player-card.me {
     border-left-color: var(--player-color, var(--accent));
@@ -1414,6 +1416,11 @@ textarea.ds-input {
     font-style: italic;
     font-size: 14px;
     color: var(--ink);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .ds-player-card .ds-pc-role {
     font-family: var(--font-zine);
@@ -1421,6 +1428,9 @@ textarea.ds-input {
     letter-spacing: 0.08em;
     color: var(--ink-soft);
     text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .ds-player-card .ds-pc-dot {
     width: 8px;
