@@ -79,6 +79,7 @@ import { ref, watch, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useMapStore } from '@/stores/mapStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
@@ -110,6 +111,7 @@ const dungeonId = route.params.dungeonId
 
 const dungeonStore   = useD()
 const sessionStore   = useSessionStore()
+const mapStore       = useMapStore()
 const diceStore      = useDiceStore()
 const chatStore      = useChatStore()
 const characterStore = useCharacterStore()
@@ -156,6 +158,7 @@ onMounted(async () => {
   if (!sessionStore.sessionId) {
     await sessionStore.joinSession(sessionId)
   }
+  await mapStore.init(sessionId)
   await dungeonStore.init(sessionId, dungeonId)
   diceStore.init(sessionId)
   chatStore.init(sessionId)
@@ -169,6 +172,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', measureTopbar)
   window.removeEventListener('keydown', onKeyDown)
   dungeonStore.cleanup()
+  mapStore.cleanup()
   characterStore.cleanup()
   chatStore.cleanup()
   sessionStore.cleanupPresence()

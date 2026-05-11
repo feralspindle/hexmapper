@@ -10,6 +10,9 @@ export const useSessionStore = defineStore('session', () => {
   const sessionName    = ref('Untitled Campaign')
   const sessionOwnerId = ref(null)
   const activeMapId    = ref(null)
+  const torchRunning   = ref(false)
+  const torchElapsedMs = ref(0)
+  const torchStartedAt = ref(null)
   const loading        = ref(false)
   const error          = ref(null)
 
@@ -34,6 +37,9 @@ export const useSessionStore = defineStore('session', () => {
     sessionName.value    = data.name
     sessionOwnerId.value = data.owner_id
     activeMapId.value    = data.active_map_id ?? null
+    torchRunning.value   = data.torch_running ?? false
+    torchElapsedMs.value = data.torch_elapsed_ms ?? 0
+    torchStartedAt.value = data.torch_started_at ?? null
   }
 
   function _subscribeToSession(id) {
@@ -44,8 +50,11 @@ export const useSessionStore = defineStore('session', () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${id}` },
         ({ new: row }) => {
-          if (row.name !== undefined)          sessionName.value = row.name
-          if (row.active_map_id !== undefined) activeMapId.value = row.active_map_id ?? null
+          if (row.name !== undefined)             sessionName.value    = row.name
+          if (row.active_map_id !== undefined)    activeMapId.value    = row.active_map_id ?? null
+          if (row.torch_running !== undefined)    torchRunning.value   = row.torch_running
+          if (row.torch_elapsed_ms !== undefined) torchElapsedMs.value = row.torch_elapsed_ms
+          if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
         },
       )
       .subscribe()
@@ -157,20 +166,24 @@ export const useSessionStore = defineStore('session', () => {
     if (presenceChannel) supabase.removeChannel(presenceChannel)
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
 
+    let _ready = false
+
+    const channel = supabase
+      .channel(`session:${id}:presence`, {
+        config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
+      })
+
+    presenceChannel = channel
+
     const syncUsers = () => {
-      const state = presenceChannel.presenceState()
+      const state = channel.presenceState()
       const latest = Object.values(state).map(e => e.at(-1)).filter(Boolean)
       const byUser = new Map()
       for (const p of latest) byUser.set(p.user_id ?? p._clientId, p)
       onlineUsers.value = [...byUser.values()]
     }
 
-    let _ready = false
-
-    presenceChannel = supabase
-      .channel(`session:${id}:presence`, {
-        config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
-      })
+    channel
       .on('presence', { event: 'sync' }, () => { syncUsers(); _ready = true })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
         syncUsers()
@@ -183,7 +196,7 @@ export const useSessionStore = defineStore('session', () => {
       .on('presence', { event: 'leave' }, syncUsers)
       .subscribe(status => {
         if (status !== 'SUBSCRIBED') return
-        presenceChannel.track({
+        channel.track({
           user_id:      authStore.user?.id ?? null,
           _clientId:    CLIENT_ID,
           display_name: authStore.displayName ?? 'Adventurer',
@@ -205,6 +218,23 @@ export const useSessionStore = defineStore('session', () => {
     )
   }
 
+  async function torchStart() {
+    torchRunning.value = true
+    const { error } = await supabase.rpc('session_torch_start', { p_session_id: sessionId.value })
+    if (error) console.error('session torchStart:', error.message)
+  }
+
+  async function torchPause() {
+    const { error } = await supabase.rpc('session_torch_pause', { p_session_id: sessionId.value })
+    if (error) console.error('session torchPause:', error.message)
+  }
+
+  async function torchReset() {
+    torchElapsedMs.value = 0
+    const { error } = await supabase.rpc('session_torch_reset', { p_session_id: sessionId.value })
+    if (error) console.error('session torchReset:', error.message)
+  }
+
   function cleanupPresence() {
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
     if (presenceChannel) { supabase.removeChannel(presenceChannel); presenceChannel = null }
@@ -219,6 +249,9 @@ export const useSessionStore = defineStore('session', () => {
     sessionName.value    = 'Untitled Campaign'
     sessionOwnerId.value = null
     activeMapId.value    = null
+    torchRunning.value   = false
+    torchElapsedMs.value = 0
+    torchStartedAt.value = null
   }
 
   return {
@@ -226,6 +259,9 @@ export const useSessionStore = defineStore('session', () => {
     sessionName,
     sessionOwnerId,
     activeMapId,
+    torchRunning,
+    torchElapsedMs,
+    torchStartedAt,
     isGM,
     loading,
     error,
@@ -240,6 +276,9 @@ export const useSessionStore = defineStore('session', () => {
     joinSession,
     updateSessionName,
     setActiveMapId,
+    torchStart,
+    torchPause,
+    torchReset,
     initPresence,
     cleanupPresence,
     cleanup,

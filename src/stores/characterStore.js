@@ -80,7 +80,7 @@ export const useCharacterStore = defineStore('character', () => {
 
     const [charsResult, membersResult] = await Promise.all([
       supabase.from('characters').select('*').eq('session_id', sessionId).order('created_at', { ascending: true }),
-      supabase.from('session_members').select('user_id, active_character_id').eq('session_id', sessionId),
+      supabase.from('session_members').select('user_id, active_character_id, display_name').eq('session_id', sessionId),
     ])
 
     loading.value = false
@@ -375,7 +375,7 @@ export const useCharacterStore = defineStore('character', () => {
         if (!memberSelections.value.find(m => m.user_id === row.user_id)) {
           memberSelections.value = [
             ...memberSelections.value,
-            { user_id: row.user_id, active_character_id: row.active_character_id ?? null },
+            { user_id: row.user_id, active_character_id: row.active_character_id ?? null, display_name: row.display_name ?? null },
           ]
         }
         await _fetchMissingChars([row.active_character_id])
@@ -387,7 +387,7 @@ export const useCharacterStore = defineStore('character', () => {
         filter: `session_id=eq.${sessionId}`,
       }, async ({ new: row }) => {
         const idx = memberSelections.value.findIndex(m => m.user_id === row.user_id)
-        const entry = { user_id: row.user_id, active_character_id: row.active_character_id ?? null }
+        const entry = { user_id: row.user_id, active_character_id: row.active_character_id ?? null, display_name: row.display_name ?? null }
         if (idx !== -1) memberSelections.value[idx] = entry
         else memberSelections.value = [...memberSelections.value, entry]
         await _fetchMissingChars([row.active_character_id])
@@ -424,7 +424,8 @@ export const useCharacterStore = defineStore('character', () => {
       .on('broadcast', { event: 'active_character_changed' }, async ({ payload }) => {
         const { userId, characterId } = payload
         const idx = memberSelections.value.findIndex(m => m.user_id === userId)
-        const entry = { user_id: userId, active_character_id: characterId }
+        const existing = idx !== -1 ? memberSelections.value[idx] : null
+        const entry = { ...existing, user_id: userId, active_character_id: characterId }
         if (idx !== -1) memberSelections.value[idx] = entry
         else memberSelections.value = [...memberSelections.value, entry]
         await _fetchMissingChars([characterId])

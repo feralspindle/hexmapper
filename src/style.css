@@ -73,7 +73,7 @@ svg {
     /* density: regular */
     --topbar-h: 56px;
     --toolbar-w: 64px;
-    --tool-size: 44px;
+    --tool-size: 38px;
     --side-panel-w: 360px;
     --pad: 12px;
     --gap: 10px;
@@ -326,6 +326,7 @@ svg {
     border-radius: 50%;
     background: #6cae6c;
     border: 2px solid var(--ink);
+    animation: ds-online-pulse 2.4s ease-out infinite;
 }
 .ds-tb-btn {
     display: inline-flex;
@@ -362,8 +363,8 @@ svg {
     align-items: center;
     background: var(--paper-2);
     border-right: 1px solid var(--rule-strong);
-    padding: 10px 0;
-    gap: 4px;
+    padding: 6px 0;
+    gap: 2px;
     box-shadow:
         1px 0 0 rgba(255, 255, 255, 0.4) inset,
         4px 0 12px rgba(0, 0, 0, 0.08);
@@ -377,14 +378,14 @@ svg {
 .ds-tool-group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 4px 0;
+    gap: 1px;
+    padding: 2px 0;
     align-items: center;
 }
 .ds-tool-group + .ds-tool-group {
     border-top: 1px solid var(--rule);
-    margin-top: 4px;
-    padding-top: 8px;
+    margin-top: 2px;
+    padding-top: 5px;
 }
 .ds-tool-label {
     font-family: var(--font-zine);
@@ -396,8 +397,8 @@ svg {
 }
 .ds-tool {
     position: relative;
-    width: var(--tool-size, 44px);
-    height: var(--tool-size, 44px);
+    width: var(--tool-size, 38px);
+    height: var(--tool-size, 38px);
     display: grid;
     place-items: center;
     background: transparent;
@@ -1429,11 +1430,24 @@ textarea.ds-input {
     flex: 0 0 auto;
 }
 .ds-online-dot {
-    width: 7px;
-    height: 7px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: #6cae6c;
     flex: 0 0 auto;
+    box-shadow: 0 0 0 0 rgba(108, 174, 108, 0.5);
+    animation: ds-online-pulse 2.4s ease-out infinite;
+}
+@keyframes ds-online-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(108, 174, 108, 0.5);
+    }
+    60% {
+        box-shadow: 0 0 0 5px rgba(108, 174, 108, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 5px rgba(108, 174, 108, 0);
+    }
 }
 .ds-hp-row {
     display: flex;
@@ -1471,10 +1485,10 @@ textarea.ds-input {
     background: var(--paper-2);
     border-bottom: 1px solid var(--rule);
     font-family: var(--font-zine);
-    font-size: 9.5px;
+    font-size: 11px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--ink-soft);
+    color: var(--p1);
 }
 .ds-clear-initiative {
     font-family: var(--font-zine);
@@ -1497,11 +1511,13 @@ textarea.ds-input {
 }
 .ds-initiative-score {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
-    color: var(--player-color, var(--ink));
+    color: var(--p1);
     min-width: 18px;
     text-align: right;
+    border: 2px solid;
+    padding: 3px;
 }
 
 /* tweaks panel */
@@ -1856,20 +1872,26 @@ textarea.ds-input {
     padding: 4px 0 8px;
 }
 .ds-inv-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    align-items: baseline;
-    gap: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     padding: 5px 12px;
     border-bottom: 1px solid var(--rule);
 }
 .ds-inv-row:last-child {
     border-bottom: none;
 }
+.ds-inv-row-main {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
 .ds-inv-name {
     font-family: var(--font-body);
     font-size: 13px;
     color: var(--ink);
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1882,6 +1904,7 @@ textarea.ds-input {
     white-space: nowrap;
     min-width: 28px;
     text-align: right;
+    flex-shrink: 0;
 }
 .ds-inv-char {
     font-family: var(--font-mono);
@@ -1889,6 +1912,8 @@ textarea.ds-input {
     color: var(--ink-mute);
     letter-spacing: 0.04em;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .ds-inv-empty {
     font-family: var(--font-body);

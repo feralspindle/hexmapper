@@ -12,6 +12,14 @@ export const MARKER_KINDS = [
   { id: "landmark", label: "Landmark" },
 ];
 
+export const GM_MARKER_KINDS = [
+  { id: "trap", label: "Trap", badge: "T" },
+  { id: "secret", label: "Secret", badge: "S" },
+  { id: "encounter", label: "Encounter", badge: "E" },
+  { id: "treasure", label: "Treasure", badge: "★" },
+  { id: "note", label: "GM Note", badge: "!" },
+];
+
 export function parseMarkers(raw) {
   if (!raw) return [];
   try {
@@ -83,7 +91,16 @@ export const useHexStore = defineStore("hex", () => {
 
     if (!error && data) {
       const map = new Map();
-      for (const row of data) map.set(cellKey(row.q, row.r), row);
+      const isGM = useSessionStore().isGM;
+      for (const row of data) {
+        if (isGM) {
+          map.set(cellKey(row.q, row.r), row);
+        } else {
+          const stripped = { ...row };
+          delete stripped.gm_markers;
+          map.set(cellKey(row.q, row.r), stripped);
+        }
+      }
       hexCells.value = map;
     }
     loading.value = false;
@@ -221,11 +238,18 @@ export const useHexStore = defineStore("hex", () => {
   function handleRealtimeEvent({ eventType, new: row, old }) {
     if (eventType === "INSERT" || eventType === "UPDATE") {
       if (row.source_client === CLIENT_ID) return;
-      if (!useSessionStore().isGM && row.revealed === false) {
+      const isGM = useSessionStore().isGM;
+      if (!isGM && row.revealed === false) {
         hexCells.value.delete(cellKey(row.q, row.r));
         return;
       }
-      hexCells.value.set(cellKey(row.q, row.r), row);
+      if (isGM) {
+        hexCells.value.set(cellKey(row.q, row.r), row);
+      } else {
+        const stripped = { ...row };
+        delete stripped.gm_markers;
+        hexCells.value.set(cellKey(row.q, row.r), stripped);
+      }
     } else if (eventType === "DELETE") {
       hexCells.value.delete(cellKey(old.q, old.r));
     }
@@ -278,7 +302,11 @@ export const useHexStore = defineStore("hex", () => {
       else hexCells.value.delete(key);
       console.error("upsertHex error:", error.message);
     } else if (data) {
-      hexCells.value.set(key, data);
+      const stored =
+        merged.gm_markers != null && data.gm_markers == null
+          ? { ...data, gm_markers: merged.gm_markers }
+          : data;
+      hexCells.value.set(key, stored);
     }
   }
 
@@ -304,6 +332,24 @@ export const useHexStore = defineStore("hex", () => {
     );
     const next = current.map((m) => (m.id === markerId ? { ...m, label } : m));
     await upsertHex(q, r, { marker_color: serializeMarkers(next) });
+  }
+
+  async function addGmMarker(q, r, kind) {
+    const current = parseMarkers(hexCells.value.get(cellKey(q, r))?.gm_markers);
+    const next = [...current, { id: crypto.randomUUID(), kind, label: "" }];
+    await upsertHex(q, r, { gm_markers: serializeMarkers(next) });
+  }
+
+  async function removeGmMarker(q, r, markerId) {
+    const current = parseMarkers(hexCells.value.get(cellKey(q, r))?.gm_markers);
+    const next = current.filter((m) => m.id !== markerId);
+    await upsertHex(q, r, { gm_markers: serializeMarkers(next) });
+  }
+
+  async function updateGmMarkerLabel(q, r, markerId, label) {
+    const current = parseMarkers(hexCells.value.get(cellKey(q, r))?.gm_markers);
+    const next = current.map((m) => (m.id === markerId ? { ...m, label } : m));
+    await upsertHex(q, r, { gm_markers: serializeMarkers(next) });
   }
 
   async function deleteHex(q, r) {
@@ -522,6 +568,9 @@ export const useHexStore = defineStore("hex", () => {
     addMarker,
     removeMarker,
     updateMarkerLabel,
+    addGmMarker,
+    removeGmMarker,
+    updateGmMarkerLabel,
     deleteHex,
     ensureCellExists,
     fetchDungeonsForHex,

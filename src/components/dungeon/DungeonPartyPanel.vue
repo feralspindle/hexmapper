@@ -69,7 +69,7 @@
                     class="ds-clear-initiative"
                     @click="characterStore.clearAllInitiative()"
                 >
-                    Clear
+                    Clear Initiative
                 </button>
             </div>
             <div
@@ -94,19 +94,28 @@
                     :style="{ '--player-color': charColor(card.userId) }"
                 >
                     <div style="display: flex; align-items: center; gap: 6px">
-                        <div class="ds-pc-dot" />
+                        <span
+                            v-if="
+                                hasInitiative &&
+                                card.char?.data?.initiative != null
+                            "
+                            class="ds-initiative-score"
+                            >{{ card.char.data.initiative }}</span
+                        >
+                        <div
+                            v-if="isOnline(card.userId)"
+                            class="ds-online-dot"
+                            title="Online"
+                        />
                         <span class="ds-pc-name">{{ card.displayName }}</span>
-                        <div style="display: flex; align-items: center; gap: 4px; margin-left: auto">
-                            <span
-                                v-if="hasInitiative && card.char?.data?.initiative != null"
-                                class="ds-initiative-score"
-                            >{{ card.char.data.initiative }}</span>
-                            <div
-                                v-if="isOnline(card.userId)"
-                                class="ds-online-dot"
-                                title="Online"
-                            />
-                        </div>
+                        <div
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 4px;
+                                margin-left: auto;
+                            "
+                        ></div>
                     </div>
                     <div v-if="card.char?.data?.name" class="ds-pc-role">
                         {{ card.char.data.name }}
@@ -246,13 +255,17 @@ const partyCards = computed(() => {
 
     const gmId = sessionStore.sessionOwnerId;
     if (gmId) {
+        const gmMember = characterStore.memberSelections.find(
+            (m) => m.user_id === gmId,
+        );
         const gmPresence = sessionStore.onlineUsers.find(
             (u) => u.user_id === gmId,
         );
         result.push({
             userId: gmId,
             isGM: true,
-            displayName: gmPresence?.display_name ?? "Game Master",
+            displayName:
+                gmPresence?.display_name ?? gmMember?.display_name ?? null,
             char: null,
         });
         seen.add(gmId);
@@ -275,8 +288,7 @@ const partyCards = computed(() => {
         result.push({
             userId: member.user_id,
             isGM: false,
-            displayName:
-                presence?.display_name ?? char?.display_name ?? "Adventurer",
+            displayName: presence?.display_name ?? member.display_name ?? null,
             char,
         });
     }
@@ -287,7 +299,7 @@ const partyCards = computed(() => {
         result.push({
             userId: user.user_id,
             isGM: false,
-            displayName: user.display_name ?? "Adventurer",
+            displayName: user.display_name ?? null,
             char: null,
         });
     }

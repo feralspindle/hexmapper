@@ -226,6 +226,93 @@
                 </div>
             </div>
 
+            <div v-if="sessionStore.isGM">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #b87800; flex-shrink: 0">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <span class="ds-field-label" style="margin-bottom: 0; color: #b87800">GM Markers</span>
+                </div>
+
+                <div
+                    v-for="m in hexGmMarkers"
+                    :key="m.id"
+                    class="hm-content-card"
+                    style="margin-top: 6px; border-color: rgba(184,120,0,0.3)"
+                >
+                    <div class="hm-content-card-head">
+                        <div class="hm-stamp" style="background: rgba(184,120,0,0.15); color: #b87800">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <template v-if="m.kind === 'trap'">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </template>
+                                <template v-else-if="m.kind === 'secret'">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                                </template>
+                                <template v-else-if="m.kind === 'encounter'">
+                                    <circle cx="12" cy="8" r="5"/><path d="M8 14v7M12 14v7M16 14v7"/><path d="M8 14h8"/>
+                                </template>
+                                <template v-else-if="m.kind === 'treasure'">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </template>
+                                <template v-else-if="m.kind === 'note'">
+                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/>
+                                </template>
+                            </svg>
+                        </div>
+                        <span class="hm-kind">{{
+                            GM_MARKER_KINDS.find((k) => k.id === m.kind)?.label ?? m.kind
+                        }}</span>
+                        <input
+                            v-model="m.label"
+                            type="text"
+                            :placeholder="GM_MARKER_KINDS.find((k) => k.id === m.kind)?.label ?? m.kind"
+                            maxlength="24"
+                            class="ds-input hm-card-input"
+                            @input="debouncedUpdateGmMarker(m)"
+                        />
+                        <button
+                            class="hm-content-card-x"
+                            @click="doRemoveGmMarker(m.id)"
+                        >
+                            ×
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    class="hm-marker-picker"
+                    :style="hexGmMarkers.length ? 'margin-top:8px' : 'margin-top:4px'"
+                >
+                    <button
+                        v-for="k in GM_MARKER_KINDS"
+                        :key="k.id"
+                        class="hm-marker-chip"
+                        :title="`Add ${k.label}`"
+                        @click="doAddGmMarker(k.id)"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0">
+                            <template v-if="k.id === 'trap'">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </template>
+                            <template v-else-if="k.id === 'secret'">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                            </template>
+                            <template v-else-if="k.id === 'encounter'">
+                                <circle cx="12" cy="8" r="5"/><path d="M8 14v7M12 14v7M16 14v7"/><path d="M8 14h8"/>
+                            </template>
+                            <template v-else-if="k.id === 'treasure'">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </template>
+                            <template v-else-if="k.id === 'note'">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/>
+                            </template>
+                        </svg>
+                        {{ k.label }}
+                    </button>
+                </div>
+            </div>
+
             <div>
                 <div
                     style="
@@ -527,6 +614,7 @@ import {
     useHexStore,
     TERRAIN_TYPES,
     MARKER_KINDS,
+    GM_MARKER_KINDS,
     parseMarkers,
 } from "@/stores/hexStore.js";
 import { useMapStore } from "@/stores/mapStore.js";
@@ -549,6 +637,7 @@ const open = ref(true);
 const hexLabel = ref("");
 const hexTerrain = ref(null);
 const hexMarkers = ref([]);
+const hexGmMarkers = ref([]);
 const newNote = ref("");
 const savingNote = ref(false);
 const addingDungeon = ref(false);
@@ -579,6 +668,7 @@ watch(
         hexLabel.value = cell?.label ?? "";
         hexTerrain.value = cell?.terrain_type ?? null;
         hexMarkers.value = parseMarkers(cell?.marker_color);
+        hexGmMarkers.value = parseMarkers(cell?.gm_markers);
         addingDungeon.value = false;
         addingChildMap.value = false;
         hexStore.fetchDungeonsForHex(cell?.id ?? null);
@@ -640,6 +730,31 @@ function debouncedUpdateMarker(marker) {
         if (!hexStore.selectedHex) return;
         const { q, r } = hexStore.selectedHex;
         hexStore.updateMarkerLabel(q, r, marker.id, marker.label);
+    }, 500);
+}
+
+function doAddGmMarker(kind) {
+    if (!hexStore.selectedHex) return;
+    const { q, r } = hexStore.selectedHex;
+    const newMarker = { id: crypto.randomUUID(), kind, label: "" };
+    hexGmMarkers.value = [...hexGmMarkers.value, newMarker];
+    hexStore.addGmMarker(q, r, kind);
+}
+
+function doRemoveGmMarker(markerId) {
+    if (!hexStore.selectedHex) return;
+    const { q, r } = hexStore.selectedHex;
+    hexGmMarkers.value = hexGmMarkers.value.filter((m) => m.id !== markerId);
+    hexStore.removeGmMarker(q, r, markerId);
+}
+
+let gmMarkerLabelTimer = null;
+function debouncedUpdateGmMarker(marker) {
+    clearTimeout(gmMarkerLabelTimer);
+    gmMarkerLabelTimer = setTimeout(() => {
+        if (!hexStore.selectedHex) return;
+        const { q, r } = hexStore.selectedHex;
+        hexStore.updateGmMarkerLabel(q, r, marker.id, marker.label);
     }, 500);
 }
 

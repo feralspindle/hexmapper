@@ -3,11 +3,13 @@
         ref="containerEl"
         class="w-full h-full overflow-hidden select-none"
         :class="
-            panMode
-                ? 'cursor-pan'
-                : moveMode !== 'none'
-                  ? 'cursor-move'
-                  : 'cursor-default'
+            middlePanning
+                ? 'cursor-grabbing'
+                : panMode
+                  ? 'cursor-pan'
+                  : moveMode !== 'none'
+                    ? 'cursor-move'
+                    : 'cursor-default'
         "
         style="position: relative"
     >
@@ -18,6 +20,7 @@
             class="block"
             style="overflow: visible"
             @mousedown.left="onPanStart"
+            @mousedown.middle.prevent="onMiddlePanStart"
             @mousemove="onMouseMove"
             @mouseup="onPanEnd"
             @mouseleave="onPanEnd"
@@ -170,6 +173,9 @@ let panning = false;
 let didPan = false;
 let panStart = { x: 0, y: 0 };
 let panOrigin = { x: 0, y: 0 };
+const middlePanning = ref(false);
+let middlePanStart = { x: 0, y: 0 };
+let middlePanOrigin = { x: 0, y: 0 };
 
 const imageNaturalWidth = ref(0);
 const imageNaturalHeight = ref(0);
@@ -331,6 +337,12 @@ function onPanStart(e) {
 }
 
 function onMouseMove(e) {
+    if (middlePanning.value) {
+        pan.value = {
+            x: middlePanOrigin.x + (e.clientX - middlePanStart.x),
+            y: middlePanOrigin.y + (e.clientY - middlePanStart.y),
+        };
+    }
     if (!panning) return;
     const dx = e.clientX - panStart.x;
     const dy = e.clientY - panStart.y;
@@ -364,6 +376,13 @@ function onPanEnd() {
     }
     panning = false;
     didPan = false;
+    middlePanning.value = false;
+}
+
+function onMiddlePanStart(e) {
+    middlePanning.value = true;
+    middlePanStart = { x: e.clientX, y: e.clientY };
+    middlePanOrigin = { x: pan.value.x, y: pan.value.y };
 }
 
 function onWheel(e) {

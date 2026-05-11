@@ -83,8 +83,10 @@
             <div class="ds-inv-section-head ds-inv-section-head--gear">Gear</div>
             <div v-if="allGear.length">
                 <div v-for="(item, i) in allGear" :key="i" class="ds-inv-row">
-                    <span class="ds-inv-name">{{ item.itemName }}</span>
-                    <span class="ds-inv-qty">{{ item.totalQty > 1 ? `×${item.totalQty}` : '' }}</span>
+                    <div class="ds-inv-row-main">
+                        <span class="ds-inv-name">{{ item.itemName }}</span>
+                        <span class="ds-inv-qty">{{ item.totalQty > 1 ? `×${item.totalQty}` : '' }}</span>
+                    </div>
                     <span class="ds-inv-char">{{ item.ownerLabel }}</span>
                 </div>
             </div>

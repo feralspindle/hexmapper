@@ -306,24 +306,11 @@
                                 @blur="saveInitiative"
                             />
                         </template>
-                        <span v-else class="cs-initiative-val">{{
-                            char.initiative ?? "—"
-                        }}</span>
-                        <div
-                            v-if="canEdit && !editingInitiative"
-                            class="cs-initiative-actions"
-                        >
+                        <template v-else-if="canEdit">
                             <button
-                                class="cs-btn primary"
-                                style="font-size: 11px; padding: 3px 8px"
-                                @click="rollInitiative"
-                            >
-                                Roll Initiative (d20{{ dexMod >= 0 ? "+" : ""
-                                }}{{ dexMod }})
-                            </button>
-                            <button
+                                v-if="char.initiative == null"
                                 class="cs-icon-btn"
-                                title="Enter manually"
+                                v-tooltip="'Enter manually'"
                                 @click="startEditInitiative"
                             >
                                 <svg
@@ -342,6 +329,43 @@
                                         d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
                                     />
                                 </svg>
+                            </button>
+                            <span
+                                v-else
+                                class="cs-initiative-val"
+                                style="cursor: pointer"
+                                v-tooltip="'Click to edit'"
+                                @click="startEditInitiative"
+                                >{{ char.initiative }}</span
+                            >
+                        </template>
+                        <span v-else class="cs-initiative-val">{{
+                            char.initiative ?? "—"
+                        }}</span>
+                        <div
+                            v-if="canEdit && !editingInitiative"
+                            class="cs-initiative-actions"
+                        >
+                            <button
+                                v-if="char.initiative != null"
+                                class="cs-btn"
+                                style="font-size: 11px; padding: 3px 8px"
+                                @click="
+                                    characterStore.updateField(
+                                        'initiative',
+                                        null,
+                                    )
+                                "
+                            >
+                                Clear
+                            </button>
+                            <button
+                                class="cs-btn primary"
+                                style="font-size: 11px; padding: 3px 8px"
+                                @click="rollInitiative"
+                            >
+                                Roll Initiative (d20{{ dexMod >= 0 ? "+" : ""
+                                }}{{ dexMod }})
                             </button>
                         </div>
                     </div>
@@ -1200,7 +1224,7 @@
                     <button
                         v-if="canEdit"
                         class="cs-add-btn"
-                        style="margin-top: 6px font-size: 12px;"
+                        style="margin-top: 6px; font-size: 12px"
                         @click="
                             characterStore.updateField(
                                 'rations',
@@ -1210,67 +1234,6 @@
                     >
                         + Add 3-pack of rations
                     </button>
-                </div>
-
-                <div v-if="showAddGear && canEdit" class="cs-info-block">
-                    <div class="cs-form-stack">
-                        <input
-                            v-model="newGearDraft.name"
-                            placeholder="Item name"
-                            class="cs-input"
-                            @keyup.enter="submitAddGear"
-                        />
-                        <div style="display: flex; gap: 6px">
-                            <label class="cs-form-label" style="flex: 1"
-                                >Slots<input
-                                    v-model.number="newGearDraft.slots"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    class="cs-input"
-                            /></label>
-                            <label class="cs-form-label" style="flex: 1"
-                                >Qty<input
-                                    v-model.number="newGearDraft.quantity"
-                                    type="number"
-                                    min="1"
-                                    class="cs-input"
-                            /></label>
-                            <label class="cs-form-label" style="flex: 1"
-                                >Type
-                                <select
-                                    v-model="newGearDraft.type"
-                                    class="cs-input"
-                                >
-                                    <option value="weapon">Weapon</option>
-                                    <option value="armor">Armor</option>
-                                    <option value="sundry">Sundry</option>
-                                </select>
-                            </label>
-                        </div>
-                        <label
-                            v-if="newGearDraft.type === 'weapon'"
-                            class="cs-form-label"
-                            >Damage die<input
-                                v-model="newGearDraft.damageDie"
-                                placeholder="e.g. 1d8+2"
-                                class="cs-input"
-                        /></label>
-                        <div class="cs-form-actions">
-                            <button
-                                class="cs-btn primary"
-                                @click="submitAddGear"
-                            >
-                                Add
-                            </button>
-                            <button
-                                class="cs-btn ghost"
-                                @click="showAddGear = false"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="cs-list">
@@ -1556,6 +1519,89 @@
                     >
                         + Add Gear
                     </button>
+                    <div v-if="showAddGear && canEdit" class="cs-info-block" style="margin-top: 8px">
+                        <div class="cs-form-stack">
+                            <input
+                                v-model="newGearDraft.name"
+                                placeholder="Item name"
+                                class="cs-input"
+                                @keyup.enter="submitAddGear"
+                            />
+                            <div style="display: flex; gap: 6px">
+                                <label class="cs-form-label" style="flex: 1"
+                                    >Slots<input
+                                        v-model.number="newGearDraft.slots"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        class="cs-input"
+                                /></label>
+                                <label class="cs-form-label" style="flex: 1"
+                                    >Qty<input
+                                        v-model.number="newGearDraft.quantity"
+                                        type="number"
+                                        min="1"
+                                        class="cs-input"
+                                /></label>
+                                <label class="cs-form-label" style="flex: 1"
+                                    >Type
+                                    <select
+                                        v-model="newGearDraft.type"
+                                        class="cs-input"
+                                    >
+                                        <option value="weapon">Weapon</option>
+                                        <option value="armor">Armor</option>
+                                        <option value="sundry">Sundry</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <label
+                                v-if="newGearDraft.type === 'weapon'"
+                                class="cs-form-label"
+                                >Damage die<input
+                                    v-model="newGearDraft.damageDie"
+                                    placeholder="e.g. 1d8+2"
+                                    class="cs-input"
+                            /></label>
+                            <div style="display: flex; gap: 6px">
+                                <label class="cs-form-label" style="flex: 1"
+                                    >Cost (GP)<input
+                                        v-model.number="newGearDraft.costGold"
+                                        type="number"
+                                        min="0"
+                                        class="cs-input"
+                                /></label>
+                                <label class="cs-form-label" style="flex: 1"
+                                    >SP<input
+                                        v-model.number="newGearDraft.costSilver"
+                                        type="number"
+                                        min="0"
+                                        class="cs-input"
+                                /></label>
+                                <label class="cs-form-label" style="flex: 1"
+                                    >CP<input
+                                        v-model.number="newGearDraft.costCopper"
+                                        type="number"
+                                        min="0"
+                                        class="cs-input"
+                                /></label>
+                            </div>
+                            <div class="cs-form-actions">
+                                <button
+                                    class="cs-btn primary"
+                                    @click="submitAddGear"
+                                >
+                                    Add
+                                </button>
+                                <button
+                                    class="cs-btn ghost"
+                                    @click="showAddGear = false"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div v-if="char.treasures?.length || canEdit">
@@ -1771,11 +1817,37 @@
                     </div>
                 </div>
 
+                <div v-if="canEdit" style="margin-top: 10px; padding: 0 2px">
+                    <span class="cs-section-label">Convert</span>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px">
+                        <button
+                            class="cs-btn ghost"
+                            :disabled="(char.gold ?? 0) < 1"
+                            @click="convertMoney('gold', 1, 'silver', 10)"
+                        >1 GP → 10 SP</button>
+                        <button
+                            class="cs-btn ghost"
+                            :disabled="(char.silver ?? 0) < 10"
+                            @click="convertMoney('silver', 10, 'gold', 1)"
+                        >10 SP → 1 GP</button>
+                        <button
+                            class="cs-btn ghost"
+                            :disabled="(char.silver ?? 0) < 1"
+                            @click="convertMoney('silver', 1, 'copper', 10)"
+                        >1 SP → 10 CP</button>
+                        <button
+                            class="cs-btn ghost"
+                            :disabled="(char.copper ?? 0) < 10"
+                            @click="convertMoney('copper', 10, 'silver', 1)"
+                        >10 CP → 1 SP</button>
+                    </div>
+                </div>
+
                 <div v-if="char.ledger?.length" style="margin-top: 12px">
                     <span class="cs-section-label">Ledger</span>
                     <div class="cs-list" style="margin-top: 6px">
                         <div
-                            v-for="(entry, i) in char.ledger"
+                            v-for="(entry, i) in [...(char.ledger ?? [])].reverse()"
                             :key="i"
                             class="cs-list-item"
                             style="
@@ -2100,6 +2172,21 @@ function saveSpells() {
     editingSpells.value = false;
 }
 
+function convertMoney(fromKey, fromAmt, toKey, toAmt) {
+    if ((char.value?.[fromKey] ?? 0) < fromAmt) return;
+    const symbols = { gold: "GP", silver: "SP", copper: "CP" };
+    characterStore.adjustMoney(fromKey, -fromAmt);
+    characterStore.adjustMoney(toKey, toAmt);
+    characterStore.updateField("ledger", [
+        ...(char.value?.ledger ?? []),
+        {
+            desc: `${fromAmt} ${symbols[fromKey]} → ${toAmt} ${symbols[toKey]}`,
+            [fromKey + "Change"]: -fromAmt,
+            [toKey + "Change"]: toAmt,
+        },
+    ]);
+}
+
 const showAddGear = ref(false);
 const newGearDraft = ref({
     name: "",
@@ -2107,9 +2194,30 @@ const newGearDraft = ref({
     quantity: 1,
     type: "sundry",
     damageDie: "",
+    costGold: 0,
+    costSilver: 0,
+    costCopper: 0,
 });
 function submitAddGear() {
     if (!newGearDraft.value.name.trim()) return;
+    const costG = Math.max(0, newGearDraft.value.costGold || 0);
+    const costS = Math.max(0, newGearDraft.value.costSilver || 0);
+    const costC = Math.max(0, newGearDraft.value.costCopper || 0);
+    if (costG > 0) characterStore.adjustMoney("gold", -costG);
+    if (costS > 0) characterStore.adjustMoney("silver", -costS);
+    if (costC > 0) characterStore.adjustMoney("copper", -costC);
+    if (costG > 0 || costS > 0 || costC > 0) {
+        const ledgerEntry = {
+            desc: `Purchased ${newGearDraft.value.name.trim()}`,
+            ...(costG ? { goldChange: -costG } : {}),
+            ...(costS ? { silverChange: -costS } : {}),
+            ...(costC ? { copperChange: -costC } : {}),
+        };
+        characterStore.updateField("ledger", [
+            ...(char.value?.ledger ?? []),
+            ledgerEntry,
+        ]);
+    }
     characterStore.addGearItem(newGearDraft.value);
     newGearDraft.value = {
         name: "",
@@ -2117,6 +2225,9 @@ function submitAddGear() {
         quantity: 1,
         type: "sundry",
         damageDie: "",
+        costGold: 0,
+        costSilver: 0,
+        costCopper: 0,
     };
     showAddGear.value = false;
 }
@@ -2734,6 +2845,10 @@ button.cs-stat-val:hover {
 }
 .cs-btn.ghost:hover {
     color: var(--ink, #1a1410);
+}
+.cs-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
 
 .cs-form-stack {

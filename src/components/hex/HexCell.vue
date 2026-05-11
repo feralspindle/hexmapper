@@ -61,7 +61,7 @@
       </template>
     </g>
 
-    <g v-if="blankMode && visibleToPlayer && markerCount" class="pointer-events-none">
+    <g v-if="blankMode && visibleToPlayer && markerCount" v-tooltip="markerTooltip">
       <circle
         cx="0" cy="0"
         :r="markerR"
@@ -104,8 +104,8 @@
     <g
       v-if="visibleToPlayer && cell?.has_dungeon"
       :transform="`translate(${size * 0.42}, ${-size * 0.08})`"
-      class="pointer-events-none"
       style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))"
+      v-tooltip="'Dungeon'"
     >
       <path :d="`M${-size*0.042},${-size*0.156} L0,0 L${size*0.042},${-size*0.156}Z`" fill="#5a2e7a" />
       <circle :cy="-size*0.273" :r="size*0.13" fill="#5a2e7a" stroke="var(--paper, #f4e8cc)" :stroke-width="1.2 / (size / 48)" />
@@ -122,8 +122,8 @@
     <g
       v-if="visibleToPlayer && hasChildMap"
       :transform="`translate(${-size * 0.42}, ${-size * 0.08})`"
-      class="pointer-events-none"
       style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))"
+      v-tooltip="'Child Map'"
     >
       <path :d="`M${-size*0.042},${-size*0.156} L0,0 L${size*0.042},${-size*0.156}Z`" fill="#2a5a1e" />
       <circle :cy="-size*0.273" :r="size*0.13" fill="#2a5a1e" stroke="var(--paper, #f4e8cc)" :stroke-width="1.2 / (size / 48)" />
@@ -178,8 +178,29 @@
       class="pointer-events-none"
     />
 
-    <g v-if="isParty" class="pointer-events-none">
+    <g
+      v-if="isGM && gmMarkerCount"
+      :transform="`translate(${size * 0.42}, ${size * 0.08})`"
+      style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))"
+      v-tooltip="gmMarkerTooltip"
+    >
+      <path :d="`M${-size*0.042},${size*0.156} L0,0 L${size*0.042},${size*0.156}Z`" fill="#7a5200" />
+      <circle :cy="size*0.273" :r="size*0.13" fill="#7a5200" stroke="var(--paper, #f4e8cc)" :stroke-width="1.2 / (size / 48)" />
+      <text
+        text-anchor="middle"
+        :y="size*0.273"
+        dominant-baseline="central"
+        :font-size="size * 0.12"
+        fill="var(--paper, #f4e8cc)"
+        style="font-family: var(--font-mono, monospace); font-weight: 700;"
+      >{{ gmBadgeLetter }}</text>
+      <g v-if="gmMarkerCount > 1" :transform="`translate(${size*0.09}, ${size*0.18})`">
+        <circle :r="badgeR" fill="var(--accent, #8a4a1c)" stroke="var(--paper, #f4e8cc)" :stroke-width="1 / (size / 48)" />
+        <text text-anchor="middle" dy=".35em" :font-size="badgeR * 1.1" fill="#fff5e8" style="font-family: var(--font-mono, monospace); font-weight: 700;">{{ gmMarkerCount }}</text>
+      </g>
+    </g>
 
+    <g v-if="isParty" v-tooltip="'Party Location'">
       <g :transform="`translate(${-size * 0.3}, ${size * 0.1})`" style="filter: drop-shadow(0 3px 6px rgba(40,0,0,0.7)) drop-shadow(0 1px 3px rgba(0,0,0,0.5))">
   
         <path
@@ -209,7 +230,7 @@
 <script setup>
 import { computed } from 'vue'
 import { hexToPixel, hexCorners, cornersToPoints, HEX_SIZE } from '@/composables/useHexGeometry.js'
-import { TERRAIN_TYPES, parseMarkers } from '@/stores/hexStore.js'
+import { TERRAIN_TYPES, MARKER_KINDS, GM_MARKER_KINDS, parseMarkers } from '@/stores/hexStore.js'
 
 const props = defineProps({
   q: Number,
@@ -295,6 +316,28 @@ const markerGlyphOffset = computed(() => -12 * markerGlyphScale.value)
 const badgeR            = computed(() => Math.max(5, markerR.value * 0.38))
 const badgeX            = computed(() => markerR.value * 0.65)
 const badgeY            = computed(() => -markerR.value * 0.65)
+
+const markerTooltip = computed(() =>
+  markerKinds.value
+    .map(m => {
+      const kindLabel = MARKER_KINDS.find(k => k.id === m.kind)?.label ?? m.kind
+      return m.label ? `${kindLabel}: ${m.label}` : kindLabel
+    })
+    .join('\n')
+)
+
+const gmMarkerKinds  = computed(() => props.isGM ? parseMarkers(props.cell?.gm_markers) : [])
+const firstGmMarker  = computed(() => gmMarkerKinds.value[0] ?? null)
+const gmMarkerCount  = computed(() => gmMarkerKinds.value.length)
+const gmBadgeLetter  = computed(() => GM_MARKER_KINDS.find(k => k.id === firstGmMarker.value?.kind)?.badge ?? '?')
+const gmMarkerTooltip = computed(() =>
+  gmMarkerKinds.value
+    .map(m => {
+      const kindLabel = GM_MARKER_KINDS.find(k => k.id === m.kind)?.label ?? m.kind
+      return m.label ? `${kindLabel}: ${m.label}` : kindLabel
+    })
+    .join('\n')
+)
 
 const labelSize = computed(() => {
   const len = (props.cell?.label ?? '').length
