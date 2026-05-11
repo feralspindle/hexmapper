@@ -10,6 +10,7 @@ export const useSessionStore = defineStore('session', () => {
   const sessionName    = ref('Untitled Campaign')
   const sessionOwnerId = ref(null)
   const activeMapId    = ref(null)
+  const hexMode        = ref(null)
   const torchRunning   = ref(false)
   const torchElapsedMs = ref(0)
   const torchStartedAt = ref(null)
@@ -28,6 +29,7 @@ export const useSessionStore = defineStore('session', () => {
   let sessionChannel  = null
   let presenceChannel = null
   let _stopAuthWatch  = null
+  let _stopPageHide   = null
 
   const onlineUsers = ref([])
   const latestJoin  = ref(null)
@@ -37,6 +39,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionName.value    = data.name
     sessionOwnerId.value = data.owner_id
     activeMapId.value    = data.active_map_id ?? null
+    hexMode.value        = data.hex_mode ?? null
     torchRunning.value   = data.torch_running ?? false
     torchElapsedMs.value = data.torch_elapsed_ms ?? 0
     torchStartedAt.value = data.torch_started_at ?? null
@@ -52,6 +55,7 @@ export const useSessionStore = defineStore('session', () => {
         ({ new: row }) => {
           if (row.name !== undefined)             sessionName.value    = row.name
           if (row.active_map_id !== undefined)    activeMapId.value    = row.active_map_id ?? null
+          if (row.hex_mode !== undefined)         hexMode.value        = row.hex_mode
           if (row.torch_running !== undefined)    torchRunning.value   = row.torch_running
           if (row.torch_elapsed_ms !== undefined) torchElapsedMs.value = row.torch_elapsed_ms
           if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
@@ -161,6 +165,15 @@ export const useSessionStore = defineStore('session', () => {
     if (err) { console.error('setActiveMapId:', err.message); activeMapId.value = prev }
   }
 
+  async function setHexMode(mode) {
+    const { error: err } = await supabase
+      .from('sessions')
+      .update({ hex_mode: mode })
+      .eq('id', sessionId.value)
+    if (err) console.error('setHexMode:', err.message)
+    else hexMode.value = mode
+  }
+
   function initPresence(id) {
     const authStore = useAuthStore()
     if (presenceChannel) supabase.removeChannel(presenceChannel)
@@ -216,6 +229,10 @@ export const useSessionStore = defineStore('session', () => {
         })
       },
     )
+
+    const handlePageHide = () => { if (presenceChannel) presenceChannel.untrack() }
+    window.addEventListener('pagehide', handlePageHide)
+    _stopPageHide = () => window.removeEventListener('pagehide', handlePageHide)
   }
 
   async function torchStart() {
@@ -236,6 +253,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function cleanupPresence() {
+    if (_stopPageHide)  { _stopPageHide(); _stopPageHide = null }
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
     if (presenceChannel) { supabase.removeChannel(presenceChannel); presenceChannel = null }
     onlineUsers.value = []
@@ -249,6 +267,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionName.value    = 'Untitled Campaign'
     sessionOwnerId.value = null
     activeMapId.value    = null
+    hexMode.value        = null
     torchRunning.value   = false
     torchElapsedMs.value = 0
     torchStartedAt.value = null
@@ -259,6 +278,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionName,
     sessionOwnerId,
     activeMapId,
+    hexMode,
     torchRunning,
     torchElapsedMs,
     torchStartedAt,
@@ -276,6 +296,7 @@ export const useSessionStore = defineStore('session', () => {
     joinSession,
     updateSessionName,
     setActiveMapId,
+    setHexMode,
     torchStart,
     torchPause,
     torchReset,

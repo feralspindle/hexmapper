@@ -206,14 +206,20 @@ const prefs = useUserPrefsStore();
 const modeKey = computed(() => `hex_mode_${sessionId}`);
 
 function loadMode() {
-    const saved = localStorage.getItem(modeKey.value);
-    if (saved === "fow" || saved === "blank") {
-        hexMode.value = saved;
-        showModePicker.value = false;
-    } else if (sessionStore.isGM) {
-        showModePicker.value = true;
+    if (sessionStore.isGM) {
+        const saved = localStorage.getItem(modeKey.value);
+        if (saved === "fow" || saved === "blank") {
+            hexMode.value = saved;
+            showModePicker.value = false;
+            if (sessionStore.hexMode !== saved) sessionStore.setHexMode(saved);
+        } else if (sessionStore.hexMode) {
+            hexMode.value = sessionStore.hexMode;
+            showModePicker.value = false;
+        } else {
+            showModePicker.value = true;
+        }
     } else {
-        hexMode.value = "fow";
+        hexMode.value = sessionStore.hexMode ?? "fow";
         showModePicker.value = false;
     }
 }
@@ -232,6 +238,7 @@ async function onPickFow(file) {
     hexMode.value = "fow";
     localStorage.setItem(modeKey.value, "fow");
     activeTool.value = "select";
+    sessionStore.setHexMode("fow");
     if (file) {
         try {
             const path = await mapStore.uploadMapImage(file);
@@ -250,6 +257,7 @@ function onPickBlank() {
     hexMode.value = "blank";
     localStorage.setItem(modeKey.value, "blank");
     activeTool.value = "select";
+    sessionStore.setHexMode("blank");
 }
 
 function setTool(tool) {
@@ -267,6 +275,15 @@ function onKeyDown(e) {
     else if (key === "M" && hexMode.value === "blank") setTool("marker");
     else if (key === "E" && hexMode.value === "blank") setTool("erase");
 }
+
+watch(
+    () => sessionStore.hexMode,
+    (newMode) => {
+        if (!sessionStore.isGM && newMode && newMode !== hexMode.value) {
+            hexMode.value = newMode;
+        }
+    },
+);
 
 watch(
     () => mapStore.maps.length,
