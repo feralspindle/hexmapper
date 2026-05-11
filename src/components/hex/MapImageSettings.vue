@@ -144,7 +144,7 @@
           <span class="map-size-unit-label">W</span>
           <input
             v-model.number="hexWidthDraft"
-            type="number" min="20" max="300" step="1"
+            type="number" min="20" max="300" step="0.1"
             class="map-size-input"
             @change="saveHexSizeDebounced"
           />
@@ -152,7 +152,7 @@
         </div>
         <input
           v-model.number="hexWidthDraft"
-          type="range" min="20" max="300" step="1"
+          type="range" min="20" max="300" step="0.1"
           class="map-slider"
           @input="saveHexSizeDebounced"
         />
@@ -160,7 +160,7 @@
           <span class="map-size-unit-label">H</span>
           <input
             v-model.number="hexHeightDraftInput"
-            type="number" min="20" max="300" step="1"
+            type="number" min="20" max="300" step="0.1"
             class="map-size-input"
             @change="saveHexSizeDebounced"
           />
@@ -168,7 +168,7 @@
         </div>
         <input
           v-model.number="hexHeightDraftInput"
-          type="range" min="20" max="300" step="1"
+          type="range" min="20" max="300" step="0.1"
           class="map-slider"
           @input="saveHexSizeDebounced"
         />
