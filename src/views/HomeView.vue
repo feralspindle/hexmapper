@@ -42,72 +42,37 @@
             </template>
 
             <template v-else>
-
-              <div v-if="emailConfirmSent" class="text-center py-2">
-                <p class="text-parchment-200 font-display mb-2">Check your inbox</p>
-                <p class="text-stone-400 text-sm">You should get a confirmation link from Supabase Auth at <span class="text-stone-200">{{ emailField }}</span>. Click it to activate your account</p>
-                <button class="mt-4 text-stone-500 hover:text-stone-300 text-sm underline" @click="emailConfirmSent = false">Back</button>
-              </div>
-
-              <template v-else>
-                <div class="flex gap-4 mb-5 border-b border-stone-700">
-                  <button
-                    v-for="m in ['signin', 'signup']"
-                    :key="m"
-                    class="pb-2 text-sm transition-colors"
-                    :class="emailMode === m
-                      ? 'text-parchment-300 border-b-2 border-parchment-400 -mb-px'
-                      : 'text-stone-500 hover:text-stone-300'"
-                    @click="emailMode = m; authError = null"
-                  >
-                    {{ m === 'signin' ? 'Sign in' : 'Create account' }}
-                  </button>
+              <form @submit.prevent="handleEmailSubmit" class="space-y-3">
+                <div>
+                  <label class="block text-stone-400 text-sm mb-1">Email</label>
+                  <input
+                    v-model="emailField"
+                    type="email"
+                    required
+                    autocomplete="email"
+                    placeholder="you@example.com"
+                    class="w-full bg-stone-700 border border-stone-600 rounded px-3 py-2 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-parchment-400 text-sm"
+                  />
                 </div>
-
-                <form @submit.prevent="handleEmailSubmit" class="space-y-3">
-                  <div v-if="emailMode === 'signup'">
-                    <label class="block text-stone-400 text-sm mb-1">Username</label>
-                    <input
-                      v-model="usernameField"
-                      type="text"
-                      required
-                      autocomplete="username"
-                      placeholder="Thorin Oakenshield"
-                      class="w-full bg-stone-700 border border-stone-600 rounded px-3 py-2 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-parchment-400 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-stone-400 text-sm mb-1">Email</label>
-                    <input
-                      v-model="emailField"
-                      type="email"
-                      required
-                      autocomplete="email"
-                      placeholder="you@example.com"
-                      class="w-full bg-stone-700 border border-stone-600 rounded px-3 py-2 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-parchment-400 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-stone-400 text-sm mb-1">Password</label>
-                    <input
-                      v-model="passwordField"
-                      type="password"
-                      required
-                      autocomplete="current-password"
-                      placeholder="••••••••"
-                      class="w-full bg-stone-700 border border-stone-600 rounded px-3 py-2 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-parchment-400 text-sm"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    :disabled="emailLoading"
-                    class="w-full bg-parchment-500 hover:bg-parchment-400 disabled:opacity-50 text-stone-900 font-display rounded px-4 py-2.5 transition-colors mt-1"
-                  >
-                    {{ emailLoading ? '…' : (emailMode === 'signin' ? 'Sign in' : 'Create account') }}
-                  </button>
-                </form>
-              </template>
-
+                <div>
+                  <label class="block text-stone-400 text-sm mb-1">Password</label>
+                  <input
+                    v-model="passwordField"
+                    type="password"
+                    required
+                    autocomplete="current-password"
+                    placeholder="••••••••"
+                    class="w-full bg-stone-700 border border-stone-600 rounded px-3 py-2 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-parchment-400 text-sm"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  :disabled="emailLoading"
+                  class="w-full bg-parchment-500 hover:bg-parchment-400 disabled:opacity-50 text-stone-900 font-display rounded px-4 py-2.5 transition-colors mt-1"
+                >
+                  {{ emailLoading ? '…' : 'Sign in' }}
+                </button>
+              </form>
             </template>
 
             <p v-if="authError" class="text-red-400 text-sm mt-3">{{ authError }}</p>
@@ -290,12 +255,9 @@ const joinInput = ref('')
 const joinError = ref(null)
 
 const authTab = ref('discord')
-const emailMode = ref('signin')
 const loggingIn = ref(false)
 const emailLoading = ref(false)
 const authError = ref(null)
-const emailConfirmSent = ref(false)
-const usernameField = ref('')
 const emailField = ref('')
 const passwordField = ref('')
 
@@ -321,21 +283,8 @@ async function handleEmailSubmit() {
   authError.value = null
   emailLoading.value = true
   try {
-    if (emailMode.value === 'signin') {
-      await authStore.signInWithEmail(emailField.value, passwordField.value)
-      await sessionStore.fetchUserSessions()
-    } else {
-      const { needsConfirmation } = await authStore.signUpWithEmail(
-        usernameField.value,
-        emailField.value,
-        passwordField.value,
-      )
-      if (needsConfirmation) {
-        emailConfirmSent.value = true
-      } else {
-        await sessionStore.fetchUserSessions()
-      }
-    }
+    await authStore.signInWithEmail(emailField.value, passwordField.value)
+    await sessionStore.fetchUserSessions()
   } catch (e) {
     authError.value = e.message
   } finally {

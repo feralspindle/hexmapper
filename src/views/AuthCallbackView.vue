@@ -26,11 +26,25 @@ const router = useRouter()
 const error = ref(null)
 
 onMounted(async () => {
-  const { error: err } = await supabase.auth.getSession()
+  const { data, error: err } = await supabase.auth.getSession()
   if (err) {
     error.value = err.message
-  } else {
-    router.replace('/')
+    return
   }
+
+  const userId = data.session?.user?.id
+  if (userId) {
+    const [{ count: owned }, { count: joined }] = await Promise.all([
+      supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('owner_id', userId),
+      supabase.from('session_members').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    ])
+    if (!owned && !joined) {
+      await supabase.auth.signOut()
+      error.value = 'Sign-ups are currently closed.'
+      return
+    }
+  }
+
+  router.replace('/')
 })
 </script>
