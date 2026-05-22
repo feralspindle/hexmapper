@@ -164,13 +164,39 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
+  function _fmt(v) {
+    if (v === null || v === undefined) return '–'
+    if (typeof v === 'object') return JSON.stringify(v)
+    return String(v)
+  }
+
+  function _gearSlots(gear) {
+    return (gear ?? []).filter(i => !i.disabled).reduce((sum, i) => sum + (i.slots ?? 0) * (i.quantity ?? 1), 0)
+  }
+
+  function _logSheet(what) {
+    if (!currentSessionId.value) return
+    const authStore = useAuthStore()
+    supabase.from('character_sheet_log').insert({
+      session_id:   currentSessionId.value,
+      user_id:      authStore.user?.id ?? null,
+      display_name: authStore.displayName ?? 'Someone',
+      what,
+    }).then(({ error }) => { if (error) console.error('characterStore._logSheet:', error.message) })
+  }
+
   function updateField(field, value) {
     if (!activeId.value) return
+    const oldValue = character.value?.[field]
+    const charName = character.value?.name ?? 'character'
     characters.value = characters.value.map(c =>
       c.id === activeId.value ? { ...c, data: { ...c.data, [field]: value } } : c
     )
     _scheduleSave(activeId.value)
     _scheduleBroadcast(activeId.value)
+    if (field !== 'gear' && field !== 'attacks') {
+      _logSheet(`${charName} · ${field}: ${_fmt(oldValue)} → ${_fmt(value)}`)
+    }
   }
 
   function adjustHp(delta) {
@@ -200,6 +226,8 @@ export const useCharacterStore = defineStore('character', () => {
 
   function addGearItem(item) {
     if (!character.value) return
+    const charName = character.value?.name ?? 'character'
+    const slotsBefore = _gearSlots(character.value.gear)
     const newItem = {
       instanceId: crypto.randomUUID(),
       name: item.name,
@@ -219,43 +247,74 @@ export const useCharacterStore = defineStore('character', () => {
       }
       updateField('attacks', [...(character.value.attacks ?? []), attackEntry])
     }
+    const delta = newItem.slots * newItem.quantity
+    const slotsAfter = slotsBefore + delta
+    _logSheet(`${charName} added gear: ${newItem.name} (${newItem.slots} slot${newItem.slots !== 1 ? 's' : ''} ×${newItem.quantity}) · total slots: ${slotsBefore} → ${slotsAfter} (${delta >= 0 ? '+' : ''}${delta})`)
   }
 
   function moveGearItem(instanceId, direction) {
     if (!character.value?.gear) return
+    const charName = character.value?.name ?? 'character'
     const gear = [...character.value.gear]
     const idx = gear.findIndex(item => item.instanceId === instanceId)
     if (idx === -1) return
     const next = idx + direction
     if (next < 0 || next >= gear.length) return
+    const itemName = gear[idx].name
     ;[gear[idx], gear[next]] = [gear[next], gear[idx]]
     updateField('gear', gear)
+    _logSheet(`${charName} moved gear: ${itemName} ${direction > 0 ? 'down' : 'up'}`)
   }
 
   function updateGearItem(instanceId, patch) {
     if (!character.value?.gear) return
-    updateField('gear', character.value.gear.map(item =>
-      item.instanceId === instanceId ? { ...item, ...patch } : item
-    ))
+    const charName = character.value?.name ?? 'character'
+    const item = character.value.gear.find(i => i.instanceId === instanceId)
+    const slotsBefore = _gearSlots(character.value.gear)
+    const updatedGear = character.value.gear.map(i => i.instanceId === instanceId ? { ...i, ...patch } : i)
+    updateField('gear', updatedGear)
+    if (item) {
+      const action = 'disabled' in patch ? (patch.disabled ? 'disabled' : 'enabled') : 'edited'
+      const slotsAfter = _gearSlots(updatedGear)
+      const delta = slotsAfter - slotsBefore
+      const slotStr = delta !== 0
+        ? ` · total slots: ${slotsBefore} → ${slotsAfter} (${delta > 0 ? '+' : ''}${delta})`
+        : ` · total slots: ${slotsBefore}`
+      _logSheet(`${charName} ${action} gear: ${item.name}${slotStr}`)
+    }
   }
 
   function deleteGearItem(instanceId) {
     if (!character.value?.gear) return
-    updateField('gear', character.value.gear.filter(item => item.instanceId !== instanceId))
+    const charName = character.value?.name ?? 'character'
+    const item = character.value.gear.find(i => i.instanceId === instanceId)
+    const slotsBefore = _gearSlots(character.value.gear)
+    const remainingGear = character.value.gear.filter(i => i.instanceId !== instanceId)
+    updateField('gear', remainingGear)
+    if (item) {
+      const slotsAfter = _gearSlots(remainingGear)
+      const delta = slotsAfter - slotsBefore
+      _logSheet(`${charName} deleted gear: ${item.name} · total slots: ${slotsBefore} → ${slotsAfter} (${delta > 0 ? '+' : ''}${delta})`)
+    }
   }
 
   function addAttack(raw, damageDie = null) {
     if (!character.value) return
+    const charName = character.value?.name ?? 'character'
     updateField('attacks', [...(character.value.attacks ?? []), {
       id: crypto.randomUUID(),
       raw: raw.trim(),
       damageDie: damageDie?.trim() || null,
       disabled: false,
     }])
+    _logSheet(`${charName} added attack: ${raw.trim()}`)
   }
 
   function updateAttack(idx, patch) {
     if (!character.value?.attacks) return
+    const charName = character.value?.name ?? 'character'
+    const atk = character.value.attacks[idx]
+    const raw = typeof atk === 'string' ? atk : (atk?.raw ?? '')
     updateField('attacks', character.value.attacks.map((a, i) => {
       if (i !== idx) return a
       const base = typeof a === 'string'
@@ -263,11 +322,16 @@ export const useCharacterStore = defineStore('character', () => {
         : { ...a }
       return { ...base, ...patch }
     }))
+    _logSheet(`${charName} edited attack: ${raw}`)
   }
 
   function deleteAttack(idx) {
     if (!character.value?.attacks) return
+    const charName = character.value?.name ?? 'character'
+    const atk = character.value.attacks[idx]
+    const raw = typeof atk === 'string' ? atk : (atk?.raw ?? '')
     updateField('attacks', character.value.attacks.filter((_, i) => i !== idx))
+    _logSheet(`${charName} deleted attack: ${raw}`)
   }
 
   function spendLuckToken() {
@@ -289,6 +353,14 @@ export const useCharacterStore = defineStore('character', () => {
     if (!character.value) return
     const luck = character.value.luckTokens ?? { current: 1, max: 3 }
     updateField('luckTokens', { ...luck, current: Math.max(0, Math.min(luck.max, luck.current + delta)) })
+  }
+
+  function updateFieldForChar(id, field, value) {
+    characters.value = characters.value.map(c =>
+      c.id === id ? { ...c, data: { ...c.data, [field]: value } } : c
+    )
+    _scheduleSave(id)
+    _scheduleBroadcast(id)
   }
 
   async function clearAllInitiative() {
@@ -484,7 +556,7 @@ export const useCharacterStore = defineStore('character', () => {
     loading, saving,
     luckEvents,
     loadAll, setActive, importCharacter, deleteCharacter,
-    updateField, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
+    updateField, updateFieldForChar, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
     addGearItem, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative,
     cleanup,

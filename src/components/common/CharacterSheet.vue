@@ -369,6 +369,7 @@
                             </button>
                         </div>
                     </div>
+
                 </div>
 
                 <div class="cs-luck-block">
@@ -1528,14 +1529,19 @@
                                 @keyup.enter="submitAddGear"
                             />
                             <div style="display: flex; gap: 6px">
-                                <label class="cs-form-label" style="flex: 1"
-                                    >Slots<input
-                                        v-model.number="newGearDraft.slots"
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        class="cs-input"
-                                /></label>
+                                <label class="cs-form-label" style="flex: 1">Slots
+                                    <div style="display: flex; align-items: center; gap: 4px; margin-top: 4px">
+                                        <button
+                                            class="cs-adj-btn"
+                                            @click="newGearDraft.slots = Math.max(0, newGearDraft.slots - 1)"
+                                        >−</button>
+                                        <span style="min-width: 20px; text-align: center">{{ newGearDraft.slots }}</span>
+                                        <button
+                                            class="cs-adj-btn"
+                                            @click="newGearDraft.slots++"
+                                        >+</button>
+                                    </div>
+                                </label>
                                 <label class="cs-form-label" style="flex: 1"
                                     >Qty<input
                                         v-model.number="newGearDraft.quantity"
@@ -1781,7 +1787,38 @@
                                 <div class="cs-section-label">
                                     {{ coin.label }}
                                 </div>
+                                <template v-if="editingCoin === coin.key && canEdit">
+                                    <input
+                                        ref="coinInputRef"
+                                        v-model.number="coinDraft"
+                                        type="number"
+                                        min="0"
+                                        class="cs-input"
+                                        style="
+                                            width: 70px;
+                                            text-align: center;
+                                            font-size: 20px;
+                                            font-family: var(--font-mono);
+                                            font-weight: 700;
+                                        "
+                                        @keyup.enter="saveCoin"
+                                        @keyup.escape="editingCoin = null"
+                                        @blur="saveCoin"
+                                    />
+                                </template>
+                                <button
+                                    v-else-if="canEdit"
+                                    class="cs-big-val cs-clickable"
+                                    style="font-size: 20px"
+                                    v-tooltip.bottom="'Click to edit'"
+                                    @click="startEditCoin(coin.key)"
+                                >
+                                    {{ char[coin.key] ?? 0 }}
+                                    <span class="cs-tip">Click to edit</span>
+                                </button>
                                 <div
+                                    v-else
+                                    v-tooltip.bottom="coin.label + ': ' + (char[coin.key] ?? 0)"
                                     style="
                                         font-family: var(--font-mono);
                                         font-size: 20px;
@@ -1793,7 +1830,7 @@
                                     {{ char[coin.key] ?? 0 }}
                                 </div>
                             </div>
-                            <div v-if="canEdit" style="display: flex; gap: 4px">
+                            <div v-if="canEdit" style="display: flex; gap: 4px; align-items: center">
                                 <button
                                     class="cs-adj-btn"
                                     :title="`Spend 1 ${coin.label.toLowerCase()}`"
@@ -1812,7 +1849,48 @@
                                 >
                                     +
                                 </button>
+                                <button
+                                    class="cs-adj-btn"
+                                    title="Add custom amount"
+                                    @click="startAddCoin(coin.key)"
+                                >
+                                    ⊕
+                                </button>
                             </div>
+                        </div>
+                        <div
+                            v-if="canEdit && addingCoin === coin.key"
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 6px;
+                                padding: 0 8px 8px;
+                            "
+                        >
+                            <input
+                                ref="coinAddInputRef"
+                                v-model.number="coinAddDraft"
+                                type="number"
+                                class="cs-input"
+                                placeholder="Amount"
+                                style="flex: 1; text-align: center"
+                                @keyup.enter="submitAddCoin"
+                                @keyup.escape="addingCoin = null"
+                            />
+                            <button
+                                class="cs-btn primary"
+                                style="padding: 4px 10px; font-size: 12px"
+                                @click="submitAddCoin"
+                            >
+                                Add
+                            </button>
+                            <button
+                                class="cs-btn ghost"
+                                style="padding: 4px 8px; font-size: 12px"
+                                @click="addingCoin = null"
+                            >
+                                ×
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1930,14 +2008,38 @@ import {
     parseDamageDie,
 } from "@/stores/characterStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
+import { useSessionStore } from "@/stores/sessionStore.js";
+import { useAuthStore } from "@/stores/authStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
+import { supabase } from "@/lib/supabase";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
+const sessionStore = useSessionStore();
+const authStore = useAuthStore();
+
+// Import store functions for direct access
+const { setActive, characters, currentSessionId, saving, updateField } = characterStore;
 const { confirm } = useConfirmDialog();
+
+// Augment function (matches _augment from characterStore)
+function augmentData(data) {
+    return {
+        ...data,
+        currentHp: data.currentHp ?? data.maxHitPoints ?? 0,
+        luckTokens: data.luckTokens ?? { current: 1, max: 3 },
+    };
+}
 
 const canEdit = computed(() => characterStore.canEditActiveCharacter);
 const char = computed(() => characterStore.character);
+
+// GMs should be able to roll initiative for their own character
+const isGM = computed(() => sessionStore.isGM);
+const isGmCharacter = computed(() => {
+    const authId = characterStore.activeCharacter?.user_id;
+    return isGM.value && authId === authStore.user?.id;
+});
 
 const subTab = ref("stats");
 const subTabs = [
@@ -2098,6 +2200,35 @@ function startEditXP() {
 function saveXP() {
     characterStore.updateField("XP", Number(xpDraft.value) || 0);
     editingXP.value = false;
+}
+
+const editingCoin = ref(null);
+const coinDraft = ref(0);
+const coinInputRef = ref(null);
+const addingCoin = ref(null);
+const coinAddDraft = ref(null);
+const coinAddInputRef = ref(null);
+
+function startEditCoin(key) {
+    coinDraft.value = char.value[key] ?? 0;
+    editingCoin.value = key;
+    nextTick(() => coinInputRef.value?.[0]?.focus());
+}
+function saveCoin() {
+    if (!editingCoin.value) return;
+    characterStore.updateField(editingCoin.value, Math.max(0, Number(coinDraft.value) || 0));
+    editingCoin.value = null;
+}
+function startAddCoin(key) {
+    coinAddDraft.value = null;
+    addingCoin.value = key;
+    nextTick(() => coinAddInputRef.value?.focus());
+}
+function submitAddCoin() {
+    if (!addingCoin.value) return;
+    const delta = Number(coinAddDraft.value);
+    if (delta) characterStore.adjustMoney(addingCoin.value, delta);
+    addingCoin.value = null;
 }
 
 const luckCurrent = computed(() => char.value?.luckTokens?.current ?? 1);

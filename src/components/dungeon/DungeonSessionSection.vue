@@ -56,7 +56,7 @@
         No activity yet
       </div>
       <div
-        v-for="item in activityStore.activities"
+        v-for="item in activityStore.activities.filter(a => a.verb !== 'sheet')"
         :key="item.id"
         class="ds-activity-item"
         :style="{ '--act-color': actColor(item.user_id) }"
@@ -69,6 +69,7 @@
         <span class="ds-activity-when"> {{ timeAgo(item.created_at) }} </span>
       </div>
     </div>
+
   </div>
 </template>
 
