@@ -164,7 +164,6 @@ async function submit() {
       const mimeType = screenshotFile.value.type
       if (!ALLOWED_TYPES.includes(mimeType)) throw new Error('Only image files are allowed')
       const ext  = EXT_MAP[mimeType] ?? 'jpg'
-      // Upload into per-user folder so storage policy can enforce ownership
       const path = `${authStore.user?.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`
       const { error: uploadErr } = await supabase.storage
         .from('bug-screenshots')

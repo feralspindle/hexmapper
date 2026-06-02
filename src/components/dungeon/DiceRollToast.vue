@@ -40,15 +40,11 @@ const { gmName } = useGMLabel()
 const toasts = ref([])
 
 const seenIds = new Set()
-const TOAST_MAX_AGE_MS = 30_000
 
 watch(
-  () => diceStore.rolls[0],
+  () => diceStore.latestRoll,
   (newRoll) => {
     if (!newRoll) return
-
-    const age = Date.now() - new Date(newRoll.created_at).getTime()
-    if (age > TOAST_MAX_AGE_MS) return
 
     const id = newRoll.id
     if (seenIds.has(id)) return

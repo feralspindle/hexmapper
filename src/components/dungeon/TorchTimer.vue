@@ -16,7 +16,7 @@
       <i
         :class="expired ? 'ra ra-skull text-red-500' : running ? 'ra ra-torch text-amber-400' : 'fa-solid fa-hourglass-half text-stone-500'"
       />
-      <span>{{ displayTime }}</span>
+      <span v-if="sessionStore.isGM">{{ displayTime }}</span>
     </button>
 
     <button
@@ -33,10 +33,12 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
+import { useSessionStore } from '@/stores/sessionStore.js'
 
-const DURATION = 60 * 60 * 1000 //TODO - is there a need to make this editable by gm, ie for different house rules
+const DURATION = 60 * 60 * 1000
 
 const dungeonStore = useD()
+const sessionStore = useSessionStore()
 
 const totalElapsed = ref(0)
 let tickId = null

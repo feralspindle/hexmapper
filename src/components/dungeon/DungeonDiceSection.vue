@@ -325,11 +325,9 @@
             >
                 <div class="ds-roll-dot" />
                 <div>
-                    <div
-                        class="ds-roll-who"
-                        :style="{ color: rollColor(entry.user_id) }"
-                    >
-                        {{ gmName(entry.user_id, entry.display_name) }}
+                    <div class="ds-roll-who-row">
+                        <span class="ds-roll-who" :style="{ color: rollColor(entry.user_id) }">{{ gmName(entry.user_id, entry.display_name) }}</span>
+                        <span v-if="entry.label" class="ds-roll-label">{{ entry.label }}</span>
                     </div>
                     <div class="ds-roll-expr">{{ formatExpr(entry) }}</div>
                     <div v-if="entry.results?.length" class="ds-roll-breakdown">
@@ -349,9 +347,6 @@
                                 >,
                             </span></template
                         >]
-                    </div>
-                    <div v-if="entry.label" class="ds-roll-label">
-                        {{ entry.label }}
                     </div>
                     <div class="ds-roll-when">
                         {{ timeAgo(entry.created_at) }}

@@ -128,8 +128,6 @@ export const useSessionStore = defineStore('session', () => {
     loading.value = true
     error.value = null
     try {
-      // Uses the join_session RPC (security definer) so sessions don't need to be
-      // publicly enumerable — the UUID is the access credential.
       const { data, error: err } = await supabase.rpc('join_session', { p_session_id: id })
       if (err) throw err
       _applySessionRow(data)

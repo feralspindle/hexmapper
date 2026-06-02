@@ -315,7 +315,8 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
-import { useDungeonDraw, CELL_SIZE, pixelToGrid, corridorSegments } from '@/composables/useDungeonDraw.js'
+import { useSessionStore } from '@/stores/sessionStore.js'
+import { useDungeonDraw, CELL_SIZE, pixelToGrid, pixelToCell, corridorSegments } from '@/composables/useDungeonDraw.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
@@ -327,6 +328,7 @@ const WALL  = '#000000'
 const ROCK  = '#000000'
 
 const prefs = useUserPrefsStore()
+const sessionStore = useSessionStore()
 const mapStyle = computed(() => prefs.mapStyle ?? 'classic')
 const styleColors = computed(() => {
   switch (mapStyle.value) {
@@ -334,7 +336,7 @@ const styleColors = computed(() => {
       return { bg: '#1a0f06', grid: 'rgba(58,46,34,.10)', gridStrong: 'rgba(58,46,34,.22)', floor: '#f4e8cc', wall: '#2a1810', wallW: 2, selectedColor: '#8a1c1c' }
     case 'blueprint':
       return { bg: '#0c2438', grid: 'rgba(255,255,255,.05)', gridStrong: 'rgba(255,255,255,.10)', floor: '#1d4868', wall: '#b8e0f0', wallW: 1.5, selectedColor: '#ffaa55' }
-    default: // classic
+    default:
       return { bg: '#1a1a1a', grid: 'rgba(255,255,255,.04)', gridStrong: 'rgba(255,255,255,.08)', floor: '#ffffff', wall: '#000000', wallW: 2.5, selectedColor: '#d00000' }
   }
 })
@@ -351,7 +353,7 @@ const labelStyle = computed(() => {
         name: { family: '"IM Fell English",serif', size: 14, fill: '#2a1810', italic: true, weight: '400', uppercase: false, letterSpacing: '.01em' },
         dims: { family: '"JetBrains Mono",monospace', fill: 'rgba(58,46,34,.6)', letterSpacing: '.06em' },
       }
-    default: // classic
+    default:
       return {
         name: { family: '"Special Elite",monospace', size: 12, fill: '#000000', italic: false, weight: '400', uppercase: true, letterSpacing: '.04em' },
         dims: { family: '"JetBrains Mono",monospace', fill: 'rgba(0,0,0,.55)', letterSpacing: '.04em' },
@@ -365,23 +367,29 @@ const TOOL_HINTS = {
   polygon:  [{ type: 'text', text: 'Click to place vertices. Double-click or ' }, { type: 'kbd', text: 'Enter' }, { type: 'text', text: ' to close. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
   corridor: [{ type: 'text', text: 'Click to place points along the corridor. Double-click to finish. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
   door:     [{ type: 'text', text: 'Click a wall to place a door. ' }],
+  fog:      [{ type: 'text', text: 'Click or drag to reveal cells. Hold ' }, { type: 'kbd', text: 'Shift' }, { type: 'text', text: ' to hide.' }],
 }
 const statusBanner = computed(() => TOOL_HINTS[dungeonStore.drawMode] ?? null)
 
-const props = defineProps({ dungeonId: String })
+const props = defineProps({
+  dungeonId: String,
+  mapMoveMode: { type: String, default: 'none' },
+  imageSettingsOpen: { type: Boolean, default: false },
+})
+const emit = defineEmits(['image-offset-change'])
 
 const dungeonStore = useD()
 const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
 
-const remoteCursors = ref(new Map()) // userId → { x, y, name, color }
+const remoteCursors = ref(new Map())
 
-const dimEntry = ref(null)  // { gx, gy, screenX, screenY } when popup is open
+const dimEntry = ref(null)
 const dimW = ref('30')
 const dimH = ref('20')
 
-let doorDrag = null       // { roomId, doorId } while dragging a door
-const doorDragGhost = ref(null)  // { roomId, doorData } ghost position
+let doorDrag = null
+const doorDragGhost = ref(null)
 let doorDragMoved = false
 let skipNextDoorClick = false
 
@@ -502,7 +510,6 @@ function polygonOutsetPoints(room, offset) {
   const cs = cellPx.value
   const pts = room.points
   if (!pts?.length) return ''
-  // outset each point along the averaged normal of its two adjacent edges
   const n = pts.length
   return pts.map((p, i) => {
     const prev = pts[(i + n - 1) % n]
@@ -559,6 +566,19 @@ const canvasWidth = ref(800)
 const canvasHeight = ref(600)
 let ctx = null
 let rafId = null
+
+const mapImageEl = new Image()
+const mapImageLoaded = ref(false)
+watch(() => dungeonStore.dungeonImageUrl, (url) => {
+  mapImageLoaded.value = false
+  if (!url) return
+  mapImageEl.onload = () => { mapImageLoaded.value = true }
+  mapImageEl.onerror = () => { mapImageLoaded.value = false }
+  mapImageEl.src = url
+}, { immediate: true })
+
+let fogBrush = null
+let _fogFlushTimer = null
 
 
 const viewport = ref({ offsetX: -100, offsetY: -100, zoom: 1 })
@@ -691,12 +711,12 @@ let moveStartGrid = null
 let moveOriginal = null
 let didMove = false
 
-const corridorDragGhost = ref(null)  // { id, points } during corridor drag
-let corridorDrag = null              // { id, type: 'point'|'whole', pointIndex, originalPoints, startGx, startGy }
+const corridorDragGhost = ref(null)
+let corridorDrag = null
 let didCorridorDrag = false
-const hoveredCorridorPoint = ref(-1) // -1=none, -2=body, >=0=point index
+const hoveredCorridorPoint = ref(-1)
 
-const draggingItem = ref(null) // { roomId, itemId, ghostX, ghostY }
+const draggingItem = ref(null)
 
 function onItemMouseDown(_e, roomId, item) {
   draggingItem.value = { roomId, itemId: item.id, ghostX: item.x, ghostY: item.y }
@@ -792,6 +812,8 @@ function applyResize(handle, original, startGx, startGy, gx, gy) {
 }
 
 const cursorStyle = computed(() => {
+  if (props.mapMoveMode === 'image') return isPanning ? 'grabbing' : 'move'
+  if (dungeonStore.drawMode === 'fog') return 'cell'
   if (dungeonStore.drawMode === 'pan') return isPanning ? 'grabbing' : 'grab'
   if (dungeonStore.drawMode === 'edit') {
     if (isMoving || corridorDrag) return 'grabbing'
@@ -908,13 +930,79 @@ function renderFrame() {
   ctx.clearRect(0, 0, W, H)
 
   drawBackground(W, H)
+  drawMapImage()
   drawGrid(W, H)
   drawCorridors()
   drawRooms()
   drawDoors()
   if (draw.ghost.value) drawGhost()
+  drawFog()
 
   rafId = requestAnimationFrame(renderFrame)
+}
+
+function drawMapImage() {
+  if (!mapImageLoaded.value || !dungeonStore.dungeon?.map_image_path) return
+  const d = dungeonStore.dungeon
+  const zoom = viewport.value.zoom
+  const scale = (d.map_image_scale ?? 1) * zoom
+  const imgW = mapImageEl.naturalWidth  * scale
+  const imgH = mapImageEl.naturalHeight * scale
+  const imgX = (d.map_image_offset_x ?? 0) * zoom - viewport.value.offsetX
+  const imgY = (d.map_image_offset_y ?? 0) * zoom - viewport.value.offsetY
+  const rot  = d.map_image_rotation ?? 0
+
+  ctx.save()
+  if (rot) {
+    ctx.translate(imgX + imgW / 2, imgY + imgH / 2)
+    ctx.rotate(rot * Math.PI / 180)
+    ctx.drawImage(mapImageEl, -imgW / 2, -imgH / 2, imgW, imgH)
+  } else {
+    ctx.drawImage(mapImageEl, imgX, imgY, imgW, imgH)
+  }
+  ctx.restore()
+}
+
+function drawFog() {
+  const d = dungeonStore.dungeon
+  if (!d) return
+  if (d.fog_reveal_all) return
+  if (!d.fog_mode) {
+    if (sessionStore.isGM) return
+  }
+
+  const cs = cellPx.value
+  const colMin = Math.floor(viewport.value.offsetX / cs) - 1
+  const rowMin = Math.floor(viewport.value.offsetY / cs) - 1
+  const colMax = colMin + Math.ceil(canvasWidth.value / cs) + 2
+  const rowMax = rowMin + Math.ceil(canvasHeight.value / cs) + 2
+
+  const isGM = sessionStore.isGM
+  ctx.fillStyle = isGM ? 'rgba(8,12,22,0.45)' : '#080c16'
+
+  for (let col = colMin; col <= colMax; col++) {
+    for (let row = rowMin; row <= rowMax; row++) {
+      if (!dungeonStore.isCellRevealed(col, row)) {
+        const px = col * cs - viewport.value.offsetX
+        const py = row * cs - viewport.value.offsetY
+        ctx.fillRect(px, py, cs, cs)
+      }
+    }
+  }
+
+  if (isGM && d.fog_mode) {
+    ctx.strokeStyle = 'rgba(255,200,80,0.25)'
+    ctx.lineWidth = 0.5
+    for (let col = colMin; col <= colMax; col++) {
+      for (let row = rowMin; row <= rowMax; row++) {
+        if (dungeonStore.isCellRevealed(col, row)) {
+          const px = col * cs - viewport.value.offsetX
+          const py = row * cs - viewport.value.offsetY
+          ctx.strokeRect(px + 0.5, py + 0.5, cs - 1, cs - 1)
+        }
+      }
+    }
+  }
 }
 
 function drawBackground(W, H) {
@@ -949,20 +1037,25 @@ function drawGrid(W, H) {
   const sc = styleColors.value
   const sx = -(viewport.value.offsetX % cs)
   const sy = -(viewport.value.offsetY % cs)
+  const alignMode = props.imageSettingsOpen
 
-  ctx.strokeStyle = sc.grid
-  ctx.lineWidth = mapStyle.value === 'blueprint' ? 0.7 : 0.5
+  const gridColor       = alignMode ? 'rgba(255, 210, 60, 0.55)' : sc.grid
+  const gridStrongColor = alignMode ? 'rgba(255, 210, 60, 0.95)' : sc.gridStrong
+  const gridWidth       = alignMode ? 1.0 : (mapStyle.value === 'blueprint' ? 0.7 : 0.5)
+  const gridStrongWidth = alignMode ? 1.8 : (mapStyle.value === 'blueprint' ? 1.0 : 0.8)
+
+  ctx.strokeStyle = gridColor
+  ctx.lineWidth = gridWidth
   ctx.beginPath()
   for (let x = sx; x < W; x += cs) { ctx.moveTo(x, 0); ctx.lineTo(x, H) }
   for (let y = sy; y < H; y += cs) { ctx.moveTo(0, y); ctx.lineTo(W, y) }
   ctx.stroke()
 
-  // 5-cell major grid = 25 ft interval
   const mcs = cs * 5
   const msx = -(viewport.value.offsetX % mcs)
   const msy = -(viewport.value.offsetY % mcs)
-  ctx.strokeStyle = sc.gridStrong
-  ctx.lineWidth = mapStyle.value === 'blueprint' ? 1.0 : 0.8
+  ctx.strokeStyle = gridStrongColor
+  ctx.lineWidth = gridStrongWidth
   ctx.beginPath()
   for (let x = msx; x < W; x += mcs) { ctx.moveTo(x, 0); ctx.lineTo(x, H) }
   for (let y = msy; y < H; y += mcs) { ctx.moveTo(0, y); ctx.lineTo(W, y) }
@@ -1097,12 +1190,12 @@ function drawResizeHandles(room) {
 }
 
 function drawDoorAt(cx, cy, nx, ny) {
-  const scale   = cellPx.value / 25   // proportion to design's GRID_PX=25
-  const bgW     = Math.max(6, 10 * scale)   // paper-colored clearing line
-  const fgW     = Math.max(1.5, 3 * scale)  // ink door frame line
-  const halfLen = Math.max(5, 7 * scale)    // half-length of the perpendicular line
-  const knobR   = Math.max(2, 2.5 * scale)  // door knob radius
-  const tx = -ny, ty = nx  // perpendicular vector
+  const scale   = cellPx.value / 25
+  const bgW     = Math.max(6, 10 * scale)
+  const fgW     = Math.max(1.5, 3 * scale)
+  const halfLen = Math.max(5, 7 * scale)
+  const knobR   = Math.max(2, 2.5 * scale)
+  const tx = -ny, ty = nx
 
   const bgColor = mapStyle.value === 'blueprint' ? '#1d4868' : mapStyle.value === 'classic' ? '#ffffff' : '#ede1c7'
   ctx.strokeStyle = bgColor
@@ -1391,6 +1484,26 @@ function onMouseDown(e) {
     return
   }
 
+  if (e.button === 0 && props.mapMoveMode === 'image' && dungeonStore.dungeon?.map_image_path) {
+    isPanning = true
+    panStart = { x: e.clientX, y: e.clientY }
+    panOrigin = { ...viewport.value, imageOffsetX: dungeonStore.dungeon.map_image_offset_x ?? 0, imageOffsetY: dungeonStore.dungeon.map_image_offset_y ?? 0 }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return
+  }
+
+  if (e.button === 0 && dungeonStore.drawMode === 'fog' && sessionStore.isGM) {
+    const rect = getRect()
+    const { cellX, cellY } = pixelToCell(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
+    const brushMode = e.shiftKey ? 'hide' : 'reveal'
+    fogBrush = { mode: brushMode, seen: new Set([`${cellX}:${cellY}`]) }
+    _applyFogBrush(cellX, cellY)
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return
+  }
+
   if (e.button === 0 && (dungeonStore.drawMode === 'door' || dungeonStore.drawMode === 'select' || dungeonStore.drawMode === 'edit')) {
     const rect = getRect()
     const mx = e.clientX - rect.left
@@ -1478,11 +1591,32 @@ function onMouseMove(e) {
     broadcastCursor(e.clientX - rect.left, e.clientY - rect.top)
   }
 
+  if (isPanning && props.mapMoveMode === 'image') {
+    const dx = (e.clientX - panStart.x) / viewport.value.zoom
+    const dy = (e.clientY - panStart.y) / viewport.value.zoom
+    emit('image-offset-change', {
+      offsetX: panOrigin.imageOffsetX + dx,
+      offsetY: panOrigin.imageOffsetY + dy,
+    })
+    return
+  }
+
   if (isPanning) {
     viewport.value = {
       offsetX: panOrigin.offsetX - (e.clientX - panStart.x),
       offsetY: panOrigin.offsetY - (e.clientY - panStart.y),
       zoom: panOrigin.zoom,
+    }
+    return
+  }
+
+  if (fogBrush) {
+    const rect = getRect()
+    const { cellX, cellY } = pixelToCell(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
+    const key = `${cellX}:${cellY}`
+    if (!fogBrush.seen.has(key)) {
+      fogBrush.seen.add(key)
+      _applyFogBrush(cellX, cellY)
     }
     return
   }
@@ -1569,6 +1703,13 @@ function onMouseMove(e) {
 }
 
 function onMouseUp(e) {
+  if (fogBrush) {
+    fogBrush = null
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
+    return
+  }
+
   if (isPanning) {
     isPanning = false
     window.removeEventListener('mousemove', onMouseMove)
@@ -1646,6 +1787,7 @@ function onMouseUp(e) {
 }
 
 function onClick(e) {
+  if (dungeonStore.drawMode === 'fog') return
   if (didResize)        { didResize = false; return }
   if (didMove)          { didMove = false; return }
   if (didCorridorDrag)  { didCorridorDrag = false; return }
@@ -1780,6 +1922,15 @@ function openAnnotation(type, id) {
   dungeonStore.selectElement(type, id)
 }
 
+function _applyFogBrush(cellX, cellY) {
+  if (!fogBrush || !props.dungeonId) return
+  if (fogBrush.mode === 'reveal') {
+    dungeonStore.revealFogCell(props.dungeonId, cellX, cellY)
+  } else {
+    dungeonStore.hideFogCell(props.dungeonId, cellX, cellY)
+  }
+}
+
 function onWheel(e) {
   if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
@@ -1809,6 +1960,10 @@ function onKeyDown(e) {
   if (e.key === 'v' || e.key === 'V') { dungeonStore.drawMode = 'select'; return }
   if (e.key === 'h' || e.key === 'H') { dungeonStore.drawMode = 'pan'; return }
   if (e.key === 'e' || e.key === 'E') { dungeonStore.drawMode = 'edit'; return }
+  if ((e.key === 'f' || e.key === 'F') && sessionStore.isGM && dungeonStore.fogMode) {
+    dungeonStore.drawMode = dungeonStore.drawMode === 'fog' ? 'select' : 'fog'
+    return
+  }
   if (e.key === 'r' || e.key === 'R') { dungeonStore.drawMode = 'room'; return }
   if (e.key === 'o' || e.key === 'O') { dungeonStore.drawMode = 'circle'; return }
   if (e.key === 'c' || e.key === 'C') { dungeonStore.drawMode = 'corridor'; return }

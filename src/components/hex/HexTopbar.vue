@@ -1,5 +1,5 @@
 <template>
-    <header class="ds-topbar" style="gap: 0">
+    <header class="ds-topbar">
         <RouterLink
             to="/"
             class="ds-brand"
@@ -124,7 +124,7 @@
 
         <div style="flex: 1" />
 
-        <div class="ds-presence" style="margin-right: 12px">
+        <div class="ds-presence">
             <div
                 v-for="user in visibleOnlineUsers"
                 :key="user.user_id ?? user._clientId"
@@ -157,15 +157,14 @@
             </span>
         </div>
 
-        <SessionTorchTimer style="margin-right: 6px" />
+        <SessionTorchTimer />
 
-        <CharacterPicker style="margin-right: 6px" />
+        <CharacterPicker />
 
         <button
             class="ds-tb-btn"
             :class="{ active: charOpen }"
             title="Character sheet"
-            style="margin-right: 4px"
             @click="$emit('toggle-char')"
         >
             <svg
@@ -184,11 +183,8 @@
             <span>Sheet</span>
         </button>
 
-        <ShareModal
-            :session-id="sessionStore.sessionId"
-            style="margin-right: 4px"
-        />
-        <BugReportButton style="margin-right: 10px" />
+        <ShareModal :session-id="sessionStore.sessionId" />
+        <BugReportButton />
 
         <div
             style="

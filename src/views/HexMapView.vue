@@ -27,7 +27,6 @@
                 @hide-all="hexStore.hideAll()"
                 @map-settings="showMapSettings = !showMapSettings"
             />
-            <!-- placeholder toolbar width when no mode selected yet -->
             <div v-else-if="!hexMode" style="width: var(--toolbar-w, 64px); flex-shrink: 0" />
             <div v-else />
 
@@ -123,6 +122,8 @@
 
                 <DiceRollToast />
                 <LuckTokenToast />
+                <QuestCompleteToast />
+                <LootDealToast />
                 <ChatToast />
                 <JoinToast />
             </div>
@@ -142,7 +143,8 @@
         />
 
         <DungeonPartyPanel v-if="!showModePicker" />
-        <GroupInventoryPanel v-if="!showModePicker" />
+        <PartyNotebook v-if="!showModePicker" :session-id="sessionId" />
+
     </div>
 </template>
 
@@ -165,15 +167,18 @@ import HexRightPanel from "@/components/hex/HexRightPanel.vue";
 import HexGrid from "@/components/hex/HexGrid.vue";
 import MapImageSettings from "@/components/hex/MapImageSettings.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
-import DiceRollToast from "@/components/dungeon/DiceRollToast.vue";
-import LuckTokenToast from "@/components/common/LuckTokenToast.vue";
+import DiceRollToast      from "@/components/dungeon/DiceRollToast.vue";
+import LuckTokenToast     from "@/components/common/LuckTokenToast.vue";
+import QuestCompleteToast from "@/components/common/QuestCompleteToast.vue";
+import LootDealToast      from "@/components/common/LootDealToast.vue";
 import ChatToast from "@/components/common/ChatToast.vue";
 import JoinToast from "@/components/common/JoinToast.vue";
 import PhotoBroadcastModal from "@/components/common/PhotoBroadcastModal.vue";
 import WelcomeModal from "@/components/common/WelcomeModal.vue";
 import CharacterDrawer from "@/components/common/CharacterDrawer.vue";
 import DungeonPartyPanel from "@/components/dungeon/DungeonPartyPanel.vue";
-import GroupInventoryPanel from "@/components/common/GroupInventoryPanel.vue";
+import PartyNotebook       from "@/components/common/PartyNotebook.vue";
+
 import HexBottomBar from "@/components/hex/HexBottomBar.vue";
 import MapScale from "@/components/hex/MapScale.vue";
 
@@ -183,8 +188,7 @@ const showMapSettings = ref(false);
 const moveMode = ref("none");
 const showWelcome = ref(false);
 
-// Mode + tool state
-const hexMode = ref(null); // null = show picker, 'fow' | 'blank'
+const hexMode = ref(null);
 const showModePicker = ref(false);
 const activeTool = ref("select");
 const activeTerrain = ref("plains");

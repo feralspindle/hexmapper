@@ -4,12 +4,12 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
 
 const BUCKET = 'reference-photos'
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 export const usePhotoStore = defineStore('photo', () => {
   const photos           = ref([])
-  const broadcastHistory = ref([]) // deduplicated, newest-first; shown in player gallery
-  const currentBroadcast = ref(null) // { id, photo_url, photo_name }
+  const broadcastHistory = ref([])
+  const currentBroadcast = ref(null)
   const loading          = ref(false)
   const uploading        = ref(false)
   let channel            = null
@@ -47,7 +47,6 @@ export const usePhotoStore = defineStore('photo', () => {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
     if (error) { console.error('photoStore._loadBroadcastHistory:', error.message); return }
-    // Deduplicate by photo_url, keeping the most recent broadcast for each
     const seen = new Set()
     broadcastHistory.value = (data ?? []).filter(row => {
       if (seen.has(row.photo_url)) return false
@@ -57,7 +56,6 @@ export const usePhotoStore = defineStore('photo', () => {
   }
 
   function _addToBroadcastHistory(row) {
-    // Remove any existing entry for this url, then prepend the new one
     broadcastHistory.value = [
       { id: row.id, photo_url: row.photo_url, photo_name: row.photo_name, created_at: row.created_at },
       ...broadcastHistory.value.filter(p => p.photo_url !== row.photo_url),
@@ -87,14 +85,12 @@ export const usePhotoStore = defineStore('photo', () => {
 
     if (file.size > MAX_FILE_SIZE) throw new Error('File too large (max 10 MB)')
 
-    // Validate by MIME type (not file extension — trivially spoofable)
     const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     const EXT_MAP = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
     const mimeType = file.type
     if (!ALLOWED_TYPES.includes(mimeType)) throw new Error('Unsupported file type')
     const ext = EXT_MAP[mimeType] ?? 'jpg'
 
-    // Path: {session_id}/{uuid}.{ext} — storage policy verifies session membership
     const storagePath = `${currentSessionId}/${crypto.randomUUID()}.${ext}`
 
     uploading.value = true

@@ -119,15 +119,10 @@ export const useMapStore = defineStore('map', () => {
 
     loading.value = false
 
-    // Restore the client's personal map view from localStorage.
-    // Falls back to sessionStore.activeMapId only when nothing is stored yet.
     const saved = localStorage.getItem(_localViewKey())
     if (saved && maps.value.find(m => m.id === saved)) {
       localMapId.value = saved
     } else {
-      // Legacy guard: if sessions.active_map_id somehow holds a child map (stale
-      // data from before this fix), navigate locally to the root rather than
-      // rewriting the DB.
       const sessionStore = useSessionStore()
       let cur = maps.value.find(m => m.id === sessionStore.activeMapId)
       if (cur?.parent_map_id) {

@@ -69,14 +69,12 @@ const emit = defineEmits(['update:fogMode', 'update:markerColor'])
 const hexStore = useHexStore()
 const activeMarker = ref(null)
 
-// Marker already on the currently-selected hex (may differ from activeMarker).
 const selectedHexMarker = computed(() => {
   const hex = hexStore.selectedHex
   if (!hex) return null
   return hexStore.hexCells.get(`${hex.q}:${hex.r}`)?.marker_color ?? null
 })
 
-// Whichever is truthy takes precedence for highlight / X-button visibility.
 const displayMarker = computed(() => activeMarker.value ?? selectedHexMarker.value)
 
 function selectMarker(id) {

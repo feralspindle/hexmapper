@@ -1,5 +1,5 @@
 <template>
-  <aside class="ds-toolbar">
+  <aside class="ds-toolbar" @mouseover="onHover" @mouseleave="onLeave">
 
     <div class="ds-tool-group">
       <button
@@ -27,21 +27,6 @@
         <component :is="tool.icon" :size="20" />
         <span class="ds-tool-key">{{ tool.key }}</span>
         <span class="ds-tip">{{ tool.label }}<kbd>{{ tool.key }}</kbd></span>
-      </button>
-    </div>
-
-    <div class="ds-tool-group">
-      <button class="ds-tool" title="Zoom in (=)" @click="emit('zoom-in')">
-        <ZoomInIcon :size="18" />
-        <span class="ds-tip">Zoom in<kbd>=</kbd></span>
-      </button>
-      <button class="ds-tool" title="Zoom out (-)" @click="emit('zoom-out')">
-        <ZoomOutIcon :size="18" />
-        <span class="ds-tip">Zoom out<kbd>-</kbd></span>
-      </button>
-      <button class="ds-tool" title="Reset zoom" @click="emit('zoom-reset')" style="font-family:var(--font-mono);font-size:9px;letter-spacing:-.5px">
-        1:1
-        <span class="ds-tip">Reset zoom</span>
       </button>
     </div>
 
@@ -91,11 +76,32 @@
       </button>
       <button
         class="ds-tool"
-        :aria-pressed="inventoryVisible ? 'true' : 'false'"
-        @click="toggleInventory()"
+        :aria-pressed="vaultVisible ? 'true' : 'false'"
+        @click="toggleVault()"
       >
-        <component :is="BagIcon" :size="18" />
-        <span class="ds-tip">Party inventory</span>
+        <component :is="VaultIcon" :size="18" />
+        <span class="ds-tip">Party vault</span>
+      </button>
+    </div>
+
+    <div v-if="sessionStore.isGM" class="ds-tool-group">
+      <button
+        class="ds-tool"
+        :aria-pressed="mapSettingsOpen ? 'true' : 'false'"
+        @click="emit('map-settings')"
+      >
+        <component :is="MapImageIcon" :size="18" />
+        <span class="ds-tip">Map image &amp; fog settings</span>
+      </button>
+      <button
+        v-if="dungeonStore.fogMode"
+        class="ds-tool"
+        :aria-pressed="dungeonStore.drawMode === 'fog' ? 'true' : 'false'"
+        @click="dungeonStore.drawMode = dungeonStore.drawMode === 'fog' ? 'select' : 'fog'"
+      >
+        <component :is="FogBrushIcon" :size="18" />
+        <span class="ds-tool-key">F</span>
+        <span class="ds-tip">Fog brush<kbd>F</kbd></span>
       </button>
     </div>
 
@@ -111,22 +117,41 @@
     </div>
 
   </aside>
+
+  <Teleport to="body">
+    <div
+      v-if="tip.show"
+      class="ds-tip ds-tip-portal"
+      :style="{ left: tip.x + 'px', top: tip.y + 'px' }"
+      v-html="tip.html"
+    />
+  </Teleport>
 </template>
 
 <script setup>
-import { h } from 'vue'
+import { h, reactive } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
+import { useSessionStore } from '@/stores/sessionStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
-import { useGroupInventory } from '@/composables/useGroupInventory.js'
+import { computed } from 'vue'
+import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
 import { usePartyPanel } from '@/composables/usePartyPanel.js'
 import { soundEnabled, toggleSound } from '@/lib/soundSettings.js'
 
 const dungeonStore = useD()
+const sessionStore = useSessionStore()
 const { confirm } = useConfirmDialog()
-const { visible: inventoryVisible, toggle: toggleInventory } = useGroupInventory()
+const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook()
 const { visible: partyVisible, toggle: toggleParty } = usePartyPanel()
+const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault')
+function toggleVault() {
+  if (vaultVisible.value) { toggleInventory() } else { openNotebook('vault') }
+}
 
-const emit = defineEmits(['zoom-in', 'zoom-out', 'zoom-reset'])
+const props = defineProps({
+  mapSettingsOpen: { type: Boolean, default: false },
+})
+const emit = defineEmits(['map-settings'])
 
 const CursorIcon  = { render: () => h('svg', { width:20,height:20,viewBox:'0 0 24 24',fill:'currentColor' }, [h('path',{d:'M5 3l5 16 2.5-6.5L19 10z'})]) }
 const HandIcon    = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M9 11V5.5a1.5 1.5 0 013 0V11'}),h('path',{d:'M12 11V4a1.5 1.5 0 013 0v7'}),h('path',{d:'M15 11V5.5a1.5 1.5 0 013 0V14'}),h('path',{d:'M9 11V8.5a1.5 1.5 0 00-3 0V15c0 3 2 6 6 6h2a4 4 0 004-4v-3'})]) }
@@ -135,13 +160,14 @@ const CircleIcon  = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24
 const PolygonIcon = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polygon',{points:'12,3 21,9 17,21 7,21 3,9'})]) }
 const CorridorIcon= { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('path',{d:'M3 9h18M3 15h18'}),h('path',{d:'M3 9V6M3 18v-3M21 9V6M21 18v-3'})]) }
 const DoorIcon    = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M5 21V5a2 2 0 012-2h6v18'}),h('path',{d:'M3 21h18'}),h('circle',{cx:11,cy:13,r:.7,fill:'currentColor'})]) }
-const ZoomInIcon  = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('circle',{cx:11,cy:11,r:7}),h('path',{d:'M21 21l-4.3-4.3M11 8v6M8 11h6'})]) }
-const ZoomOutIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('circle',{cx:11,cy:11,r:7}),h('path',{d:'M21 21l-4.3-4.3M8 11h6'})]) }
 const MoveIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('path',{d:'M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3'})]) }
 const TrashIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'})]) }
 const UndoIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polyline',{points:'9 14 4 9 9 4'}),h('path',{d:'M20 20v-7a4 4 0 0 0-4-4H4'})]) }
-const BagIcon     = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M9 9V7a3 3 0 016 0v2'}),h('rect',{x:4,y:9,width:16,height:12,rx:2})]) }
 const PartyIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2'}),h('circle',{cx:9,cy:7,r:4}),h('path',{d:'M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75'})]) }
+const VaultIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M3 9h18M3 9V7a1 1 0 011-1h16a1 1 0 011 1v2M3 9v9a1 1 0 001 1h16a1 1 0 001-1V9'}),h('path',{d:'M10 13h4'})]) }
+const MapImageIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('rect',{x:3,y:3,width:18,height:18,rx:2}),h('path',{d:'M3 9l5-5 4 4 4-4 5 5'}),h('circle',{cx:16,cy:15,r:2})]) }
+const FogBrushIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 15.25'}),h('path',{d:'M8 16h.01M12 19h.01M16 16h.01'})]) }
+
 const SoundIcon   = { render: () => soundEnabled.value
   ? h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M11 5L6 9H2v6h4l5 4V5z'}),h('path',{d:'M15.54 8.46a5 5 0 010 7.07'}),h('path',{d:'M19.07 4.93a10 10 0 010 14.14'})])
   : h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M11 5L6 9H2v6h4l5 4V5z'}),h('line',{x1:23,y1:9,x2:17,y2:15}),h('line',{x1:17,y1:9,x2:23,y2:15})]) }
@@ -158,6 +184,28 @@ const drawingTools = [
   { mode: 'door',     icon: DoorIcon,     label: 'Door',     key: 'D' },
 ]
 
+const tip = reactive({ show: false, x: 0, y: 0, html: '' })
+let _lastBtn = null
+
+function onHover(e) {
+  const btn = e.target.closest('.ds-tool')
+  if (btn === _lastBtn) return
+  _lastBtn = btn
+  if (!btn) { tip.show = false; return }
+  const tipEl = btn.querySelector('.ds-tip')
+  if (!tipEl) { tip.show = false; return }
+  const rect = btn.getBoundingClientRect()
+  tip.x = rect.right + 10
+  tip.y = rect.top + rect.height / 2
+  tip.html = tipEl.innerHTML
+  tip.show = true
+}
+
+function onLeave() {
+  _lastBtn = null
+  tip.show = false
+}
+
 function deleteSelected() {
   if (!dungeonStore.selectedElement) return
   const { type, id, roomId } = dungeonStore.selectedElement
@@ -167,4 +215,6 @@ function deleteSelected() {
 }
 
 
+
 </script>
+

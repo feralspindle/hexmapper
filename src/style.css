@@ -72,6 +72,7 @@ svg {
     --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     /* density: regular */
     --topbar-h: 56px;
+    --tb-pill-h: 34px;
     --toolbar-w: 64px;
     --tool-size: 38px;
     --side-panel-w: 360px;
@@ -94,6 +95,7 @@ svg {
 }
 .dungeon-scribe[data-density="compact"] {
     --topbar-h: 44px;
+    --tb-pill-h: 28px;
     --toolbar-w: 52px;
     --tool-size: 36px;
     --side-panel-w: 320px;
@@ -116,6 +118,7 @@ svg {
 }
 .dungeon-scribe[data-density="comfy"] {
     --topbar-h: 68px;
+    --tb-pill-h: 42px;
     --toolbar-w: 76px;
     --tool-size: 52px;
     --side-panel-w: 400px;
@@ -207,7 +210,7 @@ svg {
     background: var(--ink);
     color: var(--paper);
     padding: 0 16px;
-    gap: 0;
+    gap: 8px;
     border-bottom: 2px solid #000;
     z-index: 30;
     box-shadow:
@@ -289,6 +292,11 @@ svg {
     display: flex;
     align-items: center;
     gap: 4px;
+    border: 1px solid rgba(237, 225, 199, 0.18);
+    border-radius: 999px;
+    padding: 0 8px 0 5px;
+    height: var(--tb-pill-h);
+    box-sizing: border-box;
 }
 .ds-avatar {
     position: relative;
@@ -335,8 +343,10 @@ svg {
     background: transparent;
     color: var(--paper);
     border: 1px solid rgba(237, 225, 199, 0.18);
-    padding: 6px 11px;
-    border-radius: 4px;
+    padding: 0 11px;
+    height: var(--tb-pill-h);
+    box-sizing: border-box;
+    border-radius: 999px;
     font-family: var(--font-mono);
     font-size: 12.5px;
     line-height: 1;
@@ -369,6 +379,12 @@ svg {
         1px 0 0 rgba(255, 255, 255, 0.4) inset,
         4px 0 12px rgba(0, 0, 0, 0.08);
     z-index: 20;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+.ds-toolbar::-webkit-scrollbar {
+    display: none;
 }
 .dungeon-scribe[data-panel-layout="left"] .ds-toolbar {
     order: 2;
@@ -482,6 +498,43 @@ svg {
 .ds-tool.disabled {
     opacity: 0.38;
     pointer-events: none;
+}
+.ds-toolbar .ds-tip {
+    display: none;
+}
+.ds-tip-portal {
+    position: fixed;
+    opacity: 1;
+    transform: translateY(-50%);
+    z-index: 9999;
+    pointer-events: none;
+    background: #1a1410;
+    color: #ede1c7;
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    border: 1px solid rgba(237, 225, 199, 0.22);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+.ds-tip-portal::before {
+    content: "";
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: #1a1410;
+}
+.ds-tip-portal kbd {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    background: rgba(237, 225, 199, 0.18);
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+    font-size: 12px;
 }
 
 /* canvas area */
@@ -1102,13 +1155,20 @@ textarea.ds-input {
 .ds-roll-label {
     font-family: var(--font-body);
     font-style: italic;
-    font-size: 13px;
-    color: var(--ink-soft);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
 }
 .ds-roll-who {
     font-family: var(--font-ui);
     font-size: 12px;
     font-weight: 600;
+}
+.ds-roll-who-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 .ds-roll-when {
     font-family: var(--font-mono);
@@ -1121,12 +1181,15 @@ textarea.ds-input {
     font-size: 18px;
     font-weight: 700;
     color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--ink);
-    padding: 0 8px;
-    line-height: 1.8;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-strong);
+    border-radius: 3px;
+    padding: 4px 10px;
+    line-height: 1.4;
     letter-spacing: 0;
-    text-align: right;
+    text-align: center;
+    align-self: center;
+    min-width: 48px;
 }
 .ds-roll-row.crit .ds-roll-total {
     background: linear-gradient(135deg, #7a6010, #d4aa38, #b89c2a);
@@ -1295,8 +1358,6 @@ textarea.ds-input {
 .ds-party-panel {
     position: fixed;
     z-index: 90;
-    width: 320px;
-    max-height: calc(100vh - 120px);
     background: var(--paper);
     background-image:
         radial-gradient(
@@ -1344,7 +1405,7 @@ textarea.ds-input {
 }
 .ds-party-meta {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: 11px;
     color: var(--paper-3);
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -1387,34 +1448,37 @@ textarea.ds-input {
     padding: 10px 12px 12px;
     overflow-y: auto;
     min-height: 0;
+    flex: 1;
 }
 .ds-party-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
+    gap: 8px;
 }
 .ds-player-card {
+    position: relative;
     background: var(--paper);
-    border: 1px solid var(--rule-strong);
-    padding: var(--player-card-pad, 8px 10px);
+    border: 1px solid var(--ink-2);
+    border-left-width: 3px;
+    padding: 10px 11px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     cursor: default;
-    transition: border-color 0.12s;
-    border-left: 3px solid;
-    border-color: var(--player-color, var(--ink-2));
     min-width: 0;
     overflow: hidden;
 }
-.ds-player-card.me {
-    border-left-color: var(--player-color, var(--accent));
-    border-left-width: 4px;
+.ds-pc-header-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
 }
 .ds-player-card .ds-pc-name {
     font-family: var(--font-display);
     font-style: italic;
-    font-size: 14px;
+    font-size: 17px;
     color: var(--ink);
     flex: 1;
     min-width: 0;
@@ -1422,15 +1486,25 @@ textarea.ds-input {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.ds-player-card .ds-pc-role {
-    font-family: var(--font-zine);
-    font-size: 11px;
-    letter-spacing: 0.08em;
+.ds-player-card .ds-pc-char-name {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 14px;
     color: var(--ink-soft);
-    text-transform: uppercase;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    margin-top: 1px;
+}
+.ds-player-card .ds-pc-role {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.4;
+}
+.ds-pc-no-char {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-mute);
 }
 .ds-player-card .ds-pc-dot {
     width: 8px;
@@ -1459,20 +1533,56 @@ textarea.ds-input {
         box-shadow: 0 0 0 5px rgba(108, 174, 108, 0);
     }
 }
-.ds-hp-row {
+.ds-stat-chips {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    margin-top: 1px;
+}
+.ds-hp-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    color: #8b1e1e;
+    background: rgba(139, 30, 30, 0.07);
+    border: 1px solid rgba(139, 30, 30, 0.25);
+    padding: 5px 8px 6px 7px;
+    border-radius: 3px;
+}
+.ds-hp-chip-top {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
+    gap: 4px;
+    line-height: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+.ds-hp-chip-top svg {
+    flex: 0 0 auto;
+}
+.ds-hp-current {
+    font-size: 17px;
+    font-weight: 700;
+}
+.ds-hp-sep {
     font-size: 12px;
-    color: var(--ink-2);
+    opacity: 0.35;
+    margin: 0 1px;
+}
+.ds-hp-max-val {
+    font-size: 12px;
+    opacity: 0.5;
 }
 .ds-hp-bar {
-    flex: 1;
     height: 4px;
-    background: var(--paper-3);
+    background: rgba(139, 30, 30, 0.15);
     position: relative;
     overflow: hidden;
+    border-radius: 2px;
 }
 .ds-hp-bar > span {
     position: absolute;
@@ -1487,47 +1597,90 @@ textarea.ds-input {
     display: block;
     transition: width 0.3s;
 }
+.ds-ac-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    font-family: var(--font-mono);
+    color: #2d4e72;
+    background: rgba(45, 78, 114, 0.08);
+    border: 1px solid rgba(45, 78, 114, 0.28);
+    padding: 4px 10px;
+    border-radius: 3px;
+    min-width: 42px;
+}
+.ds-ac-label {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    line-height: 1;
+}
+.ds-ac-number {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.1;
+}
 .ds-initiative-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 10px;
+    gap: 6px;
+    padding: 5px 12px;
     background: var(--paper-2);
     border-bottom: 1px solid var(--rule);
     font-family: var(--font-zine);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--p1);
+    color: var(--ink-soft);
 }
 .ds-clear-initiative {
     font-family: var(--font-zine);
-    font-size: 9.5px;
+    font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--ink-mute);
-    background: none;
-    border: 1px solid var(--rule);
+    color: var(--paper);
+    background: var(--accent, #a0392a);
+    border: 1px solid var(--accent, #a0392a);
     border-radius: 3px;
-    padding: 1px 6px;
+    padding: 3px 10px;
     cursor: pointer;
-    transition:
-        color 0.1s,
-        border-color 0.1s;
+    transition: opacity 0.12s;
 }
 .ds-clear-initiative:hover {
-    color: var(--ink);
-    border-color: var(--ink-soft);
+    opacity: 0.82;
 }
 .ds-initiative-score {
     font-family: var(--font-mono);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
-    color: var(--p1);
-    min-width: 18px;
-    text-align: right;
-    border: 2px solid;
-    padding: 3px;
+    color: #8b1e1e;
+    background: rgba(139, 30, 30, 0.08);
+    border: 1px solid rgba(139, 30, 30, 0.28);
+    padding: 2px 7px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+    line-height: 1.4;
+}
+.ds-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    display: grid;
+    place-items: center;
+    color: var(--ink-mute);
+    opacity: 0.35;
+    transition: opacity 0.12s;
+}
+.ds-resize-handle:hover {
+    opacity: 0.8;
 }
 
 /* tweaks panel */
@@ -2157,9 +2310,11 @@ textarea.ds-input {
     align-items: center;
     gap: 0;
     border: 1px solid rgba(237, 225, 199, 0.22);
-    border-radius: 5px;
+    border-radius: 999px;
     overflow: hidden;
     flex-shrink: 0;
+    height: var(--tb-pill-h);
+    box-sizing: border-box;
 }
 .hm-mode-label {
     font-family: var(--font-mono);
@@ -2180,7 +2335,8 @@ textarea.ds-input {
     color: rgba(237, 225, 199, 0.65);
     border: none;
     border-left: 1px solid rgba(237, 225, 199, 0.18);
-    padding: 5px 9px;
+    padding: 0 9px;
+    align-self: stretch;
     font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.08em;

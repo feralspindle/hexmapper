@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024
+const URL_EXPIRY_SECONDS = 86400
 
 export const useD = defineStore('dungeon', () => {
   const dungeon = ref(null)
@@ -17,25 +20,285 @@ export const useD = defineStore('dungeon', () => {
   const viewers = ref([])
   const undoStack = ref([])
   const _editingRoom = ref(null)
+
+  const dungeonImageUrl = ref(null)
+  const fogCells = ref(new Set())
+  const _localOverrides = {}
+
+  const fogMode = computed(() => dungeon.value?.fog_mode ?? false)
+  const fogRevealAll = computed(() => dungeon.value?.fog_reveal_all ?? false)
+
   let roomChannel = null
   let corridorChannel = null
   let dungeonChannel = null
   let presenceChannel = null
+  let fogChannel = null
+  let undoChannel = null
+  let changesChannel = null
   let _stopAuthWatch = null
   let _undoing = false
+  let _urlTimer = null
 
-  function pushUndo(fn) {
+  function pushUndo(action) {
     if (_undoing) return
-    undoStack.value.push(fn)
+    undoStack.value.push(action)
     if (undoStack.value.length > 50) undoStack.value.shift()
+    undoChannel?.send({ type: 'broadcast', event: 'undo_push', payload: { ...action, _src: CLIENT_ID } })
   }
 
   async function undo() {
-    const fn = undoStack.value.pop()
-    if (!fn) return
+    const action = undoStack.value.pop()
+    if (!action) return
     _undoing = true
-    try { await fn() }
+    try { await _executeUndo(action) }
     finally { _undoing = false }
+  }
+
+  async function _executeUndo(action) {
+    switch (action.type) {
+      case 'delete_room': {
+        rooms.value.delete(action.roomId)
+        if (selectedElement.value?.id === action.roomId) selectedElement.value = null
+        await supabase.from('dungeon_rooms').delete().eq('id', action.roomId)
+        _broadcastChange('room_delete', { roomId: action.roomId })
+        break
+      }
+      case 'insert_room': {
+        rooms.value.set(action.data.id, { ...action.data })
+        await supabase.from('dungeon_rooms').upsert({ ...action.data, source_client: CLIENT_ID }, { onConflict: 'id' })
+        _broadcastChange('room_upsert', { room: action.data })
+        break
+      }
+      case 'update_room': {
+        const r = rooms.value.get(action.roomId)
+        if (r) rooms.value.set(action.roomId, { ...r, ...action.patch })
+        await supabase.from('dungeon_rooms').update({ ...action.patch, source_client: CLIENT_ID }).eq('id', action.roomId)
+        _broadcastChange('room_upsert', { room: rooms.value.get(action.roomId) })
+        break
+      }
+      case 'delete_corridor': {
+        corridors.value.delete(action.corridorId)
+        if (selectedElement.value?.id === action.corridorId) selectedElement.value = null
+        await supabase.from('dungeon_corridors').delete().eq('id', action.corridorId)
+        _broadcastChange('corridor_delete', { corridorId: action.corridorId })
+        break
+      }
+      case 'insert_corridor': {
+        corridors.value.set(action.data.id, { ...action.data })
+        await supabase.from('dungeon_corridors').upsert({ ...action.data, source_client: CLIENT_ID }, { onConflict: 'id' })
+        _broadcastChange('corridor_upsert', { corridor: action.data })
+        break
+      }
+      case 'update_corridor': {
+        const c = corridors.value.get(action.corridorId)
+        if (c) corridors.value.set(action.corridorId, { ...c, ...action.patch })
+        await supabase.from('dungeon_corridors').update({ ...action.patch, source_client: CLIENT_ID }).eq('id', action.corridorId)
+        _broadcastChange('corridor_upsert', { corridor: corridors.value.get(action.corridorId) })
+        break
+      }
+    }
+  }
+
+  function _subscribeUndoChannel(dungeonId) {
+    if (undoChannel) supabase.removeChannel(undoChannel)
+    undoChannel = supabase
+      .channel(`dungeon:${dungeonId}:undo`)
+      .on('broadcast', { event: 'undo_push' }, ({ payload }) => {
+        if (payload._src === CLIENT_ID) return
+        const { _src, ...action } = payload
+        undoStack.value.push(action)
+        if (undoStack.value.length > 50) undoStack.value.shift()
+      })
+      .subscribe()
+  }
+
+  function _subscribeChangesChannel(dungeonId) {
+    if (changesChannel) supabase.removeChannel(changesChannel)
+    changesChannel = supabase
+      .channel(`dungeon:${dungeonId}:changes`)
+      .on('broadcast', { event: 'room_upsert' }, ({ payload }) => {
+        if (payload._src === CLIENT_ID) return
+        const editing = _editingRoom.value
+        if (editing && editing.id === payload.room.id) {
+          const current = rooms.value.get(payload.room.id)
+          const merged = { ...payload.room }
+          if (current) { for (const f of editing.fields) merged[f] = current[f] }
+          rooms.value.set(payload.room.id, merged)
+        } else {
+          rooms.value.set(payload.room.id, payload.room)
+        }
+      })
+      .on('broadcast', { event: 'room_delete' }, ({ payload }) => {
+        if (payload._src === CLIENT_ID) return
+        rooms.value.delete(payload.roomId)
+        if (selectedElement.value?.id === payload.roomId) selectedElement.value = null
+      })
+      .on('broadcast', { event: 'corridor_upsert' }, ({ payload }) => {
+        if (payload._src === CLIENT_ID) return
+        corridors.value.set(payload.corridor.id, payload.corridor)
+      })
+      .on('broadcast', { event: 'corridor_delete' }, ({ payload }) => {
+        if (payload._src === CLIENT_ID) return
+        corridors.value.delete(payload.corridorId)
+        if (selectedElement.value?.id === payload.corridorId) selectedElement.value = null
+      })
+      .subscribe()
+  }
+
+  function _broadcastChange(event, payload) {
+    changesChannel?.send({ type: 'broadcast', event, payload: { ...payload, _src: CLIENT_ID } })
+  }
+
+  async function _refreshImageUrl(path) {
+    if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
+    if (!path) { dungeonImageUrl.value = null; return }
+    const { data, error } = await supabase.storage
+      .from('session-maps')
+      .createSignedUrl(path, URL_EXPIRY_SECONDS)
+    if (error) {
+      if (error.message !== 'Object not found') console.error('dungeonStore refreshImageUrl:', error.message)
+      dungeonImageUrl.value = null
+      return
+    }
+    dungeonImageUrl.value = data.signedUrl
+    _urlTimer = setTimeout(() => _refreshImageUrl(path), URL_EXPIRY_SECONDS * 0.9 * 1000)
+  }
+
+  watch(() => dungeon.value?.map_image_path, p => _refreshImageUrl(p ?? null), { immediate: false })
+
+  async function uploadDungeonImage(sessionId, file) {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('Only JPEG, PNG, and WebP images are allowed.')
+    if (file.size > MAX_IMAGE_BYTES) throw new Error('Image must be under 50 MB.')
+    await new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file)
+      const img = new Image()
+      img.onload  = () => { URL.revokeObjectURL(url); resolve() }
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File could not be decoded as an image.')) }
+      img.src = url
+    })
+    const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+    const path = `${sessionId}/dungeon-${crypto.randomUUID()}.${extMap[file.type]}`
+    const { error } = await supabase.storage
+      .from('session-maps')
+      .upload(path, file, { contentType: file.type, upsert: false })
+    if (error) throw new Error(error.message)
+    return path
+  }
+
+  async function updateDungeon(patch) {
+    if (!dungeon.value?.id) return false
+    const id = dungeon.value.id
+    const dbPatch = {}
+    if (patch.fogMode          !== undefined) dbPatch.fog_mode            = patch.fogMode
+    if (patch.fogRevealAll     !== undefined) dbPatch.fog_reveal_all      = patch.fogRevealAll
+    if (patch.mapImagePath     !== undefined) dbPatch.map_image_path      = patch.mapImagePath
+    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x  = patch.mapImageOffsetX
+    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y  = patch.mapImageOffsetY
+    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale     = patch.mapImageScale
+    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation  = patch.mapImageRotation
+    if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked   = patch.mapOffsetLocked
+
+    dungeon.value = { ...dungeon.value, ...dbPatch }
+    const overrides = _localOverrides[id]
+    if (overrides) {
+      for (const [k, v] of Object.entries(dbPatch)) {
+        if (overrides[k] === v) delete overrides[k]
+      }
+    }
+
+    const { error } = await supabase.from('dungeons').update(dbPatch).eq('id', id)
+    if (error) { console.error('updateDungeon:', error.message); return false }
+    return true
+  }
+
+  function applyDungeonLocalPatch(patch) {
+    if (!dungeon.value?.id) return
+    const id = dungeon.value.id
+    const dbPatch = {}
+    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x  = patch.mapImageOffsetX
+    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y  = patch.mapImageOffsetY
+    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale     = patch.mapImageScale
+    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation  = patch.mapImageRotation
+    _localOverrides[id] = { ...(_localOverrides[id] ?? {}), ...dbPatch }
+    dungeon.value = { ...dungeon.value, ...dbPatch }
+  }
+
+  function _fogKey(x, y) { return `${x}:${y}` }
+
+  function isCellRevealed(cellX, cellY) {
+    return fogCells.value.has(_fogKey(cellX, cellY))
+  }
+
+  async function revealFogCell(dungeonId, cellX, cellY) {
+    const key = _fogKey(cellX, cellY)
+    if (fogCells.value.has(key)) return
+    fogCells.value = new Set(fogCells.value).add(key)
+    const { error } = await supabase
+      .from('dungeon_fog_cells')
+      .upsert({ dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY, source_client: CLIENT_ID }, { onConflict: 'dungeon_id,cell_x,cell_y' })
+    if (error) {
+      const next = new Set(fogCells.value); next.delete(key); fogCells.value = next
+      console.error('revealFogCell:', error.message)
+    }
+  }
+
+  async function hideFogCell(dungeonId, cellX, cellY) {
+    const key = _fogKey(cellX, cellY)
+    if (!fogCells.value.has(key)) return
+    const next = new Set(fogCells.value); next.delete(key); fogCells.value = next
+    const { error } = await supabase
+      .from('dungeon_fog_cells')
+      .delete()
+      .eq('dungeon_id', dungeonId)
+      .eq('cell_x', cellX)
+      .eq('cell_y', cellY)
+    if (error) {
+      fogCells.value = new Set(fogCells.value).add(key)
+      console.error('hideFogCell:', error.message)
+    }
+  }
+
+  async function revealFogCells(dungeonId, cells) {
+    if (!cells.length) return
+    const newCells = new Set(fogCells.value)
+    const rows = []
+    for (const { cellX, cellY } of cells) {
+      const key = _fogKey(cellX, cellY)
+      if (!newCells.has(key)) { newCells.add(key); rows.push({ dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY, source_client: CLIENT_ID }) }
+    }
+    if (!rows.length) return
+    fogCells.value = newCells
+    const { error } = await supabase.from('dungeon_fog_cells').upsert(rows, { onConflict: 'dungeon_id,cell_x,cell_y' })
+    if (error) console.error('revealFogCells:', error.message)
+  }
+
+  async function hideFogCells(dungeonId, cells) {
+    if (!cells.length) return
+    const newCells = new Set(fogCells.value)
+    const toDelete = []
+    for (const { cellX, cellY } of cells) {
+      const key = _fogKey(cellX, cellY)
+      if (newCells.has(key)) { newCells.delete(key); toDelete.push([cellX, cellY]) }
+    }
+    if (!toDelete.length) return
+    fogCells.value = newCells
+    for (const [cellX, cellY] of toDelete) {
+      const { error } = await supabase
+        .from('dungeon_fog_cells').delete()
+        .eq('dungeon_id', dungeonId).eq('cell_x', cellX).eq('cell_y', cellY)
+      if (error) console.error('hideFogCells:', error.message)
+    }
+  }
+
+  async function revealAllFog(dungeonId) {
+    await supabase.from('dungeon_fog_cells').delete().eq('dungeon_id', dungeonId)
+    await updateDungeon({ fogRevealAll: true })
+  }
+
+  async function hideAllFog(dungeonId) {
+    await supabase.from('dungeon_fog_cells').delete().eq('dungeon_id', dungeonId)
+    fogCells.value = new Set()
+    await updateDungeon({ fogRevealAll: false })
   }
 
   async function init(sessionId, dungeonId) {
@@ -57,6 +320,14 @@ export const useD = defineStore('dungeon', () => {
       dungeon.value = dungeonData
       rooms.value = new Map((roomData ?? []).map(r => [r.id, r]))
       corridors.value = new Map((corridorData ?? []).map(c => [c.id, c]))
+
+      const { data: fogData } = await supabase
+        .from('dungeon_fog_cells')
+        .select('cell_x, cell_y')
+        .eq('dungeon_id', dungeonId)
+      fogCells.value = new Set((fogData ?? []).map(r => _fogKey(r.cell_x, r.cell_y)))
+
+      if (dungeonData?.map_image_path) _refreshImageUrl(dungeonData.map_image_path)
     } catch (err) {
       loadError.value = err.message ?? 'Failed to load dungeon'
       console.error('dungeonStore.init error:', err)
@@ -67,13 +338,37 @@ export const useD = defineStore('dungeon', () => {
     if (dungeonChannel) supabase.removeChannel(dungeonChannel)
     if (roomChannel) supabase.removeChannel(roomChannel)
     if (corridorChannel) supabase.removeChannel(corridorChannel)
+    if (fogChannel) supabase.removeChannel(fogChannel)
+    _subscribeUndoChannel(dungeonId)
+    _subscribeChangesChannel(dungeonId)
 
     dungeonChannel = supabase
       .channel(`dungeon:${dungeonId}:meta`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'dungeons', filter: `id=eq.${dungeonId}` },
-        ({ new: row }) => { dungeon.value = row },
+        ({ new: row }) => {
+          const local = _localOverrides[row.id] ?? {}
+          dungeon.value = { ...row, ...local }
+        },
+      )
+      .subscribe()
+
+    fogChannel = supabase
+      .channel(`dungeon:${dungeonId}:fog`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dungeon_fog_cells', filter: `dungeon_id=eq.${dungeonId}` },
+        ({ eventType, new: row, old }) => {
+          if (eventType === 'INSERT') {
+            if (row.source_client !== CLIENT_ID)
+              fogCells.value = new Set(fogCells.value).add(_fogKey(row.cell_x, row.cell_y))
+          } else if (eventType === 'DELETE') {
+            const next = new Set(fogCells.value)
+            next.delete(_fogKey(old.cell_x, old.cell_y))
+            fogCells.value = next
+          }
+        },
       )
       .subscribe()
 
@@ -183,12 +478,8 @@ export const useD = defineStore('dungeon', () => {
     if (error) { console.error('addRoom error:', error.message); return }
     rooms.value.set(data.id, data)
     useActivityStore().record('added room', data.name ?? 'Unnamed Room')
-    pushUndo(async () => {
-      const id = data.id
-      rooms.value.delete(id)
-      if (selectedElement.value?.id === id) selectedElement.value = null
-      await supabase.from('dungeon_rooms').delete().eq('id', id)
-    })
+    pushUndo({ type: 'delete_room', roomId: data.id })
+    _broadcastChange('room_upsert', { room: data })
   }
 
   async function updateRoom(id, patch) {
@@ -206,7 +497,8 @@ export const useD = defineStore('dungeon', () => {
       console.error('updateRoom error:', error.message)
     } else {
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
-      pushUndo(() => updateRoom(id, revert))
+      pushUndo({ type: 'update_room', roomId: id, patch: revert })
+      _broadcastChange('room_upsert', { room: rooms.value.get(id) })
     }
   }
 
@@ -221,12 +513,8 @@ export const useD = defineStore('dungeon', () => {
       console.error('deleteRoom error:', error.message)
     } else {
       useActivityStore().record('deleted room', backup?.name ?? 'Unnamed Room')
-      pushUndo(async () => {
-        if (!backup) return
-        rooms.value.set(backup.id, { ...backup })
-        const { error: e } = await supabase.from('dungeon_rooms').insert({ ...backup, source_client: CLIENT_ID })
-        if (e) { rooms.value.delete(backup.id); console.error('undo deleteRoom:', e.message) }
-      })
+      pushUndo({ type: 'insert_room', data: backup })
+      _broadcastChange('room_delete', { roomId: id })
     }
   }
 
@@ -245,12 +533,8 @@ export const useD = defineStore('dungeon', () => {
     if (error) { console.error('addCorridor error:', error.message); return }
     corridors.value.set(data.id, data)
     useActivityStore().record('added corridor', '')
-    pushUndo(async () => {
-      const id = data.id
-      corridors.value.delete(id)
-      if (selectedElement.value?.id === id) selectedElement.value = null
-      await supabase.from('dungeon_corridors').delete().eq('id', id)
-    })
+    pushUndo({ type: 'delete_corridor', corridorId: data.id })
+    _broadcastChange('corridor_upsert', { corridor: data })
   }
 
   async function updateCorridor(id, patch) {
@@ -268,7 +552,8 @@ export const useD = defineStore('dungeon', () => {
       console.error('updateCorridor error:', error.message)
     } else {
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
-      pushUndo(() => updateCorridor(id, revert))
+      pushUndo({ type: 'update_corridor', corridorId: id, patch: revert })
+      _broadcastChange('corridor_upsert', { corridor: corridors.value.get(id) })
     }
   }
 
@@ -283,12 +568,8 @@ export const useD = defineStore('dungeon', () => {
       console.error('deleteCorridor error:', error.message)
     } else {
       useActivityStore().record('deleted corridor', '')
-      pushUndo(async () => {
-        if (!backup) return
-        corridors.value.set(backup.id, { ...backup })
-        const { error: e } = await supabase.from('dungeon_corridors').insert({ ...backup, source_client: CLIENT_ID })
-        if (e) { corridors.value.delete(backup.id); console.error('undo deleteCorridor:', e.message) }
-      })
+      pushUndo({ type: 'insert_corridor', data: backup })
+      _broadcastChange('corridor_delete', { corridorId: id })
     }
   }
 
@@ -407,14 +688,21 @@ export const useD = defineStore('dungeon', () => {
 
   function cleanup() {
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
-    if (dungeonChannel) supabase.removeChannel(dungeonChannel)
-    if (roomChannel) supabase.removeChannel(roomChannel)
+    if (dungeonChannel)  supabase.removeChannel(dungeonChannel)
+    if (roomChannel)     supabase.removeChannel(roomChannel)
     if (corridorChannel) supabase.removeChannel(corridorChannel)
     if (presenceChannel) supabase.removeChannel(presenceChannel)
-    dungeonChannel = null
-    roomChannel = null
+    if (fogChannel)      supabase.removeChannel(fogChannel)
+    if (undoChannel)     supabase.removeChannel(undoChannel)
+    if (changesChannel)  supabase.removeChannel(changesChannel)
+    if (_urlTimer)       { clearTimeout(_urlTimer); _urlTimer = null }
+    dungeonChannel  = null
+    roomChannel     = null
     corridorChannel = null
     presenceChannel = null
+    fogChannel      = null
+    undoChannel     = null
+    changesChannel  = null
     dungeon.value = null
     rooms.value = new Map()
     corridors.value = new Map()
@@ -423,6 +711,9 @@ export const useD = defineStore('dungeon', () => {
     loadError.value = null
     loading.value = true
     undoStack.value = []
+    dungeonImageUrl.value = null
+    fogCells.value = new Set()
+    Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
   }
 
   return {
@@ -435,6 +726,10 @@ export const useD = defineStore('dungeon', () => {
     selectedElement,
     viewers,
     undoStack,
+    dungeonImageUrl,
+    fogCells,
+    fogMode,
+    fogRevealAll,
     init,
     undo,
     addRoom,
@@ -458,5 +753,15 @@ export const useD = defineStore('dungeon', () => {
     torchPause,
     torchReset,
     cleanup,
+    uploadDungeonImage,
+    updateDungeon,
+    applyDungeonLocalPatch,
+    isCellRevealed,
+    revealFogCell,
+    hideFogCell,
+    revealFogCells,
+    hideFogCells,
+    revealAllFog,
+    hideAllFog,
   }
 })

@@ -147,7 +147,6 @@
         class="pointer-events-none"
         style="font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.03em;"
       >{{ q }},{{ r }}</text>
-      <!-- hex label: bottom -->
       <text
         v-if="cell?.label"
         text-anchor="middle"

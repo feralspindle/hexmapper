@@ -1,14 +1,22 @@
 <template>
-  <div class="flex items-center gap-2">
+  <div
+    class="flex items-center gap-1 rounded-full border px-1 transition-colors"
+    style="height: var(--tb-pill-h); box-sizing: border-box;"
+    :class="expired
+      ? 'border-red-500/60 bg-red-950/40'
+      : running
+        ? 'border-amber-500/60 bg-amber-500/10'
+        : 'border-stone-600/50'"
+  >
     <button
       v-tooltip.bottom="expired ? 'The torch has gone out — light a new one' : running ? 'Pause the torch timer' : 'Start the torch timer'"
       :class="[
-        'flex items-center gap-1.5 px-2 py-1 rounded transition-colors font-mono text-sm',
+        'flex items-center gap-1.5 px-2 py-1 rounded-full transition-colors font-mono text-sm',
         expired
-          ? 'bg-red-950/70 text-red-400 animate-pulse'
+          ? 'text-red-400 animate-pulse'
           : running
-            ? 'text-amber-400 hover:bg-stone-800'
-            : 'text-stone-500 hover:bg-stone-800 hover:text-parchment-400',
+            ? 'text-amber-400 hover:bg-amber-500/10'
+            : 'text-stone-400 hover:text-amber-300',
       ]"
       :disabled="!sessionStore.sessionId"
       @click="toggleRunning"
@@ -18,12 +26,12 @@
         :class="expired ? 'ra ra-skull text-red-500' : running ? 'ra ra-torch text-amber-400' : 'fa-solid fa-hourglass-half text-stone-500'"
       />
       <i v-else class="fa-solid fa-circle-notch fa-spin" style="opacity:.6" />
-      <span>{{ displayTime }}</span>
+      <span v-if="sessionStore.isGM">{{ displayTime }}</span>
     </button>
 
     <button
       v-tooltip.bottom="'Light a new torch — resets the timer to 60 minutes'"
-      class="text-stone-500 hover:text-parchment-400 transition-colors"
+      class="px-1.5 text-stone-500 hover:text-amber-300 transition-colors rounded-full"
       :disabled="!sessionStore.sessionId || pending"
       @click="reset"
     >

@@ -27,6 +27,8 @@ export function parseAttack(str) {
   return { label, bonus, raw: str }
 }
 
+const CLIENT_ID = crypto.randomUUID()
+
 export const useCharacterStore = defineStore('character', () => {
   const _saveTimers = new Map()
   const _broadcastTimers = new Map()
@@ -37,7 +39,6 @@ export const useCharacterStore = defineStore('character', () => {
   const loading = ref(false)
   const saving = ref(false)
   const currentSessionId = ref(null)
-  // user_id → active_character_id, loaded from session_members
   const memberSelections = ref([])
   const luckEvents = ref([])
 
@@ -112,7 +113,6 @@ export const useCharacterStore = defineStore('character', () => {
       const key = `char_active_${authStore.user.id}_${currentSessionId.value}`
       if (id) localStorage.setItem(key, id)
       else localStorage.removeItem(key)
-      // Update memberSelections locally so party panel reflects instantly
       const userId = authStore.user.id
       const existing = memberSelections.value.find(m => m.user_id === userId)
       if (existing) existing.active_character_id = id ?? null
@@ -250,6 +250,20 @@ export const useCharacterStore = defineStore('character', () => {
     const delta = newItem.slots * newItem.quantity
     const slotsAfter = slotsBefore + delta
     _logSheet(`${charName} added gear: ${newItem.name} (${newItem.slots} slot${newItem.slots !== 1 ? 's' : ''} ×${newItem.quantity}) · total slots: ${slotsBefore} → ${slotsAfter} (${delta >= 0 ? '+' : ''}${delta})`)
+  }
+
+  function addGearItemToChar(charId, item) {
+    const char = characters.value.find(c => c.id === charId)
+    if (!char?.data) return
+    const newItem = {
+      instanceId: crypto.randomUUID(),
+      name:       item.name,
+      slots:      Math.round(Math.max(0, Number(item.slots) || 0)),
+      quantity:   Number(item.quantity) || 1,
+      type:       item.type ?? 'sundry',
+      disabled:   false,
+    }
+    updateFieldForChar(charId, 'gear', [...(char.data.gear ?? []), newItem])
   }
 
   function moveGearItem(instanceId, direction) {
@@ -410,7 +424,7 @@ export const useCharacterStore = defineStore('character', () => {
         filter: `session_id=eq.${sessionId}`,
       }, ({ new: row }) => {
         const authStore = useAuthStore()
-        if (row.user_id === authStore.user?.id) return  // we created it ourselves
+        if (row.user_id === authStore.user?.id) return
         if (!characters.value.find(c => c.id === row.id)) {
           characters.value = [...characters.value, row]
         }
@@ -421,7 +435,7 @@ export const useCharacterStore = defineStore('character', () => {
         table: 'characters',
         filter: `session_id=eq.${sessionId}`,
       }, ({ new: updated }) => {
-        if (updated.id === activeId.value) return  // we're the source of truth for our own
+        if (updated.id === activeId.value) return
         if (characters.value.some(c => c.id === updated.id)) {
           characters.value = characters.value.map(c =>
             c.id === updated.id ? { ...c, data: _augment(updated.data) } : c
@@ -477,8 +491,8 @@ export const useCharacterStore = defineStore('character', () => {
         playLuckSound()
       })
       .on('broadcast', { event: 'character_updated' }, ({ payload }) => {
-        const { characterId, data } = payload
-        if (characterId === activeId.value) return
+        const { characterId, data, sourceClient } = payload
+        if (sourceClient === CLIENT_ID) return
         if (characters.value.some(c => c.id === characterId)) {
           characters.value = characters.value.map(c =>
             c.id === characterId ? { ...c, data: _augment(data) } : c
@@ -531,7 +545,7 @@ export const useCharacterStore = defineStore('character', () => {
       _realtimeChannel?.send({
         type: 'broadcast',
         event: 'character_updated',
-        payload: { characterId: charId, data: char.data },
+        payload: { characterId: charId, data: char.data, sourceClient: CLIENT_ID },
       })
       _broadcastTimers.delete(charId)
     }, 100))
@@ -557,7 +571,7 @@ export const useCharacterStore = defineStore('character', () => {
     luckEvents,
     loadAll, setActive, importCharacter, deleteCharacter,
     updateField, updateFieldForChar, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
-    addGearItem, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
+    addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative,
     cleanup,
   }

@@ -10,6 +10,14 @@ export function pixelToGrid(px, py, viewport) {
   return { gx, gy }
 }
 
+export function pixelToCell(px, py, viewport) {
+  const cs = CELL_SIZE * (viewport.zoom ?? 1)
+  return {
+    cellX: Math.floor((px + viewport.offsetX) / cs),
+    cellY: Math.floor((py + viewport.offsetY) / cs),
+  }
+}
+
 export function gridToPixel(gx, gy, viewport) {
   const cs = CELL_SIZE * (viewport.zoom ?? 1)
   const px = gx * cs - viewport.offsetX
@@ -44,7 +52,7 @@ export function useDungeonDraw(viewport) {
   const ghost = ref(null)
 
   const roomStart = ref(null)
-  const corridorPoints = ref([])  // [{gx, gy}, ...]
+  const corridorPoints = ref([])
   const polygonPoints = ref([])
 
   function onMouseDown(event, mode, canvasRect) {
@@ -127,7 +135,6 @@ export function useDungeonDraw(viewport) {
       return null
     }
 
-    // Add waypoint
     corridorPoints.value = [...corridorPoints.value, { gx, gy }]
     ghost.value = {
       ...ghost.value,

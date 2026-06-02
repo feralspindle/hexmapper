@@ -14,7 +14,6 @@ function _writeStorage(vals) {
 }
 
 export const useUserPrefsStore = defineStore('userPrefs', () => {
-  // Apply any locally-cached prefs before the first render so there is no flash of defaults.
   const _cached = _readStorage()
   const mapStyle    = ref(_cached?.mapStyle    ?? 'classic')
   const density     = ref(_cached?.density     ?? 'regular')

@@ -286,26 +286,6 @@
             <span class="ds-tool-label">Party</span>
             <button
                 class="ds-tool"
-                :aria-pressed="inventoryVisible ? 'true' : 'false'"
-                @click="toggleInventory()"
-            >
-                <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                >
-                    <path d="M9 9V7a3 3 0 016 0v2" />
-                    <rect x="4" y="9" width="16" height="12" rx="2" />
-                </svg>
-                <span class="ds-tip">Party inventory</span>
-            </button>
-            <button
-                class="ds-tool"
                 :aria-pressed="partyVisible ? 'true' : 'false'"
                 @click="toggleParty()"
             >
@@ -324,6 +304,26 @@
                     <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
                 </svg>
                 <span class="ds-tip">Party panel</span>
+            </button>
+            <button
+                class="ds-tool"
+                :aria-pressed="vaultVisible ? 'true' : 'false'"
+                @click="toggleVault()"
+            >
+                <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <path d="M3 9h18M3 9V7a1 1 0 011-1h16a1 1 0 011 1v2M3 9v9a1 1 0 001 1h16a1 1 0 001-1V9"/>
+                    <path d="M10 13h4"/>
+                </svg>
+                <span class="ds-tip">Party vault</span>
             </button>
         </div>
     </aside>
@@ -372,26 +372,6 @@
         <div class="ds-float-sep" />
         <button
             class="ds-tool"
-            :aria-pressed="inventoryVisible ? 'true' : 'false'"
-            @click="toggleInventory()"
-        >
-            <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-            >
-                <path d="M9 9V7a3 3 0 016 0v2" />
-                <rect x="4" y="9" width="16" height="12" rx="2" />
-            </svg>
-            <span class="ds-tip">Party inventory</span>
-        </button>
-        <button
-            class="ds-tool"
             :aria-pressed="partyVisible ? 'true' : 'false'"
             @click="toggleParty()"
         >
@@ -401,6 +381,17 @@
                 <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
             </svg>
             <span class="ds-tip">Party panel</span>
+        </button>
+        <button
+            class="ds-tool"
+            :aria-pressed="vaultVisible ? 'true' : 'false'"
+            @click="toggleVault()"
+        >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 9h18M3 9V7a1 1 0 011-1h16a1 1 0 011 1v2M3 9v9a1 1 0 001 1h16a1 1 0 001-1V9"/>
+                <path d="M10 13h4"/>
+            </svg>
+            <span class="ds-tip">Party vault</span>
         </button>
         <div class="ds-float-sep" />
         <button
@@ -491,7 +482,8 @@
 </template>
 
 <script setup>
-import { useGroupInventory } from "@/composables/useGroupInventory.js";
+import { computed } from "vue";
+import { usePartyNotebook } from "@/composables/usePartyNotebook.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 import { soundEnabled, toggleSound } from "@/lib/soundSettings.js";
 
@@ -505,6 +497,10 @@ const props = defineProps({
 
 const emit = defineEmits(["tool", "reveal-all", "hide-all", "map-settings"]);
 
-const { visible: inventoryVisible, toggle: toggleInventory } = useGroupInventory();
+const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook();
 const { visible: partyVisible, toggle: toggleParty } = usePartyPanel();
+const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault');
+function toggleVault() {
+  if (vaultVisible.value) { toggleInventory(); } else { openNotebook('vault'); }
+}
 </script>

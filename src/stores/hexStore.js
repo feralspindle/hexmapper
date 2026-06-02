@@ -105,7 +105,6 @@ export const useHexStore = defineStore("hex", () => {
     }
     loading.value = false;
 
-    // Load party hex from database (fallback for players who join after broadcast)
     await _loadPartyHexFromDb();
 
     if (channel) supabase.removeChannel(channel);

@@ -2,7 +2,7 @@
     <div
         v-if="partyVisible"
         class="ds-party-panel"
-        :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
+        :style="{ left: `${pos.x}px`, top: `${pos.y}px`, width: `${size.w}px`, height: `${size.h}px` }"
     >
         <div class="ds-party-head" @mousedown="startDrag">
             <div class="ds-grip">
@@ -28,24 +28,6 @@
             <h4>The Party</h4>
             <span class="ds-party-meta">{{ onlineCount }} online</span>
 
-            <button
-                class="ds-panel-action"
-                :style="collapsed ? 'transform:rotate(-90deg)' : ''"
-                @click.stop="collapsed = !collapsed"
-            >
-                <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                >
-                    <path d="M6 9l6 6 6-6" />
-                </svg>
-            </button>
-
             <button class="ds-panel-action" @click.stop="closeParty()">
                 <svg
                     width="10"
@@ -61,7 +43,7 @@
             </button>
         </div>
 
-        <div v-if="!collapsed" class="ds-party-body">
+        <div class="ds-party-body">
             <div v-if="hasInitiative || (isGM && gmChar)" class="ds-initiative-bar">
                 <span>Initiative order</span>
                 <button
@@ -84,7 +66,7 @@
                 style="
                     font-family: var(--font-body);
                     font-style: italic;
-                    font-size: 13px;
+                    font-size: 14px;
                     color: var(--ink-mute);
                     text-align: center;
                     padding: 16px 0;
@@ -100,72 +82,49 @@
                     :class="{ me: card.userId === authStore.user?.id }"
                     :style="{ '--player-color': charColor(card.userId) }"
                 >
-                    <div style="display: flex; align-items: center; gap: 6px">
+                    <div class="ds-pc-header-row">
+                        <div v-if="isOnline(card.userId)" class="ds-online-dot" title="Online" />
+                        <span class="ds-pc-name">{{ card.displayName }}</span>
                         <span
                             v-if="hasInitiative && (card.char?.data?.initiative ?? card.initiative) != null"
                             class="ds-initiative-score"
-                            >{{ card.char?.data?.initiative ?? card.initiative }}</span
-                        >
-                        <div
-                            v-if="isOnline(card.userId)"
-                            class="ds-online-dot"
-                            title="Online"
-                        />
-                        <span class="ds-pc-name">{{ card.displayName }}</span>
-                        <div
-                            style="
-                                display: flex;
-                                align-items: center;
-                                gap: 4px;
-                                margin-left: auto;
-                            "
-                        ></div>
+                        >{{ card.char?.data?.initiative ?? card.initiative }}</span>
                     </div>
-                    <div v-if="card.char?.data?.name" class="ds-pc-role">
+                    <div v-if="card.char?.data?.name" class="ds-pc-char-name">
                         {{ card.char.data.name }}
                     </div>
-
                     <div v-if="cardRole(card)" class="ds-pc-role">
                         {{ cardRole(card) }}
                     </div>
 
-                    <div v-if="card.char?.data?.maxHitPoints" class="ds-hp-row">
-                        <span style="min-width: 30px"
-                            >{{
-                                card.char.data.currentHp ??
-                                card.char.data.maxHitPoints
-                            }}/{{ card.char.data.maxHitPoints }}</span
-                        >
-                        <div class="ds-hp-bar">
-                            <span :style="{ width: hpPct(card.char) + '%' }" />
+                    <div v-if="card.char?.data?.maxHitPoints" class="ds-stat-chips">
+                        <div class="ds-hp-chip">
+                            <div class="ds-hp-chip-top">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.53L12 21.35z"/>
+                                </svg>
+                                <span class="ds-hp-numbers"><span class="ds-hp-current">{{ card.char.data.currentHp ?? card.char.data.maxHitPoints }}</span><span class="ds-hp-sep">/</span><span class="ds-hp-max-val">{{ card.char.data.maxHitPoints }}</span></span>
+                            </div>
+                            <div class="ds-hp-bar">
+                                <span :style="{ width: hpPct(card.char) + '%' }" />
+                            </div>
                         </div>
-                        <span
-                            v-if="card.char?.data?.armorClass"
-                            style="min-width: 22px; text-align: right"
-                            >AC {{ card.char.data.armorClass }}</span
-                        >
+                        <span v-if="card.char?.data?.armorClass" class="ds-ac-chip">
+                            <span class="ds-ac-label">AC</span>
+                            <span class="ds-ac-number">{{ card.char.data.armorClass }}</span>
+                        </span>
                     </div>
-
-                    <div
-                        v-else
-                        style="
-                            font-family: var(--font-mono);
-                            font-size: 11px;
-                            letter-spacing: 0.1em;
-                            text-transform: uppercase;
-                            color: var(--ink-mute);
-                        "
-                    >
-                        {{
-                            card.isGM
-                                ? "Game Master"
-                                : card.char
-                                  ? ""
-                                  : "No character"
-                        }}
+                    <div v-else-if="card.isGM || !card.char" class="ds-pc-no-char">
+                        {{ card.isGM ? "Game Master" : "No character" }}
                     </div>
                 </div>
             </div>
+        </div>
+        <div class="ds-resize-handle" @mousedown.stop="startResize">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <line x1="2" y1="9" x2="9" y2="2"/>
+                <line x1="5.5" y1="9" x2="9" y2="5.5"/>
+            </svg>
         </div>
     </div>
 </template>
@@ -187,15 +146,19 @@ const diceStore = useDiceStore();
 const { visible: partyVisible, close: closeParty } = usePartyPanel();
 
 const STORAGE_KEY = "dm.partyPanel.pos";
+const SIZE_KEY = "dm.partyPanel.size";
 const DEFAULT_POS = { x: 80, y: 88 };
+const DEFAULT_SIZE = { w: 320, h: 400 };
 
 const pos = ref({ ...DEFAULT_POS });
-const collapsed = ref(false);
+const size = ref({ ...DEFAULT_SIZE });
 
 onMounted(() => {
     try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
         if (saved?.x !== undefined) pos.value = saved;
+        const savedSize = JSON.parse(localStorage.getItem(SIZE_KEY) ?? "null");
+        if (savedSize?.w !== undefined) size.value = savedSize;
     } catch {}
 });
 
@@ -228,9 +191,31 @@ function onDragUp() {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragUp);
 }
+let resizeStart = null;
+function startResize(e) {
+    resizeStart = { mx: e.clientX, my: e.clientY, w: size.value.w, h: size.value.h };
+    window.addEventListener("mousemove", onResizeMove);
+    window.addEventListener("mouseup", onResizeUp);
+}
+function onResizeMove(e) {
+    if (!resizeStart) return;
+    size.value = {
+        w: Math.max(280, Math.min(600, resizeStart.w + (e.clientX - resizeStart.mx))),
+        h: Math.max(200, Math.min(window.innerHeight - 60, resizeStart.h + (e.clientY - resizeStart.my))),
+    };
+}
+function onResizeUp() {
+    resizeStart = null;
+    localStorage.setItem(SIZE_KEY, JSON.stringify(size.value));
+    window.removeEventListener("mousemove", onResizeMove);
+    window.removeEventListener("mouseup", onResizeUp);
+}
+
 onUnmounted(() => {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragUp);
+    window.removeEventListener("mousemove", onResizeMove);
+    window.removeEventListener("mouseup", onResizeUp);
 });
 
 const isGM = computed(() => authStore.user?.id === sessionStore.sessionOwnerId);

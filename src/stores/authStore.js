@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import router from '@/router/index.js'
-// Imported lazily inside cleanupAllStores to avoid circular-dep issues at module load time
 import { useSessionStore }   from '@/stores/sessionStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useHexStore }       from '@/stores/hexStore.js'

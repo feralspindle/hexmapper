@@ -123,7 +123,6 @@
         </button>
       </div>
 
-      <!-- Pending roll: shown while the server RPC is in flight -->
       <div v-if="diceStore.pendingRoll" class="mx-2 my-1.5">
         <div class="rounded border border-parchment-400 bg-stone-800/80 text-sm overflow-hidden">
           <div class="px-2 pt-1.5 pb-0.5 min-h-[3rem]">
@@ -135,7 +134,7 @@
               <i class="fa-solid fa-spinner fa-spin" />
               <span>Rolling…</span>
             </div>
-            <span class="font-bold text-2xl text-stone-600">—</span>
+            <span class="inline-flex items-center justify-center rounded-full min-w-[2.75rem] px-3 py-0.5 font-mono font-bold text-xl bg-stone-800 text-stone-600 ring-1 ring-stone-700">—</span>
           </div>
         </div>
       </div>
@@ -164,8 +163,8 @@
             <span class="block text-stone-400 text-right text-sm max-w-[6rem]">{{ timeAgo(entry.created_at) }}</span>
           </div>
           <div class="px-2 pt-1.5 pb-0.5 pr-28 min-h-[3rem]">
-            <div v-if="entry.label" class="text-parchment-400/70 text-sm italic mb-0.5" style="font-family: 'Crimson Text', serif">{{ entry.label }}</div>
-            <span class="font-mono text-stone-200 text-sm">{{ formatExpression(entry) }}</span>
+            <div v-if="entry.label" class="text-parchment-300 text-base mb-0.5" style="font-family: 'Crimson Text', serif; font-style: italic; font-weight: 600">{{ entry.label }}</div>
+            <span class="font-mono text-stone-400 text-xs">{{ formatExpression(entry) }}</span>
           </div>
 
           <div class="flex items-center justify-between px-2 pb-1.5">
@@ -187,11 +186,12 @@
               ><i class="fa-solid fa-pencil text-[10px]" /></button>
             </div>
             <div class="flex items-center gap-2 shrink-0 ml-2">
-              <span v-if="isCrit(entry)" class="text-amber-300 text-sm font-bold tracking-wide">CRIT!</span>
-              <span v-else-if="isFumble(entry)" class="text-red-400 text-sm font-bold tracking-wide">FAIL</span>
-              <span class="font-bold text-2xl" :class="isCrit(entry) ? 'text-amber-300' : isFumble(entry) ? 'text-red-400' : entry.user_id === authStore.user?.id ? 'text-parchment-300' : 'text-stone-300'">
-                {{ entry.total }}
-              </span>
+              <span v-if="isCrit(entry)" class="text-amber-300 text-xs font-bold tracking-wide uppercase">Crit</span>
+              <span v-else-if="isFumble(entry)" class="text-red-400 text-xs font-bold tracking-wide uppercase">Fail</span>
+              <span
+                class="inline-flex items-center justify-center rounded-full min-w-[2.75rem] px-3 py-0.5 font-mono font-bold text-xl tabular-nums"
+                :class="isCrit(entry) ? 'bg-amber-900/70 text-amber-300 ring-1 ring-amber-400/40' : isFumble(entry) ? 'bg-red-900/70 text-red-400 ring-1 ring-red-400/40' : entry.user_id === authStore.user?.id ? 'bg-parchment-900/50 text-parchment-300 ring-1 ring-parchment-400/30' : 'bg-stone-700 text-stone-300'"
+              >{{ entry.total }}</span>
             </div>
           </div>
         </div>

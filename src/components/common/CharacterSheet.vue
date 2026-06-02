@@ -1066,178 +1066,51 @@
                 </div>
             </div>
 
-            <div v-else-if="subTab === 'gear'" class="cs-scroll-body">
-                <div>
-                    <div
-                        style="
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                            margin-bottom: 5px;
-                        "
-                    >
-                        <span class="cs-section-label" style="color: var(--ink)"
-                            >Gear Slots</span
-                        >
-                        <div
-                            style="
-                                display: flex;
-                                align-items: center;
-                                gap: 5px;
-                                font-family: var(--font-mono);
-                                font-size: 11px;
-                                color: var(--ink-2);
-                            "
-                        >
-                            <button
-                                v-if="canEdit"
-                                class="cs-adj-btn"
-                                style="
-                                    width: 18px;
-                                    height: 18px;
-                                    font-size: 11px;
-                                "
-                                @click="
-                                    characterStore.updateField(
-                                        'gearSlotsTotal',
-                                        Math.max(
-                                            0,
-                                            (char.gearSlotsTotal ?? 0) - 1,
-                                        ),
-                                    )
-                                "
-                            >
-                                −
-                            </button>
-                            <span
-                                >{{ effectiveGearSlotsUsed }} /
-                                {{ char.gearSlotsTotal }}</span
-                            >
-                            <button
-                                v-if="canEdit"
-                                class="cs-adj-btn"
-                                style="
-                                    width: 18px;
-                                    height: 18px;
-                                    font-size: 11px;
-                                "
-                                @click="
-                                    characterStore.updateField(
-                                        'gearSlotsTotal',
-                                        (char.gearSlotsTotal ?? 0) + 1,
-                                    )
-                                "
-                            >
-                                +
-                            </button>
-                        </div>
+            <div v-else-if="subTab === 'gear'" class="cs-scroll-body cs-scroll-gear">
+                <div class="cs-gear-header">
+                    <span class="cs-section-label">Gear Slots</span>
+                    <div class="cs-gear-slot-count">
+                        <button v-if="canEdit" class="cs-adj-btn" style="width:18px;height:18px;font-size:11px" @click="characterStore.updateField('gearSlotsTotal', Math.max(0, (char.gearSlotsTotal ?? 0) - 1))">−</button>
+                        <span class="cs-gear-slot-num" :style="{ color: slotRatio > 0.9 ? '#8a1c1c' : slotRatio > 0.7 ? '#b8541c' : 'var(--ink)' }">{{ effectiveGearSlotsUsed }}</span>
+                        <span class="cs-gear-slot-sep">/ {{ char.gearSlotsTotal }}</span>
+                        <button v-if="canEdit" class="cs-adj-btn" style="width:18px;height:18px;font-size:11px" @click="characterStore.updateField('gearSlotsTotal', (char.gearSlotsTotal ?? 0) + 1)">+</button>
                     </div>
                     <div class="cs-slot-bar">
-                        <div
-                            class="cs-slot-bar-fill"
-                            :style="{
-                                width: `${Math.min(100, slotRatio * 100)}%`,
-                                background:
-                                    slotRatio > 0.9
-                                        ? '#8a1c1c'
-                                        : slotRatio > 0.7
-                                          ? '#b8541c'
-                                          : 'var(--accent-3, #5a6b3a)',
-                            }"
-                        />
+                        <div class="cs-slot-bar-fill" :style="{ width: `${Math.min(100, slotRatio * 100)}%`, background: slotRatio > 0.9 ? '#8a1c1c' : slotRatio > 0.7 ? '#b8541c' : 'var(--accent-3, #5a6b3a)' }" />
                     </div>
-                </div>
-
-                <div
-                    style="padding-top: 10px; border-top: 1px solid var(--rule)"
-                >
-                    <div
-                        style="
-                            font-family: var(
-                                --font-zine,
-                                &quot;Special Elite&quot;,
-                                serif
-                            );
-                            font-size: 11px;
-                            letter-spacing: 0.08em;
-                            text-transform: uppercase;
-                            color: var(--ink);
-                            margin-bottom: 8px;
-                        "
-                    >
-                        Rations<template v-if="rationSlots">
-                            — {{ rationSlots }} slot{{
-                                rationSlots !== 1 ? "s" : ""
-                            }}</template
-                        >
-                    </div>
-                    <div
-                        style="
-                            display: flex;
-
-                            gap: 6px;
-                        "
-                    >
-                        <button
-                            v-if="canEdit"
-                            class="cs-adj-btn"
-                            @click="
-                                characterStore.updateField(
-                                    'rations',
-                                    Math.max(0, (char.rations ?? 0) - 1),
-                                )
-                            "
-                        >
-                            −
-                        </button>
-                        <span
-                            style="
-                                font-family: var(--font-mono);
-                                font-size: 13px;
-                                min-width: 20px;
-                                text-align: center;
-                            "
-                            >{{ char.rations ?? 0 }} 🍫</span
-                        >
-                        <button
-                            v-if="canEdit"
-                            class="cs-adj-btn"
-                            @click="
-                                characterStore.updateField(
-                                    'rations',
-                                    (char.rations ?? 0) + 1,
-                                )
-                            "
-                        >
-                            +
-                        </button>
-                        <span
-                            style="
-                                font-family: var(--font-mono);
-                                font-size: 10px;
-                                font-style: italic;
-                                color: var(--ink-mute);
-                                margin-left: 4px;
-                            "
-                            >(3 per slot)</span
-                        >
-                    </div>
-                    <button
-                        v-if="canEdit"
-                        class="cs-add-btn"
-                        style="margin-top: 6px; font-size: 12px"
-                        @click="
-                            characterStore.updateField(
-                                'rations',
-                                (char.rations ?? 0) + 3,
-                            )
-                        "
-                    >
-                        + Add 3-pack of rations
-                    </button>
                 </div>
 
                 <div class="cs-list">
+                    <div class="cs-tracked-row">
+                        <div style="flex: 1; padding: 5px 8px; min-width: 0">
+                            <div class="cs-tracked-title">Rations</div>
+                            <div style="margin-top: 5px">
+                                <span class="cs-mini-coin-amt">{{ char.rations ?? 0 }}</span> <span class="cs-tracked-sub">🍫 · 3 per slot</span>
+                            </div>
+                        </div>
+                        <div v-if="canEdit" class="cs-tracked-controls">
+                            <button class="cs-adj-btn" @click="characterStore.updateField('rations', Math.max(0, (char.rations ?? 0) - 1))">−</button>
+                            <button class="cs-adj-btn" @click="characterStore.updateField('rations', (char.rations ?? 0) + 1)">+</button>
+                            <button class="cs-adj-btn" title="Add 3-pack" @click="characterStore.updateField('rations', (char.rations ?? 0) + 3)">+3</button>
+                        </div>
+                        <span class="cs-tracked-badge">{{ rationSlots > 0 ? `${rationSlots} slot${rationSlots !== 1 ? 's' : ''}` : 'free' }}</span>
+                    </div>
+                    <div v-if="char" class="cs-tracked-row">
+                        <div style="flex: 1; padding: 5px 8px; min-width: 0">
+                            <div class="cs-tracked-title">Coins</div>
+                            <div class="cs-coins-mini-grid">
+                                <div v-for="c in coins" :key="c.key" class="cs-coins-mini-item">
+                                    <div class="cs-mini-coin-icon" :style="{ background: c.bg, color: c.fg }">{{ c.symbol }}</div>
+                                    <span class="cs-mini-coin-amt">{{ char?.[c.key] ?? 0 }}</span>
+                                </div>
+                                <div class="cs-coins-mini-total">
+                                    <span class="cs-coins-mini-total-num">{{ (char?.gold ?? 0) + (char?.silver ?? 0) + (char?.copper ?? 0) }}</span>
+                                    <span class="cs-tracked-sub">total · 100/slot · first 100 free</span>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="cs-tracked-badge">{{ coinGearSlots > 0 ? `${coinGearSlots} slot${coinGearSlots !== 1 ? 's' : ''}` : 'free' }}</span>
+                    </div>
                     <TransitionGroup
                         name="gear-move"
                         tag="div"
@@ -1330,13 +1203,18 @@
                                                 {{ item.name }}
                                             </div>
                                             <div class="cs-list-sub">
-                                                {{ item.slots }} slot{{
-                                                    item.slots !== 1 ? "s" : ""
-                                                }}<span
-                                                    v-if="item.quantity > 1"
-                                                >
-                                                    · ×{{ item.quantity }}</span
-                                                >
+                                                <template v-if="isGemItem(item)">
+                                                    {{ calcCharGearItemSlots(item) }} slot{{ calcCharGearItemSlots(item) !== 1 ? 's' : '' }} total · ×{{ item.quantity }} (10/slot)
+                                                </template>
+                                                <template v-else>
+                                                    {{ item.slots }} slot{{
+                                                        item.slots !== 1 ? "s" : ""
+                                                    }}<span
+                                                        v-if="item.quantity > 1"
+                                                    >
+                                                        · ×{{ item.quantity }}</span
+                                                    >
+                                                </template>
                                             </div>
                                         </div>
                                         <span
@@ -1512,6 +1390,7 @@
                             </template>
                         </div>
                     </TransitionGroup>
+
                     <button
                         v-if="canEdit"
                         class="cs-add-btn"
@@ -1856,7 +1735,40 @@
                                 >
                                     ⊕
                                 </button>
+                                <button
+                                    v-if="vaultStore.ledger !== undefined"
+                                    class="cs-adj-btn"
+                                    :title="`Deposit ${coin.label.toLowerCase()} to party bank`"
+                                    @click="startDepositCoin(coin.key)"
+                                >
+                                    →
+                                </button>
                             </div>
+                        </div>
+                        <div
+                            v-if="canEdit && depositingCoin === coin.key"
+                            style="display:flex;align-items:center;gap:6px;padding:0 8px 8px"
+                        >
+                            <input
+                                ref="coinDepositInputRef"
+                                v-model.number="coinDepositDraft"
+                                type="number"
+                                class="cs-input"
+                                placeholder="Amount"
+                                style="flex:1;text-align:center"
+                                @keyup.enter="submitDepositCoin"
+                                @keyup.escape="depositingCoin = null"
+                            />
+                            <button
+                                class="cs-btn primary"
+                                style="padding:4px 10px;font-size:12px"
+                                @click="submitDepositCoin"
+                            >→ Bank</button>
+                            <button
+                                class="cs-btn ghost"
+                                style="padding:4px 8px;font-size:12px"
+                                @click="depositingCoin = null"
+                            >×</button>
                         </div>
                         <div
                             v-if="canEdit && addingCoin === coin.key"
@@ -2010,19 +1922,19 @@ import {
 import { useDiceStore } from "@/stores/diceStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
+import { useVaultStore } from "@/stores/vaultStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { supabase } from "@/lib/supabase";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
 const sessionStore = useSessionStore();
-const authStore = useAuthStore();
+const authStore    = useAuthStore();
+const vaultStore   = useVaultStore();
 
-// Import store functions for direct access
 const { setActive, characters, currentSessionId, saving, updateField } = characterStore;
 const { confirm } = useConfirmDialog();
 
-// Augment function (matches _augment from characterStore)
 function augmentData(data) {
     return {
         ...data,
@@ -2034,7 +1946,6 @@ function augmentData(data) {
 const canEdit = computed(() => characterStore.canEditActiveCharacter);
 const char = computed(() => characterStore.character);
 
-// GMs should be able to roll initiative for their own character
 const isGM = computed(() => sessionStore.isGM);
 const isGmCharacter = computed(() => {
     const authId = characterStore.activeCharacter?.user_id;
@@ -2092,21 +2003,46 @@ const parsedAttacks = computed(() => {
     });
 });
 
+const GEM_NAMES = ['emerald', 'pearl', 'ruby', 'sapphire', 'diamond']
+
+function isGemItem(item) {
+    const n = (item.name ?? '').toLowerCase()
+    return GEM_NAMES.some(g => n.includes(g))
+}
+
+function calcCharGearItemSlots(item) {
+    if (isGemItem(item)) return Math.ceil((item.quantity ?? 1) / 10)
+    return (item.slots ?? 0) * (item.quantity ?? 1)
+}
+
 const rationSlots = computed(() => {
     const count = char.value?.rations ?? 0;
     return count > 0 ? Math.ceil(count / 3) : 0;
 });
+
+const coinGearSlots = computed(() => {
+    if (!char.value) return 0
+    return ['gold', 'silver', 'copper']
+        .map(c => Math.max(0, Math.ceil(((char.value[c] ?? 0) - 100) / 100)))
+        .reduce((s, n) => s + n, 0)
+})
+
+const coinSlotBreakdown = computed(() => {
+    if (!char.value) return ''
+    const parts = []
+    if ((char.value.gold   ?? 0) > 0) parts.push(`${char.value.gold}gp`)
+    if ((char.value.silver ?? 0) > 0) parts.push(`${char.value.silver}sp`)
+    if ((char.value.copper ?? 0) > 0) parts.push(`${char.value.copper}cp`)
+    return parts.join(' · ')
+})
 
 const effectiveGearSlotsUsed = computed(() => {
     const gearSlots = !char.value?.gear
         ? (char.value?.gearSlotsUsed ?? 0)
         : char.value.gear
               .filter((item) => !item.disabled)
-              .reduce(
-                  (sum, item) => sum + (item.slots ?? 0) * (item.quantity ?? 1),
-                  0,
-              );
-    return gearSlots + rationSlots.value;
+              .reduce((sum, item) => sum + calcCharGearItemSlots(item), 0)
+    return gearSlots + rationSlots.value + coinGearSlots.value
 });
 
 const sortedGear = computed(() => char.value?.gear ?? []);
@@ -2208,6 +2144,27 @@ const coinInputRef = ref(null);
 const addingCoin = ref(null);
 const coinAddDraft = ref(null);
 const coinAddInputRef = ref(null);
+const depositingCoin = ref(null);
+const coinDepositDraft = ref(null);
+const coinDepositInputRef = ref(null);
+
+function startDepositCoin(key) {
+    depositingCoin.value = key;
+    coinDepositDraft.value = null;
+    nextTick(() => coinDepositInputRef.value?.focus());
+}
+async function submitDepositCoin() {
+    const key = depositingCoin.value;
+    const amount = Number(coinDepositDraft.value);
+    if (!key || !amount || amount <= 0) { depositingCoin.value = null; return; }
+    const available = char.value?.[key] ?? 0;
+    const actual = Math.min(amount, available);
+    if (actual <= 0) { depositingCoin.value = null; return; }
+    characterStore.adjustMoney(key, -actual);
+    const label = key.charAt(0).toUpperCase() + key.slice(1) + ' Coins';
+    await vaultStore.addToBank(label, actual, '', key);
+    depositingCoin.value = null;
+}
 
 function startEditCoin(key) {
     coinDraft.value = char.value[key] ?? 0;
@@ -2771,6 +2728,123 @@ button.cs-stat-val:hover {
     transition:
         opacity 0.12s,
         transform 0.18s ease;
+}
+.cs-gear-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.cs-gear-slot-count {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.cs-gear-slot-num {
+    font-family: var(--font-mono, monospace);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+}
+.cs-gear-slot-sep {
+    font-family: var(--font-mono, monospace);
+    font-size: 15px;
+    color: var(--ink-soft, #6b5e4e);
+    flex: 1;
+}
+
+.cs-tracked-row {
+    display: flex;
+    align-items: center;
+    background: var(--paper-3, #d8ccb4);
+    border: 1px solid var(--rule, #d4c4a8);
+    overflow: hidden;
+}
+.cs-tracked-title {
+    font-family: var(--font-body, serif);
+    font-size: 15px;
+    color: var(--ink, #1a1410);
+    font-weight: 600;
+}
+.cs-tracked-sub {
+    font-family: var(--font-body, serif);
+    font-size: 14px;
+    color: var(--ink-soft, #6b5e4e);
+    margin-top: 1px;
+}
+.cs-tracked-controls {
+    display: flex;
+    gap: 3px;
+    padding: 0 6px;
+    align-items: center;
+    border-left: 1px solid var(--rule, #d4c4a8);
+    flex-shrink: 0;
+}
+.cs-tracked-badge {
+    font-family: var(--font-zine, "Special Elite", serif);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-left: 1px solid var(--rule, #d4c4a8);
+    color: var(--ink-soft, #6b5e4e);
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    flex: 0 0 72px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cs-scroll-gear .cs-section-label { font-size: 11px; }
+.cs-scroll-gear .cs-list-title    { font-size: 15px; }
+.cs-scroll-gear .cs-list-sub      { font-size: 14px; }
+.cs-scroll-gear .cs-gear-badge    { font-size: 11px; }
+
+.cs-coins-mini-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 5px;
+}
+.cs-coins-mini-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.cs-mini-coin-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono, monospace);
+    font-size: 8px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.cs-mini-coin-amt {
+    font-family: var(--font-mono, monospace);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink, #1a1410);
+}
+.cs-coins-mini-total {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding-top: 3px;
+    border-top: 1px solid var(--rule, #d4c4a8);
+    margin-top: 2px;
+}
+.cs-coins-mini-total-num {
+    font-family: var(--font-mono, monospace);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink, #1a1410);
 }
 .cs-list-item.disabled {
     opacity: 0.45;

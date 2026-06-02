@@ -118,7 +118,7 @@
 
         <div style="flex: 1" />
 
-        <div class="ds-presence" style="margin-right: 10px">
+        <div class="ds-presence">
             <div
                 v-for="user in visibleOnlineUsers"
                 :key="user.user_id ?? user._clientId"
@@ -146,14 +146,16 @@
                 }}</span>
                 <div class="ds-status-dot" />
             </div>
+            <span v-if="visibleOnlineUsers.length" class="hm-presence-count">
+                {{ visibleOnlineUsers.length }} online
+            </span>
         </div>
 
-        <CharacterPicker style="margin-right: 8px" />
+        <CharacterPicker />
 
         <button
             class="ds-tb-btn"
             :class="{ active: charOpen }"
-            style="margin-left: 8px"
             title="Character sheet"
             @click="emit('toggle-char')"
         >
@@ -173,18 +175,14 @@
             <span style="font-size: 13px">Sheet</span>
         </button>
 
-        <ShareModal
-            :session-id="sessionStore.sessionId"
-            style="margin-left: 4px"
-        />
+        <ShareModal :session-id="sessionStore.sessionId" />
 
-        <BugReportButton style="margin-left: 4px" />
+        <BugReportButton />
 
         <div
             style="
                 display: flex;
                 align-items: center;
-                margin-left: 10px;
                 padding-left: 10px;
                 border-left: 1px solid rgba(237, 225, 199, 0.15);
                 gap: 8px;

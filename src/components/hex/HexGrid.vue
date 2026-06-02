@@ -301,8 +301,6 @@ const visibleCoords = computed(() => {
     const cols = gridCols.value;
     const rows = gridRows.value;
     const imageLoaded = props.imageMode && imageNaturalWidth.value > 0;
-    // Image starts near the SVG origin, so only a small negative buffer is needed there.
-    // In free mode, extend equally in all directions from the origin.
     const qStart = imageLoaded ? -4 : -Math.floor(cols / 2);
     const rBuffer = imageLoaded ? 4 : Math.floor(rows / 2);
     const coords = [];

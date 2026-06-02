@@ -10,7 +10,6 @@
       </button>
     </div>
 
-    <!-- Scale -->
     <div class="map-settings-section">
       <div class="map-settings-subsection">
         <div class="map-settings-label">Scale per hex</div>
@@ -40,7 +39,6 @@
       </div>
     </div>
 
-    <!-- Image upload -->
     <div v-if="hexMode === 'fow'" class="map-settings-section">
       <div v-if="mapStore.activeMapImageUrl" class="map-preview">
         <img :src="mapStore.activeMapImageUrl" alt="Map image" />
@@ -65,7 +63,6 @@
       <p v-else class="map-settings-hint">JPEG, PNG, or WebP I guess if youre a fucking psychopath · max 50 MB</p>
     </div>
 
-    <!-- Alignment controls (disabled when locked) -->
     <div v-if="hexMode === 'fow'" :class="['map-settings-section', isAlignmentLocked ? 'map-settings-locked' : '']">
 
       <div class="map-settings-subsection">
@@ -206,7 +203,6 @@
 
     </div>
 
-    <!-- Lock toggle -->
     <div v-if="hexMode === 'fow'" class="map-settings-section map-lock-row">
       <div class="map-lock-state">
         <svg v-if="isAlignmentLocked" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

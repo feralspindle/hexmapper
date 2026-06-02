@@ -10,7 +10,8 @@ const HISTORY_LIMIT = 60
 export const useDiceStore = defineStore('dice', () => {
   const rolls       = ref([])
   const annotations = ref({})
-  const pendingRoll = ref(null)   // in-flight RPC: shown in UI while server rolls
+  const pendingRoll = ref(null)
+  const latestRoll  = ref(null)
   let channel = null
   let currentSessionId = null
 
@@ -57,6 +58,7 @@ export const useDiceStore = defineStore('dice', () => {
           const authStore = useAuthStore()
           if (row.user_id === authStore.user?.id) return
           rolls.value = [row, ...rolls.value].slice(0, HISTORY_LIMIT)
+          latestRoll.value = row
         },
       )
       .on(
@@ -75,7 +77,7 @@ export const useDiceStore = defineStore('dice', () => {
   }
 
   async function rollDice(pending, modifier, label = null, characterId = null) {
-    if (pendingRoll.value) return  // don't stack rolls
+    if (pendingRoll.value) return
 
     pendingRoll.value = {
       pending: { ...pending },
@@ -98,6 +100,7 @@ export const useDiceStore = defineStore('dice', () => {
       }
 
       rolls.value = [data, ...rolls.value].slice(0, HISTORY_LIMIT)
+      latestRoll.value = data
       playDiceSound()
       return data
     } finally {
@@ -157,8 +160,9 @@ export const useDiceStore = defineStore('dice', () => {
     rolls.value       = []
     annotations.value = {}
     pendingRoll.value = null
+    latestRoll.value  = null
     currentSessionId  = null
   }
 
-  return { rolls, annotations, pendingRoll, init, rollDice, addAnnotation, cleanup }
+  return { rolls, annotations, pendingRoll, latestRoll, init, rollDice, addAnnotation, cleanup }
 })
