@@ -244,7 +244,6 @@
             class="pn-note-content"
             :value="note.content"
             placeholder="Write something…"
-            rows="3"
             @input="debounceSaveNote(note.id, { content: $event.target.value })"
           />
         </div>
@@ -1759,6 +1758,8 @@ async function submitNewItem(containerId) {
   resize: none;
   outline: none;
   line-height: 1.55;
+  field-sizing: content;
+  min-height: 4.65em;
 }
 
 
