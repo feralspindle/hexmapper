@@ -475,7 +475,7 @@
             </div>
           </div>
 
-          <div v-if="!vaultStore.containers.length && !addContainerOpen" class="pv-empty">No containers — add a cart, pack horse, or other shared storage</div>
+          <div v-if="!vaultStore.containers.length && !addContainerOpen" class="pv-empty">No containers. Add a cart, horse, or other shared storage</div>
 
           <template v-for="container in vaultStore.containers" :key="container.id">
             <div class="pv-container-header">
