@@ -1,5 +1,5 @@
 <template>
-    <aside v-if="!floating" class="ds-toolbar">
+    <aside v-if="!floating" class="ds-toolbar" @mouseover="onHover" @mouseleave="onLeave">
         <div class="ds-tool-group">
             <span class="ds-tool-label">View</span>
             <button
@@ -479,10 +479,19 @@
             </button>
         </template>
     </div>
+
+    <Teleport to="body">
+        <div
+            v-if="tip.show"
+            class="ds-tip ds-tip-portal"
+            :style="{ left: tip.x + 'px', top: tip.y + 'px' }"
+            v-html="tip.html"
+        />
+    </Teleport>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, reactive } from "vue";
 import { usePartyNotebook } from "@/composables/usePartyNotebook.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 import { soundEnabled, toggleSound } from "@/lib/soundSettings.js";
@@ -502,5 +511,27 @@ const { visible: partyVisible, toggle: toggleParty } = usePartyPanel();
 const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault');
 function toggleVault() {
   if (vaultVisible.value) { toggleInventory(); } else { openNotebook('vault'); }
+}
+
+const tip = reactive({ show: false, x: 0, y: 0, html: '' })
+let _lastBtn = null
+
+function onHover(e) {
+  const btn = e.target.closest('.ds-tool')
+  if (btn === _lastBtn) return
+  _lastBtn = btn
+  if (!btn) { tip.show = false; return }
+  const tipEl = btn.querySelector('.ds-tip')
+  if (!tipEl) { tip.show = false; return }
+  const rect = btn.getBoundingClientRect()
+  tip.x = rect.right + 10
+  tip.y = rect.top + rect.height / 2
+  tip.html = tipEl.innerHTML
+  tip.show = true
+}
+
+function onLeave() {
+  _lastBtn = null
+  tip.show = false
 }
 </script>

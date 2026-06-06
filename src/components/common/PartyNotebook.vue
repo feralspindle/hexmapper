@@ -30,6 +30,9 @@
       <button class="pn-tab" :class="{ active: activeTab === 'vault' }" @click="activeTab = 'vault'">
         Vault<span v-if="vaultStore.loot.length" class="pn-badge">{{ vaultStore.loot.length }}</span>
       </button>
+      <button class="pn-tab" :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'">
+        Calendar
+      </button>
     </div>
 
     <div class="pn-body">
@@ -599,6 +602,10 @@
 
       </template>
 
+      <template v-if="activeTab === 'calendar'">
+        <PartyCalendar :session-id="sessionId" />
+      </template>
+
     </div>
     <div class="pn-resize-handle" @mousedown.stop="startResize">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -611,6 +618,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import PartyCalendar from '@/components/common/PartyCalendar.vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useNotebookStore } from '@/stores/notebookStore.js'
 import { useVaultStore } from '@/stores/vaultStore.js'
@@ -1197,7 +1205,7 @@ async function submitNewItem(containerId) {
   margin: 0;
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 400;
   color: var(--paper);
   flex: 1;
@@ -1214,7 +1222,7 @@ async function submitNewItem(containerId) {
   background: transparent;
   border: none;
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1236,7 +1244,7 @@ async function submitNewItem(containerId) {
   background: var(--ink-soft);
   color: var(--paper);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 11px;
   border-radius: 8px;
   padding: 1px 5px;
   line-height: 1.4;
@@ -1263,7 +1271,7 @@ async function submitNewItem(containerId) {
 
 .pn-count {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1281,7 +1289,7 @@ async function submitNewItem(containerId) {
 
 .pn-add-btn {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-2);
@@ -1295,7 +1303,7 @@ async function submitNewItem(containerId) {
 .pn-empty {
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink-mute);
   text-align: center;
   padding: 16px 12px;
@@ -1331,7 +1339,7 @@ async function submitNewItem(containerId) {
 .pn-done-desc {
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink-soft);
   margin: 4px 0 8px;
   line-height: 1.5;
@@ -1342,7 +1350,7 @@ async function submitNewItem(containerId) {
   border: 1px solid var(--rule-strong);
   color: var(--ink-soft);
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 5px 8px;
@@ -1360,7 +1368,7 @@ async function submitNewItem(containerId) {
   border: none;
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 16px;
+  font-size: 20px;
   color: var(--ink);
   padding: 0;
   outline: none;
@@ -1371,7 +1379,7 @@ async function submitNewItem(containerId) {
   color: var(--ink-mute);
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 13px;
+  font-size: 16px;
 }
 .pn-progress-row {
   display: flex;
@@ -1394,7 +1402,7 @@ async function submitNewItem(containerId) {
 }
 .pn-progress-label {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 16px;
   color: var(--accent-3, #4a7c59);
   white-space: nowrap;
 }
@@ -1406,14 +1414,14 @@ async function submitNewItem(containerId) {
 }
 .pn-quest-author {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
 .pn-gm-badge {
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-2);
@@ -1429,7 +1437,7 @@ async function submitNewItem(containerId) {
   border-bottom: 1px dashed var(--rule);
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 14px;
+  font-size: 18px;
   color: var(--ink-soft);
   padding: 4px 0 6px;
   margin-bottom: 8px;
@@ -1441,7 +1449,7 @@ async function submitNewItem(containerId) {
 .pn-goals-section { margin-bottom: 8px; }
 .pn-goals-label {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1476,7 +1484,7 @@ async function submitNewItem(containerId) {
   background: none;
   border: none;
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 18px;
   color: var(--ink);
   outline: none;
   padding: 0;
@@ -1503,7 +1511,7 @@ async function submitNewItem(containerId) {
   border: none;
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink-soft);
   cursor: default;
   padding: 2px 0;
@@ -1518,7 +1526,7 @@ async function submitNewItem(containerId) {
 }
 .pn-reward-label {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1537,7 +1545,7 @@ async function submitNewItem(containerId) {
 }
 .pn-reward-chip {
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 18px;
   color: var(--ink);
   background: var(--paper-2);
   border: 1px solid var(--rule-strong);
@@ -1565,7 +1573,7 @@ async function submitNewItem(containerId) {
 .pn-add-reward-btn {
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink-soft);
   background: none;
   border: none;
@@ -1580,7 +1588,7 @@ async function submitNewItem(containerId) {
 }
 .pn-reward-type-opt {
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   background: var(--paper-2);
@@ -1607,7 +1615,7 @@ async function submitNewItem(containerId) {
   border: none;
   border-bottom: 1px solid var(--rule-strong);
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink);
   padding: 2px 0;
   outline: none;
@@ -1618,7 +1626,7 @@ async function submitNewItem(containerId) {
   border: 1px solid var(--rule-strong);
   border-radius: 2px;
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink);
@@ -1633,7 +1641,7 @@ async function submitNewItem(containerId) {
   border: 1px solid var(--rule-strong);
   border-radius: 2px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 15px;
   color: var(--ink);
   padding: 3px 5px;
   text-align: center;
@@ -1644,7 +1652,7 @@ async function submitNewItem(containerId) {
   color: var(--paper);
   border: none;
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 5px 10px;
@@ -1658,7 +1666,7 @@ async function submitNewItem(containerId) {
   background: none;
   border: none;
   color: var(--ink-mute);
-  font-size: 12px;
+  font-size: 15px;
   cursor: default;
   padding: 2px 4px;
 }
@@ -1675,7 +1683,7 @@ async function submitNewItem(containerId) {
   border: none;
   color: white;
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 6px 8px;
@@ -1717,7 +1725,7 @@ async function submitNewItem(containerId) {
   border: none;
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 16px;
+  font-size: 20px;
   color: var(--ink);
   padding: 0;
   outline: none;
@@ -1726,7 +1734,7 @@ async function submitNewItem(containerId) {
 }
 .pn-note-author-badge {
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--paper);
@@ -1741,7 +1749,7 @@ async function submitNewItem(containerId) {
 }
 .pn-note-ts {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   color: var(--ink-soft);
   margin-bottom: 5px;
 }
@@ -1752,7 +1760,7 @@ async function submitNewItem(containerId) {
   border: none;
   border-top: 1px dashed var(--rule);
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 18px;
   color: var(--ink-soft);
   padding: 6px 0 0;
   resize: none;
@@ -1790,7 +1798,7 @@ async function submitNewItem(containerId) {
 }
 .pv-section-title {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1799,14 +1807,14 @@ async function submitNewItem(containerId) {
   background: var(--ink);
   color: var(--paper);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 11px;
   border-radius: 8px;
   padding: 1px 5px;
   line-height: 1.4;
 }
 .pv-add-btn {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-2);
@@ -1820,13 +1828,13 @@ async function submitNewItem(containerId) {
 .pv-empty {
   font-family: var(--font-body);
   font-style: italic;
-  font-size: 14px;
+  font-size: 18px;
   color: var(--ink-soft);
   text-align: center;
   padding: 12px 12px;
 }
 .pv-empty--sm {
-  font-size: 13px;
+  font-size: 16px;
   padding: 6px 24px;
   text-align: left;
 }
@@ -1846,7 +1854,7 @@ async function submitNewItem(containerId) {
   border: 1px solid var(--rule-strong);
   border-radius: 2px;
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink);
   padding: 5px 8px;
   outline: none;
@@ -1870,7 +1878,7 @@ async function submitNewItem(containerId) {
 }
 .pv-form-label {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1882,7 +1890,7 @@ async function submitNewItem(containerId) {
   color: var(--paper);
   border: none;
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 5px 8px;
@@ -1901,7 +1909,7 @@ async function submitNewItem(containerId) {
   place-items: center;
   cursor: default;
   border-radius: 2px;
-  font-size: 11px;
+  font-size: 14px;
   flex: 0 0 auto;
 }
 .pv-cancel-btn:hover { color: var(--accent); border-color: var(--accent); }
@@ -1921,14 +1929,14 @@ async function submitNewItem(containerId) {
 }
 .pv-loot-qty {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink-soft);
   flex: 0 0 auto;
 }
 .pv-loot-name {
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 15px;
+  font-size: 19px;
   color: var(--ink);
   flex: 1;
   min-width: 0;
@@ -1938,13 +1946,13 @@ async function submitNewItem(containerId) {
 }
 .pv-loot-notes {
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 15px;
   color: var(--ink-soft);
   margin-bottom: 1px;
 }
 .pv-loot-by {
   font-family: var(--font-zine);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -1963,7 +1971,7 @@ async function submitNewItem(containerId) {
 .pv-stash-row { flex-wrap: wrap; gap: 4px; }
 .pv-split-info {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 15px;
   color: var(--ink-soft);
   flex: 1;
 }
@@ -1973,7 +1981,7 @@ async function submitNewItem(containerId) {
   color: white;
   border: none;
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 5px 10px;
@@ -1989,7 +1997,7 @@ async function submitNewItem(containerId) {
   background: none;
   border: none;
   color: var(--ink-mute);
-  font-size: 10px;
+  font-size: 13px;
   cursor: default;
   padding: 2px 4px;
   flex: 0 0 auto;
@@ -2001,7 +2009,7 @@ async function submitNewItem(containerId) {
   border: 1px solid var(--rule-strong);
   color: var(--ink);
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   padding: 4px 8px;
@@ -2029,7 +2037,7 @@ async function submitNewItem(containerId) {
   border: 1px solid var(--rule-strong);
   color: var(--ink);
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   padding: 4px 2px;
@@ -2066,14 +2074,14 @@ async function submitNewItem(containerId) {
 .pv-storage-row--indent { padding-left: 24px; }
 .pv-storage-qty {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 15px;
   color: var(--ink-soft);
   flex: 0 0 auto;
 }
 .pv-storage-name {
   flex: 1;
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 18px;
   color: var(--ink);
   min-width: 0;
   overflow: hidden;
@@ -2106,7 +2114,7 @@ async function submitNewItem(containerId) {
 }
 .pv-container-name {
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 18px;
   color: var(--ink);
   flex: 1;
   min-width: 0;
@@ -2116,7 +2124,7 @@ async function submitNewItem(containerId) {
 }
 .pv-container-slots {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   color: var(--ink-soft);
   flex: 0 0 auto;
   white-space: nowrap;
@@ -2164,7 +2172,7 @@ async function submitNewItem(containerId) {
 .pv-gear-main { flex: 1; min-width: 0; }
 .pv-gear-name {
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
@@ -2173,13 +2181,13 @@ async function submitNewItem(containerId) {
 }
 .pv-gear-sub {
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 15px;
   color: var(--ink-soft);
   margin-top: 1px;
 }
 .pv-gear-badge {
   font-family: var(--font-zine);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -2216,7 +2224,7 @@ async function submitNewItem(containerId) {
   background: var(--paper-2);
   border: none;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 18px;
   width: 24px;
   height: 28px;
   cursor: default;
@@ -2226,7 +2234,7 @@ async function submitNewItem(containerId) {
 .pv-slots-stepper button:hover { background: var(--paper-3); }
 .pv-slots-stepper span {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink);
   min-width: 24px;
   text-align: center;
@@ -2235,7 +2243,7 @@ async function submitNewItem(containerId) {
 .pv-item-type-select {
   flex: 1;
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink);
@@ -2269,20 +2277,20 @@ async function submitNewItem(containerId) {
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;
 }
 .pv-coin-amount {
   font-family: var(--font-mono);
-  font-size: 20px;
+  font-size: 25px;
   font-weight: 700;
   color: var(--ink);
   line-height: 1;
 }
 .pv-coin-label {
   font-family: var(--font-zine);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-mute);
@@ -2295,7 +2303,7 @@ async function submitNewItem(containerId) {
 .pv-type-btn {
   flex: 1;
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   background: var(--paper-2);
@@ -2321,7 +2329,7 @@ async function submitNewItem(containerId) {
 }
 .pv-assign-char {
   font-family: var(--font-zine);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: var(--paper-2);
@@ -2341,7 +2349,7 @@ async function submitNewItem(containerId) {
   border-color: var(--ink);
 }
 .pv-assign-char:disabled { opacity: 0.3; cursor: not-allowed; }
-.pv-assign-n { font-family: var(--font-mono); font-size: 9px; }
+.pv-assign-n { font-family: var(--font-mono); font-size: 11px; }
 
 
 .pv-ledger-entry {
@@ -2354,7 +2362,7 @@ async function submitNewItem(containerId) {
 .pv-ledger-who {
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--ink);
   flex: 0 0 auto;
   max-width: 100px;
@@ -2364,7 +2372,7 @@ async function submitNewItem(containerId) {
 }
 .pv-ledger-desc {
   font-family: var(--font-zine);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-mute);
@@ -2372,13 +2380,13 @@ async function submitNewItem(containerId) {
 }
 .pv-ledger-change {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   flex: 0 0 auto;
 }
 .pv-ledger-ts {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--ink-mute);
   flex: 0 0 auto;
   white-space: nowrap;
