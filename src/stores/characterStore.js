@@ -312,13 +312,14 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
-  function addAttack(raw, damageDie = null) {
+  function addAttack(raw, damageDie = null, statKey = null) {
     if (!character.value) return
     const charName = character.value?.name ?? 'character'
     updateField('attacks', [...(character.value.attacks ?? []), {
       id: crypto.randomUUID(),
       raw: raw.trim(),
       damageDie: damageDie?.trim() || null,
+      statKey: statKey || null,
       disabled: false,
     }])
     _logSheet(`${charName} added attack: ${raw.trim()}`)

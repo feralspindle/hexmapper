@@ -651,13 +651,8 @@
                                             {{ atk.label }}
                                         </div>
                                         <div class="cs-list-sub">
-                                            {{
-                                                atk.raw
-                                                    .split(":")
-                                                    .slice(1)
-                                                    .join(":")
-                                                    .trim()
-                                            }}
+                                            <span v-if="atk.statKey" class="cs-atk-stat-badge">{{ atk.statKey }} {{ atkEffectiveBonus(atk) >= 0 ? '+' : '' }}{{ atkEffectiveBonus(atk) }}</span>
+                                            <span v-else>{{ atk.raw.split(":").slice(1).join(":").trim() }}</span>
                                         </div>
                                     </button>
                                     <button
@@ -807,10 +802,14 @@
                                     <input
                                         v-model="editAtkDraft.raw"
                                         class="cs-input"
-                                        placeholder="Name: +bonus to hit…"
+                                        placeholder="Name: description…"
                                         @keyup.enter="saveAtkEdit(atk.idx)"
                                         @keyup.escape="editingAtkIdx = null"
                                     />
+                                    <select v-model="editAtkDraft.statKey" class="cs-input">
+                                        <option value="">No stat linked (use bonus in description)</option>
+                                        <option v-for="k in ['STR','DEX','CON','INT','WIS','CHA']" :key="k" :value="k">{{ STAT_NAMES[k] }} ({{ k }})</option>
+                                    </select>
                                     <input
                                         v-model="editAtkDraft.damageDie"
                                         class="cs-input"
@@ -846,10 +845,14 @@
                                 ref="newAtkInputRef"
                                 v-model="newAtkDraft.raw"
                                 class="cs-input"
-                                placeholder="Name: +bonus to hit…"
+                                placeholder="Name: description…"
                                 @keyup.enter="submitAddAtk"
                                 @keyup.escape="showAddAtk = false"
                             />
+                            <select v-model="newAtkDraft.statKey" class="cs-input">
+                                <option value="">No stat linked (use bonus in description)</option>
+                                <option v-for="k in ['STR','DEX','CON','INT','WIS','CHA']" :key="k" :value="k">{{ STAT_NAMES[k] }} ({{ k }})</option>
+                            </select>
                             <input
                                 v-model="newAtkDraft.damageDie"
                                 class="cs-input"
@@ -1999,9 +2002,17 @@ const parsedAttacks = computed(() => {
         const raw = typeof a === "string" ? a : (a.raw ?? "");
         const disabled = typeof a === "object" ? (a.disabled ?? false) : false;
         const damageDie = typeof a === "object" ? (a.damageDie ?? null) : null;
-        return { ...parseAttack(raw), idx, disabled, damageDie };
+        const statKey = typeof a === "object" ? (a.statKey ?? null) : null;
+        return { ...parseAttack(raw), idx, disabled, damageDie, statKey };
     });
 });
+
+function atkEffectiveBonus(atk) {
+    if (atk.statKey && char.value?.stats?.[atk.statKey] !== undefined) {
+        return statMod(char.value.stats[atk.statKey]);
+    }
+    return atk.bonus;
+}
 
 const GEM_NAMES = ['emerald', 'pearl', 'ruby', 'sapphire', 'diamond']
 
@@ -2196,29 +2207,31 @@ function handleSpendLuck() {
 }
 
 const editingAtkIdx = ref(null);
-const editAtkDraft = ref({ raw: "", damageDie: "" });
+const editAtkDraft = ref({ raw: "", damageDie: "", statKey: "" });
 function startAtkEdit(atk) {
     editingAtkIdx.value = atk.idx;
-    editAtkDraft.value = { raw: atk.raw, damageDie: atk.damageDie ?? "" };
+    editAtkDraft.value = { raw: atk.raw, damageDie: atk.damageDie ?? "", statKey: atk.statKey ?? "" };
 }
 function saveAtkEdit(idx) {
     characterStore.updateAttack(idx, {
         raw: editAtkDraft.value.raw.trim(),
         damageDie: editAtkDraft.value.damageDie.trim() || null,
+        statKey: editAtkDraft.value.statKey || null,
     });
     editingAtkIdx.value = null;
 }
 
 const showAddAtk = ref(false);
-const newAtkDraft = ref({ raw: "", damageDie: "" });
+const newAtkDraft = ref({ raw: "", damageDie: "", statKey: "" });
 const newAtkInputRef = ref(null);
 function submitAddAtk() {
     if (!newAtkDraft.value.raw.trim()) return;
     characterStore.addAttack(
         newAtkDraft.value.raw.trim(),
         newAtkDraft.value.damageDie.trim() || null,
+        newAtkDraft.value.statKey || null,
     );
-    newAtkDraft.value = { raw: "", damageDie: "" };
+    newAtkDraft.value = { raw: "", damageDie: "", statKey: "" };
     showAddAtk.value = false;
 }
 
@@ -2426,7 +2439,7 @@ function rollStat(stat) {
 function rollAttack(atk) {
     diceStore.rollDice(
         { d20: 1 },
-        atk.bonus,
+        atkEffectiveBonus(atk),
         atk.label,
         characterStore.activeId,
     );
@@ -2882,6 +2895,13 @@ button.cs-stat-val:hover {
     font-size: 12px;
     color: var(--ink-soft, #6b5e4e);
     margin-top: 1px;
+}
+.cs-atk-stat-badge {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--accent, #8a1c1c);
+    font-weight: 600;
+    letter-spacing: 0.03em;
 }
 .cs-list-action-col {
     display: flex;
