@@ -44,10 +44,10 @@
         </div>
 
         <div class="ds-party-body">
-            <div v-if="hasInitiative || (isGM && gmChar)" class="ds-initiative-bar">
+            <div v-if="hasInitiative || isGM" class="ds-initiative-bar">
                 <span>Initiative order</span>
                 <button
-                    v-if="isGM && gmChar"
+                    v-if="isGM"
                     class="ds-clear-initiative"
                     @click="rollGmInitiative"
                 >
@@ -56,7 +56,7 @@
                 <button
                     v-if="isGM && hasInitiative"
                     class="ds-clear-initiative"
-                    @click="characterStore.clearAllInitiative()"
+                    @click="clearInitiative"
                 >
                     Clear Initiative
                 </button>
@@ -145,6 +145,8 @@ const diceStore = useDiceStore();
 
 const { visible: partyVisible, close: closeParty } = usePartyPanel();
 
+const gmInitiativeScore = ref(null);
+
 const STORAGE_KEY = "dm.partyPanel.pos";
 const SIZE_KEY = "dm.partyPanel.size";
 const DEFAULT_POS = { x: 80, y: 88 };
@@ -220,23 +222,16 @@ onUnmounted(() => {
 
 const isGM = computed(() => authStore.user?.id === sessionStore.sessionOwnerId);
 
-const gmChar = computed(() => {
-    const gmId = sessionStore.sessionOwnerId;
-    if (!gmId) return null;
-    const gmMember = characterStore.memberSelections.find((m) => m.user_id === gmId);
-    if (!gmMember?.active_character_id) return null;
-    return characterStore.characters.find((c) => c.id === gmMember.active_character_id) ?? null;
-});
-
 async function rollGmInitiative() {
-    const char = gmChar.value;
-    if (!char) return;
-    const dex = char.data?.stats?.DEX;
-    const mod = dex !== undefined ? Math.floor((dex - 10) / 2) : 0;
-    const result = await diceStore.rollDice({ d20: 1 }, mod, "Initiative", char.id);
+    const result = await diceStore.rollDice({ d20: 1 }, 0, "Initiative");
     if (result?.total != null) {
-        characterStore.updateFieldForChar(char.id, "initiative", result.total);
+        gmInitiativeScore.value = result.total;
     }
+}
+
+function clearInitiative() {
+    gmInitiativeScore.value = null;
+    characterStore.clearAllInitiative();
 }
 
 const hasInitiative = computed(() =>
@@ -270,18 +265,13 @@ const partyCards = computed(() => {
         const gmPresence = sessionStore.onlineUsers.find(
             (u) => u.user_id === gmId,
         );
-        const gmCharObj = gmMember?.active_character_id
-            ? (characterStore.characters.find(
-                  (c) => c.id === gmMember.active_character_id,
-              ) ?? null)
-            : null;
         result.push({
             userId: gmId,
             isGM: true,
             displayName:
                 gmPresence?.display_name ?? gmMember?.display_name ?? null,
             char: null,
-            initiative: gmCharObj?.data?.initiative ?? null,
+            initiative: gmInitiativeScore.value ?? null,
         });
         seen.add(gmId);
     }

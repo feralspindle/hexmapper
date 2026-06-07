@@ -158,7 +158,7 @@
           <div class="absolute top-1.5 right-2">
             <span class="text-sm text-right truncate max-w-[6rem] block"
               :class="entry.user_id === authStore.user?.id ? 'text-parchment-400' : 'text-stone-400'">
-              {{ gmName(entry.user_id, entry.display_name) }}
+              {{ gmName(entry.user_id, entry.display_name, entry.character_id) }}
             </span>
             <span class="block text-stone-400 text-right text-sm max-w-[6rem]">{{ timeAgo(entry.created_at) }}</span>
           </div>

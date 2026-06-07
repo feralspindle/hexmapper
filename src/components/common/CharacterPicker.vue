@@ -25,7 +25,7 @@
 
           <template v-else>
             <div v-if="sessionStore.isGM && characterStore.myCharacters.length" class="cp-section-head">
-              Your Characters
+              NPCs
             </div>
             <button
               v-for="char in characterStore.myCharacters"
@@ -58,7 +58,7 @@
               No characters yet
             </div>
             <div v-if="sessionStore.isGM && !characterStore.characters.length" class="cp-empty">
-              No trashbags in this campaign yet
+              No characters or NPCs yet
             </div>
           </template>
 
@@ -66,7 +66,7 @@
 
           <button class="cp-row cp-row--muted" @click="newCharOpen = true; open = false">
             <i class="fa-solid fa-user-plus" />
-            New trashbag
+            {{ sessionStore.isGM ? 'New NPC' : 'New trashbag' }}
           </button>
           <button class="cp-row cp-row--muted" @click="openExisting">
             <i class="fa-solid fa-box-archive" />

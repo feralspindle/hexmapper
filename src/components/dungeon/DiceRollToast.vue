@@ -22,7 +22,7 @@
             ></template>]
           </div>
 
-          <div class="ds-rt-who">— {{ gmName(toast.roll.user_id, toast.roll.display_name ?? 'Adventurer') }}</div>
+          <div class="ds-rt-who">— {{ gmName(toast.roll.user_id, toast.roll.display_name ?? 'Adventurer', toast.roll.character_id) }}</div>
         </div>
       </div>
     </TransitionGroup>

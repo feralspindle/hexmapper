@@ -285,7 +285,7 @@
                     </div>
                 </div>
 
-                <div class="cs-initiative-block">
+                <div v-if="!isGmCharacter" class="cs-initiative-block">
                     <div class="cs-initiative-row">
                         <span class="cs-section-label">Initiative</span>
                         <template v-if="editingInitiative && canEdit">
@@ -372,7 +372,7 @@
 
                 </div>
 
-                <div class="cs-luck-block">
+                <div v-if="!isGmCharacter" class="cs-luck-block">
                     <div class="cs-luck-header">
                         <span class="cs-section-label">Luck</span>
                         <span class="cs-luck-count"

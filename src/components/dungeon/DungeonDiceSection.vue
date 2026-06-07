@@ -326,7 +326,7 @@
                 <div class="ds-roll-dot" />
                 <div>
                     <div class="ds-roll-who-row">
-                        <span class="ds-roll-who" :style="{ color: rollColor(entry.user_id) }">{{ gmName(entry.user_id, entry.display_name) }}</span>
+                        <span class="ds-roll-who" :style="{ color: rollColor(entry.user_id) }">{{ gmName(entry.user_id, entry.display_name, entry.character_id) }}</span>
                         <span v-if="entry.label" class="ds-roll-label">{{ entry.label }}</span>
                     </div>
                     <div class="ds-roll-expr">{{ formatExpr(entry) }}</div>
