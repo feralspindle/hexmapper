@@ -60,7 +60,7 @@ watch(
   },
 )
 
-const DICE_ORDER = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
+const DICE_ORDER = ['d1', 'd4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
 
 function highestDie(roll) {
   for (const die of [...DICE_ORDER].reverse()) {

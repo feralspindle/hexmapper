@@ -383,6 +383,7 @@ defineExpose({
 });
 
 const DICE = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"];
+const ALL_DICE = ["d1", ...DICE];
 const pending = ref(Object.fromEntries(DICE.map((d) => [d, 0])));
 const modifier = ref(0);
 
@@ -461,7 +462,7 @@ function formatMacroExpr(macro) {
 }
 
 function formatExpr(entry) {
-    const parts = DICE.filter((d) => (entry.pending?.[d] ?? 0) > 0).map(
+    const parts = ALL_DICE.filter((d) => (entry.pending?.[d] ?? 0) > 0).map(
         (d) => `${entry.pending[d]}${d}`,
     );
     const joined = parts.join("+");
