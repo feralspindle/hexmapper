@@ -41,6 +41,7 @@ export const useCharacterStore = defineStore('character', () => {
   const currentSessionId = ref(null)
   const memberSelections = ref([])
   const luckEvents = ref([])
+  const gmInitiative = ref(null)
 
   const activeCharacter = computed(() =>
     characters.value.find(c => c.id === activeId.value) ?? null
@@ -384,6 +385,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...c,
       data: { ...c.data, initiative: null },
     }))
+    gmInitiative.value = null
     _realtimeChannel?.send({
       type: 'broadcast',
       event: 'initiative_cleared',
@@ -391,6 +393,15 @@ export const useCharacterStore = defineStore('character', () => {
     })
     const { error } = await supabase.rpc('clear_initiative', { p_session_id: currentSessionId.value })
     if (error) console.error('clearAllInitiative:', error.message)
+  }
+
+  function setGmInitiative(score) {
+    gmInitiative.value = score
+    _realtimeChannel?.send({
+      type: 'broadcast',
+      event: 'gm_initiative_set',
+      payload: { score },
+    })
   }
 
   function setMaxLuck(max) {
@@ -507,6 +518,10 @@ export const useCharacterStore = defineStore('character', () => {
           ...c,
           data: { ...c.data, initiative: null },
         }))
+        gmInitiative.value = null
+      })
+      .on('broadcast', { event: 'gm_initiative_set' }, ({ payload }) => {
+        gmInitiative.value = payload.score
       })
       .on('broadcast', { event: 'active_character_changed' }, async ({ payload }) => {
         const { userId, characterId } = payload
@@ -562,6 +577,7 @@ export const useCharacterStore = defineStore('character', () => {
     activeId.value = null
     currentSessionId.value = null
     memberSelections.value = []
+    gmInitiative.value = null
   }
 
   return {
@@ -570,10 +586,11 @@ export const useCharacterStore = defineStore('character', () => {
     memberSelections,
     loading, saving,
     luckEvents,
+    gmInitiative,
     loadAll, setActive, importCharacter, deleteCharacter,
     updateField, updateFieldForChar, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
-    spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative,
+    spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative, setGmInitiative,
     cleanup,
   }
 })

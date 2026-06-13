@@ -145,8 +145,6 @@ const diceStore = useDiceStore();
 
 const { visible: partyVisible, close: closeParty } = usePartyPanel();
 
-const gmInitiativeScore = ref(null);
-
 const STORAGE_KEY = "dm.partyPanel.pos";
 const SIZE_KEY = "dm.partyPanel.size";
 const DEFAULT_POS = { x: 80, y: 88 };
@@ -225,12 +223,11 @@ const isGM = computed(() => authStore.user?.id === sessionStore.sessionOwnerId);
 async function rollGmInitiative() {
     const result = await diceStore.rollDice({ d20: 1 }, 0, "Initiative");
     if (result?.total != null) {
-        gmInitiativeScore.value = result.total;
+        characterStore.setGmInitiative(result.total);
     }
 }
 
 function clearInitiative() {
-    gmInitiativeScore.value = null;
     characterStore.clearAllInitiative();
 }
 
@@ -271,7 +268,7 @@ const partyCards = computed(() => {
             displayName:
                 gmPresence?.display_name ?? gmMember?.display_name ?? null,
             char: null,
-            initiative: gmInitiativeScore.value ?? null,
+            initiative: characterStore.gmInitiative,
         });
         seen.add(gmId);
     }
