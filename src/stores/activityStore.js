@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { useAuthStore } from '@/stores/authStore.js'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 export const useActivityStore = defineStore('activity', () => {
   const activities = ref([])
@@ -37,22 +37,19 @@ export const useActivityStore = defineStore('activity', () => {
 
   async function record(verb, what) {
     if (!_dungeonId) return
-    const authStore = useAuthStore()
-    const item = {
-      dungeon_id:   _dungeonId,
-      user_id:      authStore.user?.id ?? null,
-      display_name: authStore.displayName ?? 'Someone',
-      verb,
-      what,
+
+    let data
+    try {
+      data = await apiClient.post('/dungeon-activity', {
+        dungeon_id: _dungeonId,
+        verb,
+        what: what ?? '',
+      })
+    } catch (error) {
+      console.error('activityStore.record:', error instanceof ApiError ? error.message : error)
+      return
     }
 
-    const { data, error } = await supabase
-      .from('dungeon_activity')
-      .insert(item)
-      .select()
-      .single()
-
-    if (error) { console.error('activityStore.record:', error.message); return }
     if (!activities.value.some(a => a.id === data.id)) {
       activities.value = [data, ...activities.value].slice(0, 100)
     }

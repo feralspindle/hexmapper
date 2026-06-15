@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 
 const BUCKET = 'reference-photos'
@@ -100,17 +101,11 @@ export const usePhotoStore = defineStore('photo', () => {
         .upload(storagePath, file, { upsert: false, contentType: mimeType })
       if (uploadErr) throw uploadErr
 
-      const { data, error } = await supabase
-        .from('reference_photos')
-        .insert({
-          session_id:   currentSessionId,
-          user_id:      authStore.user.id,
-          name:         (name ?? '').trim() || file.name.replace(/\.[^.]+$/, ''),
-          storage_path: storagePath,
-        })
-        .select()
-        .single()
-      if (error) throw error
+      const data = await apiClient.post('/reference-photos', {
+        session_id:   currentSessionId,
+        name:         (name ?? '').trim() || file.name.replace(/\.[^.]+$/, ''),
+        storage_path: storagePath,
+      })
 
       const newPhoto = _withUrl(data)
       photos.value = [newPhoto, ...photos.value]
@@ -122,22 +117,28 @@ export const usePhotoStore = defineStore('photo', () => {
 
   async function deletePhoto(photo) {
     await supabase.storage.from(BUCKET).remove([photo.storage_path])
-    const { error } = await supabase.from('reference_photos').delete().eq('id', photo.id)
-    if (error) { console.error('photoStore.deletePhoto:', error.message); return }
+    try {
+      await apiClient.delete(`/reference-photos/${photo.id}`)
+    } catch (error) {
+      console.error('photoStore.deletePhoto:', error instanceof ApiError ? error.message : error)
+      return
+    }
     photos.value = photos.value.filter(p => p.id !== photo.id)
   }
 
   async function broadcastPhoto(photo) {
     const authStore = useAuthStore()
     if (!authStore.user?.id) return
-    const { error } = await supabase.from('photo_broadcasts').insert({
-      session_id: currentSessionId,
-      user_id:    authStore.user.id,
-      photo_id:   photo.id,
-      photo_url:  photo.url,
-      photo_name: photo.name,
-    })
-    if (error) console.error('photoStore.broadcastPhoto:', error.message)
+    try {
+      await apiClient.post('/photo-broadcasts', {
+        session_id: currentSessionId,
+        photo_id:   photo.id,
+        photo_url:  photo.url,
+        photo_name: photo.name,
+      })
+    } catch (error) {
+      console.error('photoStore.broadcastPhoto:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   function dismissBroadcast() {

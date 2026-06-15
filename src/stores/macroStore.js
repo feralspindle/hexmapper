@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 
 export const useMacroStore = defineStore('macros', () => {
@@ -22,19 +23,25 @@ export const useMacroStore = defineStore('macros', () => {
   }
 
   async function saveMacro(label, pending, modifier) {
-    const authStore = useAuthStore()
-    const { data, error } = await supabase
-      .from('dice_macros')
-      .insert({ user_id: authStore.user.id, label: label.trim(), pending, modifier: modifier ?? 0 })
-      .select()
-      .single()
-
-    if (!error && data) macros.value = [...macros.value, data]
+    try {
+      const data = await apiClient.post('/dice-macros', {
+        label: label.trim(),
+        pending,
+        modifier: modifier ?? 0,
+      })
+      macros.value = [...macros.value, data]
+    } catch (error) {
+      console.error('saveMacro:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function deleteMacro(id) {
     macros.value = macros.value.filter(m => m.id !== id)
-    await supabase.from('dice_macros').delete().eq('id', id)
+    try {
+      await apiClient.delete(`/dice-macros/${id}`)
+    } catch (error) {
+      console.error('deleteMacro:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   function cleanup() {

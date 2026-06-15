@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -181,18 +182,16 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function createChildMap(parentHexCellId, name) {
-    const { data, error } = await supabase
-      .from('maps')
-      .insert({
+    let data
+    try {
+      data = await apiClient.post('/maps', {
         session_id:    _currentSessionId,
         name,
         map_type:      'hex',
         parent_map_id: activeMap.value?.id ?? null,
         parent_hex_id: parentHexCellId,
-      })
-      .select()
-      .single()
-    if (error) { console.error('createChildMap:', error.message); return null }
+      }, 'create_child_map')
+    } catch (error) { console.error('createChildMap:', error instanceof ApiError ? error.message : error); return null }
     if (!maps.value.find(m => m.id === data.id)) {
       maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     }
@@ -201,12 +200,10 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function createMap({ name = 'New Map', mapType = 'hex' } = {}) {
-    const { data, error } = await supabase
-      .from('maps')
-      .insert({ session_id: _currentSessionId, name, map_type: mapType })
-      .select()
-      .single()
-    if (error) { console.error('createMap:', error.message); return null }
+    let data
+    try {
+      data = await apiClient.post('/maps', { session_id: _currentSessionId, name, map_type: mapType }, 'create_map')
+    } catch (error) { console.error('createMap:', error instanceof ApiError ? error.message : error); return null }
     if (!maps.value.find(m => m.id === data.id)) {
       maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     }
@@ -214,50 +211,22 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function renameMap(mapId, name) {
-    const { error } = await supabase.from('maps').update({ name }).eq('id', mapId)
-    if (error) { console.error('renameMap:', error.message) }
-    else maps.value = maps.value.map(m => (m.id === mapId ? { ...m, name } : m))
+    try {
+      await apiClient.patch(`/maps/${mapId}`, { name }, 'rename_map')
+      maps.value = maps.value.map(m => (m.id === mapId ? { ...m, name } : m))
+    } catch (error) { console.error('renameMap:', error instanceof ApiError ? error.message : error) }
   }
 
   async function deleteMap(mapId) {
     if (maps.value.length <= 1) return
-    const { error } = await supabase.from('maps').delete().eq('id', mapId)
-    if (error) { console.error('deleteMap:', error.message) }
+    try {
+      await apiClient.delete(`/maps/${mapId}`, 'delete_map')
+    } catch (error) { console.error('deleteMap:', error instanceof ApiError ? error.message : error) }
   }
 
   async function setActiveMap(mapId) {
     const sessionStore = useSessionStore()
     await sessionStore.setActiveMapId(mapId)
-  }
-
-  async function cloneMap(sourceMapId) {
-    const source = maps.value.find(m => m.id === sourceMapId)
-    if (!source) return null
-
-    const { data, error } = await supabase
-      .from('maps')
-      .insert({
-        session_id:         _currentSessionId,
-        name:               `${source.name} (copy)`,
-        map_type:           source.map_type,
-        map_image_path:     source.map_image_path,
-        map_hex_width:      source.map_hex_width,
-        map_hex_height:     source.map_hex_height,
-        map_image_rotation: source.map_image_rotation,
-        map_grid_rotation:  source.map_grid_rotation,
-        map_image_offset_x: source.map_image_offset_x,
-        map_image_offset_y: source.map_image_offset_y,
-        map_grid_offset_x:  source.map_grid_offset_x,
-        map_grid_offset_y:  source.map_grid_offset_y,
-        map_offset_locked:  false,
-        map_image_scale:    source.map_image_scale ?? 1,
-      })
-      .select()
-      .single()
-
-    if (error) { console.error('cloneMap:', error.message); return null }
-    await setActiveMap(data.id)
-    return data
   }
 
   function applyLocalPatch(patch) {
@@ -293,8 +262,9 @@ export const useMapStore = defineStore('map', () => {
     if (patch.mapScaleUnit     !== undefined) dbPatch.map_scale_unit     = patch.mapScaleUnit
     if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
 
-    const { error } = await supabase.from('maps').update(dbPatch).eq('id', map.id)
-    if (error) { console.error('updateActiveMap:', error.message); return false }
+    try {
+      await apiClient.patch(`/maps/${map.id}`, dbPatch, 'update_map_settings')
+    } catch (error) { console.error('updateActiveMap:', error instanceof ApiError ? error.message : error); return false }
 
     const overrides = _localOverrides[map.id]
     if (overrides) {
@@ -316,9 +286,10 @@ export const useMapStore = defineStore('map', () => {
     const map = activeMap.value
     if (!map) return
     maps.value = maps.value.map(m => m.id === map.id ? { ...m, fog_reveal_all: value } : m)
-    const { error } = await supabase.from('maps').update({ fog_reveal_all: value }).eq('id', map.id)
-    if (error) {
-      console.error('setFogRevealAll:', error.message)
+    try {
+      await apiClient.patch(`/maps/${map.id}`, { fog_reveal_all: value }, value ? 'reveal_all_fog_map' : 'reset_fog_map')
+    } catch (error) {
+      console.error('setFogRevealAll:', error instanceof ApiError ? error.message : error)
       maps.value = maps.value.map(m => m.id === map.id ? { ...m, fog_reveal_all: !value } : m)
     }
   }
@@ -376,7 +347,6 @@ export const useMapStore = defineStore('map', () => {
     renameMap,
     deleteMap,
     setActiveMap,
-    cloneMap,
     updateActiveMap,
     setFogRevealAll,
     uploadMapImage,

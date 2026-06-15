@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playChatSound } from '@/lib/diceSound.js'
 
@@ -55,24 +56,18 @@ export const useChatStore = defineStore('chat', () => {
     }
     messages.value = [...messages.value, tempMsg]
 
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .insert({
-        session_id:   _sessionId,
-        user_id:      authStore.user?.id,
-        display_name: authStore.displayName,
-        body:         body.trim(),
+    try {
+      const data = await apiClient.post('/chat-messages', {
+        session_id: _sessionId,
+        body:       body.trim(),
       })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('sendMessage:', error.message)
-      messages.value = messages.value.filter(m => m.id !== tempId)
-    } else {
       messages.value = messages.value.map(m => m.id === tempId ? data : m)
       latestMessage.value = data
       playChatSound()
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : error
+      console.error('sendMessage:', message)
+      messages.value = messages.value.filter(m => m.id !== tempId)
     }
   }
 

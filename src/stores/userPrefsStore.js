@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 
 const STORAGE_KEY = 'ds_prefs_v1'
@@ -72,17 +73,18 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
     const authStore = useAuthStore()
     if (!authStore.user?.id) return
     if (!_loaded) { _pendingSave = true; return }
-    const { error } = await supabase.from('user_preferences').upsert({
-      user_id:              authStore.user.id,
-      dungeon_map_style:    mapStyle.value,
-      dungeon_density:      density.value,
-      dungeon_palette:      palette.value,
-      dungeon_icon_style:   iconStyle.value,
-      dungeon_panel_layout: panelLayout.value,
-      dungeon_show_cursors: showCursors.value,
-      updated_at:           new Date().toISOString(),
-    }, { onConflict: 'user_id' })
-    if (error) console.error('userPrefsStore.save:', error.message)
+    try {
+      await apiClient.put('/user-preferences', {
+        dungeon_map_style:    mapStyle.value,
+        dungeon_density:      density.value,
+        dungeon_palette:      palette.value,
+        dungeon_icon_style:   iconStyle.value,
+        dungeon_panel_layout: panelLayout.value,
+        dungeon_show_cursors: showCursors.value,
+      })
+    } catch (error) {
+      console.error('userPrefsStore.save:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   function setMapStyle(v)    { mapStyle.value    = v; _writeStorage(_snapshot()); _scheduleSave() }

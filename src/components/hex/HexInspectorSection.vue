@@ -388,13 +388,34 @@
                                 timeAgo(note.created_at)
                             }}</span>
                             <button
+                                v-if="note.user_id === authStore.user?.id && editingNoteId !== note.id"
+                                class="hm-note-del"
+                                title="Edit note"
+                                @click="startEditNote(note)"
+                            >✎</button>
+                            <button
                                 v-if="note.user_id === authStore.user?.id || sessionStore.isGM"
                                 class="hm-note-del"
                                 title="Delete note"
                                 @click="confirm('Delete this note?', () => notesStore.deleteNote(note.id))"
                             >×</button>
                         </div>
-                        <div class="hm-note-text">{{ note.body }}</div>
+                        <template v-if="editingNoteId === note.id">
+                            <textarea
+                                v-model="editingNoteBody"
+                                rows="2"
+                                class="ds-input"
+                                style="resize: none"
+                                @keydown.ctrl.enter.prevent="saveEditNote"
+                                @keydown.escape="editingNoteId = null"
+                            />
+                            <div class="hm-note-add-row">
+                                <span class="hm-kbd-hint">Ctrl+Enter</span>
+                                <button class="ds-btn" :disabled="!editingNoteBody.trim()" @click="saveEditNote">Save</button>
+                                <button class="ds-btn" @click="editingNoteId = null">Cancel</button>
+                            </div>
+                        </template>
+                        <div v-else class="hm-note-text">{{ note.body }}</div>
                     </div>
                 </div>
             </div>
@@ -640,6 +661,8 @@ const hexMarkers = ref([]);
 const hexGmMarkers = ref([]);
 const newNote = ref("");
 const savingNote = ref(false);
+const editingNoteId = ref(null);
+const editingNoteBody = ref("");
 const addingDungeon = ref(false);
 const newDungeonName = ref("");
 const dungeonNameEl = ref(null);
@@ -770,6 +793,18 @@ async function saveNote() {
     newNote.value = "";
     await notesStore.addNote(body);
     savingNote.value = false;
+}
+
+function startEditNote(note) {
+    editingNoteId.value = note.id;
+    editingNoteBody.value = note.body;
+}
+
+async function saveEditNote() {
+    if (!editingNoteBody.value.trim()) return;
+    const id = editingNoteId.value;
+    editingNoteId.value = null;
+    await notesStore.updateNote(id, editingNoteBody.value);
 }
 
 function clearHex() {

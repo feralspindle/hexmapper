@@ -1,0 +1,47 @@
+# Droplet deployment for the hex_map stack (single box + Cloudflare).
+# Lives in repo/deploy/, but data volumes use absolute /opt/hexmap paths so the
+# repo can be re-cloned/moved without touching the cert, www, or .env.
+#
+# One-time host layout + Cloudflare setup: see README.md.
+# Run via deploy.sh (it passes --env-file /opt/hexmap/.env for ${DOMAIN}).
+
+services:
+  api:
+    # Prebuilt image published by CI to GHCR; the droplet only pulls (no Rust build here).
+    image: ${API_IMAGE:?set API_IMAGE in /opt/hexmap/.env}
+    env_file: /opt/hexmap/.env          # DATABASE_URL, SUPABASE_URL, CORS_ALLOWED_ORIGIN, PORT
+    restart: unless-stopped
+    expose:
+      - "8080"                          # internal only — reached by caddy as api:8080
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in /opt/hexmap/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/hexmap/certs:/etc/caddy/certs:ro   # Cloudflare Origin cert: origin.pem + origin.key
+      - /opt/hexmap/www:/srv/www:ro             # CI rsyncs the built SPA here
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Observability collector — uncomment once Grafana Cloud + §11 instrumentation
+  # (app /metrics + OTLP) are in place. Needs GC_* creds in /opt/hexmap/.env.
+  # alloy:
+  #   image: grafana/alloy:latest
+  #   restart: unless-stopped
+  #   env_file: /opt/hexmap/.env
+  #   volumes:
+  #     - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   command: run /etc/alloy/config.alloy
+
+volumes:
+  caddy_data:
+  caddy_config:

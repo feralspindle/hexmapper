@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
@@ -39,6 +40,9 @@ export const useD = defineStore('dungeon', () => {
   let _undoing = false
   let _urlTimer = null
 
+  const _logUndoError = (label) => (err) =>
+    console.error(`undo ${label}:`, err instanceof ApiError ? err.message : err)
+
   function pushUndo(action) {
     if (_undoing) return
     undoStack.value.push(action)
@@ -59,40 +63,40 @@ export const useD = defineStore('dungeon', () => {
       case 'delete_room': {
         rooms.value.delete(action.roomId)
         if (selectedElement.value?.id === action.roomId) selectedElement.value = null
-        await supabase.from('dungeon_rooms').delete().eq('id', action.roomId)
+        await apiClient.delete(`/dungeon-rooms/${action.roomId}`, 'undo_delete_room').catch(_logUndoError('delete_room'))
         _broadcastChange('room_delete', { roomId: action.roomId })
         break
       }
       case 'insert_room': {
         rooms.value.set(action.data.id, { ...action.data })
-        await supabase.from('dungeon_rooms').upsert({ ...action.data, source_client: CLIENT_ID }, { onConflict: 'id' })
+        await apiClient.post('/dungeon-rooms', { ...action.data, source_client: CLIENT_ID }, 'undo_insert_room').catch(_logUndoError('insert_room'))
         _broadcastChange('room_upsert', { room: action.data })
         break
       }
       case 'update_room': {
         const r = rooms.value.get(action.roomId)
         if (r) rooms.value.set(action.roomId, { ...r, ...action.patch })
-        await supabase.from('dungeon_rooms').update({ ...action.patch, source_client: CLIENT_ID }).eq('id', action.roomId)
+        await apiClient.patch(`/dungeon-rooms/${action.roomId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_room').catch(_logUndoError('update_room'))
         _broadcastChange('room_upsert', { room: rooms.value.get(action.roomId) })
         break
       }
       case 'delete_corridor': {
         corridors.value.delete(action.corridorId)
         if (selectedElement.value?.id === action.corridorId) selectedElement.value = null
-        await supabase.from('dungeon_corridors').delete().eq('id', action.corridorId)
+        await apiClient.delete(`/dungeon-corridors/${action.corridorId}`, 'undo_delete_corridor').catch(_logUndoError('delete_corridor'))
         _broadcastChange('corridor_delete', { corridorId: action.corridorId })
         break
       }
       case 'insert_corridor': {
         corridors.value.set(action.data.id, { ...action.data })
-        await supabase.from('dungeon_corridors').upsert({ ...action.data, source_client: CLIENT_ID }, { onConflict: 'id' })
+        await apiClient.post('/dungeon-corridors', { ...action.data, source_client: CLIENT_ID }, 'undo_insert_corridor').catch(_logUndoError('insert_corridor'))
         _broadcastChange('corridor_upsert', { corridor: action.data })
         break
       }
       case 'update_corridor': {
         const c = corridors.value.get(action.corridorId)
         if (c) corridors.value.set(action.corridorId, { ...c, ...action.patch })
-        await supabase.from('dungeon_corridors').update({ ...action.patch, source_client: CLIENT_ID }).eq('id', action.corridorId)
+        await apiClient.patch(`/dungeon-corridors/${action.corridorId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_corridor').catch(_logUndoError('update_corridor'))
         _broadcastChange('corridor_upsert', { corridor: corridors.value.get(action.corridorId) })
         break
       }
@@ -206,8 +210,9 @@ export const useD = defineStore('dungeon', () => {
       }
     }
 
-    const { error } = await supabase.from('dungeons').update(dbPatch).eq('id', id)
-    if (error) { console.error('updateDungeon:', error.message); return false }
+    try {
+      await apiClient.patch(`/dungeons/${id}`, dbPatch, 'update_dungeon_config')
+    } catch (err) { console.error('updateDungeon:', err instanceof ApiError ? err.message : err); return false }
     return true
   }
 
@@ -233,12 +238,11 @@ export const useD = defineStore('dungeon', () => {
     const key = _fogKey(cellX, cellY)
     if (fogCells.value.has(key)) return
     fogCells.value = new Set(fogCells.value).add(key)
-    const { error } = await supabase
-      .from('dungeon_fog_cells')
-      .upsert({ dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY, source_client: CLIENT_ID }, { onConflict: 'dungeon_id,cell_x,cell_y' })
-    if (error) {
+    try {
+      await apiClient.post('/dungeon-fog/reveal', { dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY, source_client: CLIENT_ID }, 'reveal_fog')
+    } catch (err) {
       const next = new Set(fogCells.value); next.delete(key); fogCells.value = next
-      console.error('revealFogCell:', error.message)
+      console.error('revealFogCell:', err instanceof ApiError ? err.message : err)
     }
   }
 
@@ -246,15 +250,11 @@ export const useD = defineStore('dungeon', () => {
     const key = _fogKey(cellX, cellY)
     if (!fogCells.value.has(key)) return
     const next = new Set(fogCells.value); next.delete(key); fogCells.value = next
-    const { error } = await supabase
-      .from('dungeon_fog_cells')
-      .delete()
-      .eq('dungeon_id', dungeonId)
-      .eq('cell_x', cellX)
-      .eq('cell_y', cellY)
-    if (error) {
+    try {
+      await apiClient.post('/dungeon-fog/hide', { dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY }, 'hide_fog')
+    } catch (err) {
       fogCells.value = new Set(fogCells.value).add(key)
-      console.error('hideFogCell:', error.message)
+      console.error('hideFogCell:', err instanceof ApiError ? err.message : err)
     }
   }
 
@@ -264,12 +264,13 @@ export const useD = defineStore('dungeon', () => {
     const rows = []
     for (const { cellX, cellY } of cells) {
       const key = _fogKey(cellX, cellY)
-      if (!newCells.has(key)) { newCells.add(key); rows.push({ dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY, source_client: CLIENT_ID }) }
+      if (!newCells.has(key)) { newCells.add(key); rows.push({ cell_x: cellX, cell_y: cellY }) }
     }
     if (!rows.length) return
     fogCells.value = newCells
-    const { error } = await supabase.from('dungeon_fog_cells').upsert(rows, { onConflict: 'dungeon_id,cell_x,cell_y' })
-    if (error) console.error('revealFogCells:', error.message)
+    try {
+      await apiClient.post('/dungeon-fog/reveal-bulk', { dungeon_id: dungeonId, source_client: CLIENT_ID, cells: rows }, 'reveal_fog_bulk')
+    } catch (err) { console.error('revealFogCells:', err instanceof ApiError ? err.message : err) }
   }
 
   async function hideFogCells(dungeonId, cells) {
@@ -278,25 +279,26 @@ export const useD = defineStore('dungeon', () => {
     const toDelete = []
     for (const { cellX, cellY } of cells) {
       const key = _fogKey(cellX, cellY)
-      if (newCells.has(key)) { newCells.delete(key); toDelete.push([cellX, cellY]) }
+      if (newCells.has(key)) { newCells.delete(key); toDelete.push({ cell_x: cellX, cell_y: cellY }) }
     }
     if (!toDelete.length) return
     fogCells.value = newCells
-    for (const [cellX, cellY] of toDelete) {
-      const { error } = await supabase
-        .from('dungeon_fog_cells').delete()
-        .eq('dungeon_id', dungeonId).eq('cell_x', cellX).eq('cell_y', cellY)
-      if (error) console.error('hideFogCells:', error.message)
-    }
+    try {
+      await apiClient.post('/dungeon-fog/hide-bulk', { dungeon_id: dungeonId, cells: toDelete }, 'hide_fog_bulk')
+    } catch (err) { console.error('hideFogCells:', err instanceof ApiError ? err.message : err) }
   }
 
   async function revealAllFog(dungeonId) {
-    await supabase.from('dungeon_fog_cells').delete().eq('dungeon_id', dungeonId)
+    try {
+      await apiClient.post('/dungeon-fog/clear', { dungeon_id: dungeonId }, 'reveal_all_fog')
+    } catch (err) { console.error('revealAllFog:', err instanceof ApiError ? err.message : err) }
     await updateDungeon({ fogRevealAll: true })
   }
 
   async function hideAllFog(dungeonId) {
-    await supabase.from('dungeon_fog_cells').delete().eq('dungeon_id', dungeonId)
+    try {
+      await apiClient.post('/dungeon-fog/clear', { dungeon_id: dungeonId }, 'hide_all_fog')
+    } catch (err) { console.error('hideAllFog:', err instanceof ApiError ? err.message : err) }
     fogCells.value = new Set()
     await updateDungeon({ fogRevealAll: false })
   }
@@ -468,14 +470,16 @@ export const useD = defineStore('dungeon', () => {
     const optimistic = { id: tempId, ...roomData, source_client: CLIENT_ID }
     rooms.value.set(tempId, optimistic)
 
-    const { data, error } = await supabase
-      .from('dungeon_rooms')
-      .insert({ ...roomData, source_client: CLIENT_ID })
-      .select()
-      .single()
+    let data
+    try {
+      data = await apiClient.post('/dungeon-rooms', { ...roomData, source_client: CLIENT_ID }, 'create_room')
+    } catch (error) {
+      rooms.value.delete(tempId)
+      console.error('addRoom error:', error instanceof ApiError ? error.message : error)
+      return
+    }
 
     rooms.value.delete(tempId)
-    if (error) { console.error('addRoom error:', error.message); return }
     rooms.value.set(data.id, data)
     useActivityStore().record('added room', data.name ?? 'Unnamed Room')
     pushUndo({ type: 'delete_room', roomId: data.id })
@@ -487,18 +491,14 @@ export const useD = defineStore('dungeon', () => {
     if (!existing) return
     rooms.value.set(id, { ...existing, ...patch })
 
-    const { error } = await supabase
-      .from('dungeon_rooms')
-      .update({ ...patch, source_client: CLIENT_ID })
-      .eq('id', id)
-
-    if (error) {
-      rooms.value.set(id, existing)
-      console.error('updateRoom error:', error.message)
-    } else {
+    try {
+      await apiClient.patch(`/dungeon-rooms/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_room')
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
       pushUndo({ type: 'update_room', roomId: id, patch: revert })
       _broadcastChange('room_upsert', { room: rooms.value.get(id) })
+    } catch (error) {
+      rooms.value.set(id, existing)
+      console.error('updateRoom error:', error instanceof ApiError ? error.message : error)
     }
   }
 
@@ -507,14 +507,14 @@ export const useD = defineStore('dungeon', () => {
     rooms.value.delete(id)
     if (selectedElement.value?.id === id) selectedElement.value = null
 
-    const { error } = await supabase.from('dungeon_rooms').delete().eq('id', id)
-    if (error) {
-      if (backup) rooms.value.set(id, backup)
-      console.error('deleteRoom error:', error.message)
-    } else {
+    try {
+      await apiClient.delete(`/dungeon-rooms/${id}`, 'delete_room')
       useActivityStore().record('deleted room', backup?.name ?? 'Unnamed Room')
       pushUndo({ type: 'insert_room', data: backup })
       _broadcastChange('room_delete', { roomId: id })
+    } catch (error) {
+      if (backup) rooms.value.set(id, backup)
+      console.error('deleteRoom error:', error instanceof ApiError ? error.message : error)
     }
   }
 
@@ -523,14 +523,16 @@ export const useD = defineStore('dungeon', () => {
     const optimistic = { id: tempId, ...corridorData, source_client: CLIENT_ID }
     corridors.value.set(tempId, optimistic)
 
-    const { data, error } = await supabase
-      .from('dungeon_corridors')
-      .insert({ ...corridorData, source_client: CLIENT_ID })
-      .select()
-      .single()
+    let data
+    try {
+      data = await apiClient.post('/dungeon-corridors', { ...corridorData, source_client: CLIENT_ID }, 'create_corridor')
+    } catch (error) {
+      corridors.value.delete(tempId)
+      console.error('addCorridor error:', error instanceof ApiError ? error.message : error)
+      return
+    }
 
     corridors.value.delete(tempId)
-    if (error) { console.error('addCorridor error:', error.message); return }
     corridors.value.set(data.id, data)
     useActivityStore().record('added corridor', '')
     pushUndo({ type: 'delete_corridor', corridorId: data.id })
@@ -542,18 +544,14 @@ export const useD = defineStore('dungeon', () => {
     if (!existing) return
     corridors.value.set(id, { ...existing, ...patch })
 
-    const { error } = await supabase
-      .from('dungeon_corridors')
-      .update({ ...patch, source_client: CLIENT_ID })
-      .eq('id', id)
-
-    if (error) {
-      corridors.value.set(id, existing)
-      console.error('updateCorridor error:', error.message)
-    } else {
+    try {
+      await apiClient.patch(`/dungeon-corridors/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_corridor')
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
       pushUndo({ type: 'update_corridor', corridorId: id, patch: revert })
       _broadcastChange('corridor_upsert', { corridor: corridors.value.get(id) })
+    } catch (error) {
+      corridors.value.set(id, existing)
+      console.error('updateCorridor error:', error instanceof ApiError ? error.message : error)
     }
   }
 
@@ -562,14 +560,14 @@ export const useD = defineStore('dungeon', () => {
     corridors.value.delete(id)
     if (selectedElement.value?.id === id) selectedElement.value = null
 
-    const { error } = await supabase.from('dungeon_corridors').delete().eq('id', id)
-    if (error) {
-      if (backup) corridors.value.set(id, backup)
-      console.error('deleteCorridor error:', error.message)
-    } else {
+    try {
+      await apiClient.delete(`/dungeon-corridors/${id}`, 'delete_corridor')
       useActivityStore().record('deleted corridor', '')
       pushUndo({ type: 'insert_corridor', data: backup })
       _broadcastChange('corridor_delete', { corridorId: id })
+    } catch (error) {
+      if (backup) corridors.value.set(id, backup)
+      console.error('deleteCorridor error:', error instanceof ApiError ? error.message : error)
     }
   }
 
@@ -659,31 +657,32 @@ export const useD = defineStore('dungeon', () => {
   async function updateTorch(patch) {
     if (!dungeon.value?.id) return
     dungeon.value = { ...dungeon.value, ...patch }
-    const { error } = await supabase
-      .from('dungeons')
-      .update(patch)
-      .eq('id', dungeon.value.id)
-    if (error) console.error('updateTorch error:', error.message)
+    try {
+      await apiClient.patch(`/dungeons/${dungeon.value.id}`, patch, 'update_torch')
+    } catch (err) { console.error('updateTorch error:', err instanceof ApiError ? err.message : err) }
   }
 
   async function torchStart() {
     if (!dungeon.value?.id) return
     dungeon.value = { ...dungeon.value, torch_running: true }
-    const { error } = await supabase.rpc('torch_start', { p_dungeon_id: dungeon.value.id })
-    if (error) console.error('torchStart error:', error.message)
+    try {
+      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'start' }, 'torch_start')
+    } catch (err) { console.error('torchStart error:', err instanceof ApiError ? err.message : err) }
   }
 
   async function torchPause() {
     if (!dungeon.value?.id) return
-    const { error } = await supabase.rpc('torch_pause', { p_dungeon_id: dungeon.value.id })
-    if (error) console.error('torchPause error:', error.message)
+    try {
+      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'pause' }, 'torch_pause')
+    } catch (err) { console.error('torchPause error:', err instanceof ApiError ? err.message : err) }
   }
 
   async function torchReset() {
     if (!dungeon.value?.id) return
     dungeon.value = { ...dungeon.value, torch_elapsed_ms: 0 }
-    const { error } = await supabase.rpc('torch_reset', { p_dungeon_id: dungeon.value.id })
-    if (error) console.error('torchReset error:', error.message)
+    try {
+      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'reset' }, 'torch_reset')
+    } catch (err) { console.error('torchReset error:', err instanceof ApiError ? err.message : err) }
   }
 
   function cleanup() {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playDiceSound } from '@/lib/diceSound.js'
 
@@ -86,23 +87,21 @@ export const useDiceStore = defineStore('dice', () => {
     }
 
     try {
-      const { data, error } = await supabase.rpc('roll_dice', {
-        p_session_id:   currentSessionId,
-        p_pending:      pending,
-        p_modifier:     modifier ?? 0,
-        p_label:        label ?? null,
-        p_character_id: characterId ?? null,
+      const data = await apiClient.post('/dice-rolls', {
+        session_id:   currentSessionId,
+        pending,
+        modifier:     modifier ?? 0,
+        label:        label ?? null,
+        character_id: characterId ?? null,
       })
-
-      if (error) {
-        console.error('rollDice:', error.message)
-        return
-      }
 
       rolls.value = [data, ...rolls.value].slice(0, HISTORY_LIMIT)
       latestRoll.value = data
       playDiceSound()
       return data
+    } catch (error) {
+      console.error('rollDice:', error instanceof ApiError ? error.message : error)
+      return
     } finally {
       pendingRoll.value = null
     }
@@ -126,29 +125,22 @@ export const useDiceStore = defineStore('dice', () => {
     const existing = annotations.value[rollId] ?? []
     annotations.value = { ...annotations.value, [rollId]: [...existing, tempAnn] }
 
-    const { data, error } = await supabase
-      .from('dice_roll_annotations')
-      .insert({
-        roll_id:      rollId,
-        session_id:   currentSessionId,
-        user_id:      authStore.user?.id,
-        display_name: authStore.displayName,
-        body:         body.trim(),
-      })
-      .select()
-      .single()
-
-    if (error) {
-      annotations.value = {
-        ...annotations.value,
-        [rollId]: (annotations.value[rollId] ?? []).filter(a => a.id !== tempId),
-      }
-      console.error('addAnnotation:', error.message)
-    } else {
+    try {
+      const data = await apiClient.post('/dice-roll-annotations', {
+        roll_id:    rollId,
+        session_id: currentSessionId,
+        body:       body.trim(),
+      }, 'add_annotation')
       annotations.value = {
         ...annotations.value,
         [rollId]: (annotations.value[rollId] ?? []).map(a => a.id === tempId ? data : a),
       }
+    } catch (error) {
+      annotations.value = {
+        ...annotations.value,
+        [rollId]: (annotations.value[rollId] ?? []).filter(a => a.id !== tempId),
+      }
+      console.error('addAnnotation:', error instanceof ApiError ? error.message : error)
     }
   }
 

@@ -166,6 +166,11 @@ watch(charOpen, (val) => {
   if (val) activeNavDropdown.value = 'char-sheet'
   else if (activeNavDropdown.value === 'char-sheet') activeNavDropdown.value = null
 })
+// Image-positioning hijacks left-click to pan the map image; closing the settings
+// panel must release it so drawing tools (room/corridor) work again.
+watch(mapSettingsOpen, (open) => {
+  if (!open) mapMoveMode.value = 'none'
+})
 watch(activeNavDropdown, (val) => {
   if (val !== null && val !== 'char-sheet') charOpen.value = false
 })

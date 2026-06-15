@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useLootToast } from '@/composables/useLootToast.js'
@@ -164,22 +165,20 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   async function _addLedgerEntry({ description, goldChange = 0, silverChange = 0, copperChange = 0 }) {
-    const authStore      = useAuthStore()
     const characterStore = useCharacterStore()
-    const { data } = await supabase
-      .from('party_bank_ledger')
-      .insert({
+    try {
+      const data = await apiClient.post('/vault-ledger', {
         session_id:     _sessionId,
         description,
         character_name: characterStore.character?.name ?? null,
-        display_name:   authStore.displayName ?? 'Someone',
         gold_change:    goldChange,
         silver_change:  silverChange,
         copper_change:  copperChange,
       })
-      .select()
-      .single()
-    if (data) ledger.value = [data, ...ledger.value]
+      if (data) ledger.value = [data, ...ledger.value]
+    } catch (error) {
+      console.error('_addLedgerEntry:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function withdrawFromBank(item) {
@@ -198,43 +197,41 @@ export const useVaultStore = defineStore('vault', () => {
       if (remaining <= 0) break
       if (item.quantity <= remaining) {
         remaining -= item.quantity
-        items.value = items.value.filter(i => i.id !== item.id)
-        await supabase.from('party_vault_items').delete().eq('id', item.id)
+        await removeVaultItem(item.id)
       } else {
         const newQty = item.quantity - remaining
         remaining = 0
-        const idx = items.value.findIndex(i => i.id === item.id)
-        if (idx !== -1) items.value[idx] = { ...items.value[idx], quantity: newQty }
-        await supabase.from('party_vault_items').update({ quantity: newQty }).eq('id', item.id)
+        await updateVaultItem(item.id, { quantity: newQty })
       }
     }
     await _addLedgerEntry({ description: 'withdrew', [`${currency}Change`]: -amount })
   }
 
   async function addLoot(name, quantity = 1, notes = '', lootType = 'item', currency = null) {
-    const authStore = useAuthStore()
-    const { data, error } = await supabase
-      .from('party_vault_loot')
-      .insert({
+    try {
+      const data = await apiClient.post('/vault-loot', {
         session_id:    _sessionId,
         name:          name.trim(),
         quantity,
         notes,
         loot_type:     lootType,
         currency:      currency ?? null,
-        added_by_name: authStore.displayName ?? 'Someone',
         source_client: CLIENT_ID,
       })
-      .select()
-      .single()
-    if (error) console.error('addLoot failed:', error.message)
-    if (data) loot.value.push(data)
-    return data
+      if (data) loot.value.push(data)
+      return data
+    } catch (error) {
+      console.error('addLoot failed:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function _removeLoot(id) {
     loot.value = loot.value.filter(l => l.id !== id)
-    await supabase.from('party_vault_loot').delete().eq('id', id)
+    try {
+      await apiClient.delete(`/vault-loot/${id}`)
+    } catch (error) {
+      console.error('_removeLoot:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function claimLoot(lootItem) {
@@ -263,10 +260,8 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   async function _addVaultItem(containerId, name, quantity, notes = '', slots = 0, itemType = 'sundry', currency = null) {
-    const authStore = useAuthStore()
-    const { data, error } = await supabase
-      .from('party_vault_items')
-      .insert({
+    try {
+      const data = await apiClient.post('/vault-items', {
         session_id:    _sessionId,
         container_id:  containerId || null,
         name,
@@ -275,14 +270,13 @@ export const useVaultStore = defineStore('vault', () => {
         slots:         slots ?? 0,
         item_type:     itemType ?? 'sundry',
         currency:      currency ?? null,
-        added_by_name: authStore.displayName ?? 'Someone',
         source_client: CLIENT_ID,
       })
-      .select()
-      .single()
-    if (error) console.error('_addVaultItem failed:', error.message)
-    if (data) items.value.push(data)
-    return data
+      if (data) items.value.push(data)
+      return data
+    } catch (error) {
+      console.error('_addVaultItem failed:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function depositLoot(lootItem) {
@@ -329,23 +323,14 @@ export const useVaultStore = defineStore('vault', () => {
       return
     }
 
-    const authStore = useAuthStore()
     for (const char of activeChars) {
       const charName = char.data?.name || 'Unknown'
-      const { data } = await supabase
-        .from('party_vault_loot')
-        .insert({
-          session_id:    _sessionId,
-          name:          lootItem.name,
-          quantity:      perPerson + (bonusIds.has(char.id) ? 1 : 0),
-          notes:         `${charName}'s share`,
-          loot_type:     lootItem.loot_type ?? 'item',
-          added_by_name: authStore.displayName ?? 'Someone',
-          source_client: CLIENT_ID,
-        })
-        .select()
-        .single()
-      if (data) loot.value.push(data)
+      await addLoot(
+        lootItem.name,
+        perPerson + (bonusIds.has(char.id) ? 1 : 0),
+        `${charName}'s share`,
+        lootItem.loot_type ?? 'item',
+      )
     }
     await _removeLoot(lootItem.id)
   }
@@ -386,34 +371,46 @@ export const useVaultStore = defineStore('vault', () => {
 
   async function removeVaultItem(id) {
     items.value = items.value.filter(i => i.id !== id)
-    await supabase.from('party_vault_items').delete().eq('id', id)
+    try {
+      await apiClient.delete(`/vault-items/${id}`)
+    } catch (error) {
+      console.error('removeVaultItem:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function updateVaultItem(id, patch) {
     const idx = items.value.findIndex(i => i.id === id)
     if (idx !== -1) Object.assign(items.value[idx], patch)
-    await supabase.from('party_vault_items').update(patch).eq('id', id)
+    try {
+      await apiClient.patch(`/vault-items/${id}`, { ...patch, source_client: CLIENT_ID })
+    } catch (error) {
+      console.error('updateVaultItem:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function addContainer(name, gearSlots) {
-    const { data } = await supabase
-      .from('party_vault_containers')
-      .insert({
+    try {
+      const data = await apiClient.post('/vault-containers', {
         session_id:    _sessionId,
         name:          name.trim(),
         gear_slots:    gearSlots,
         source_client: CLIENT_ID,
       })
-      .select()
-      .single()
-    if (data) containers.value.push(data)
-    return data
+      if (data) containers.value.push(data)
+      return data
+    } catch (error) {
+      console.error('addContainer:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function removeContainer(id) {
     items.value      = items.value.map(i => i.container_id === id ? { ...i, container_id: null } : i)
     containers.value = containers.value.filter(c => c.id !== id)
-    await supabase.from('party_vault_containers').delete().eq('id', id)
+    try {
+      await apiClient.delete(`/vault-containers/${id}`)
+    } catch (error) {
+      console.error('removeContainer:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   return {

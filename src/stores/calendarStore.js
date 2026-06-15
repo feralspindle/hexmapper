@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 const DEFAULT_SETTINGS = {
   month_names:    ['January','February','March','April','May','June','July','August','September','October','November','December'],
@@ -111,31 +112,28 @@ export const useCalendarStore = defineStore('calendar', () => {
     } else {
       days.value.push({ session_id: _sessionId, year, month, day, weather: null, notes: '', ...patch, id: null })
     }
-    const { data } = await supabase
-      .from('party_calendar_days')
-      .upsert(
-        { session_id: _sessionId, year, month, day, ...patch },
-        { onConflict: 'session_id,year,month,day' }
-      )
-      .select()
-      .single()
-    if (data) {
-      const i = days.value.findIndex(d => d.year === year && d.month === month && d.day === day)
-      if (i !== -1) days.value[i] = data; else days.value.push(data)
+    try {
+      const data = await apiClient.post('/calendar-days', { session_id: _sessionId, year, month, day, patch })
+      if (data) {
+        const i = days.value.findIndex(d => d.year === year && d.month === month && d.day === day)
+        if (i !== -1) days.value[i] = data; else days.value.push(data)
+      }
+    } catch (error) {
+      console.error('upsertDay:', error instanceof ApiError ? error.message : error)
     }
   }
 
   async function updateSettings(patch) {
     Object.assign(settings.value, patch)
-    const { data } = await supabase
-      .from('party_calendar_settings')
-      .upsert(
-        { session_id: _sessionId, ...DEFAULT_SETTINGS, ...settings.value, ...patch },
-        { onConflict: 'session_id' }
-      )
-      .select()
-      .single()
-    if (data) settings.value = { ...DEFAULT_SETTINGS, ...data }
+    try {
+      const data = await apiClient.put('/calendar-settings', {
+        session_id: _sessionId,
+        settings: { ...DEFAULT_SETTINGS, ...settings.value, ...patch },
+      })
+      if (data) settings.value = { ...DEFAULT_SETTINGS, ...data }
+    } catch (error) {
+      console.error('updateSettings:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   return {

@@ -350,6 +350,45 @@
                     </div>
                     <div class="ds-roll-when">
                         {{ timeAgo(entry.created_at) }}
+                        <button
+                            v-if="annotatingId !== entry.id"
+                            class="ds-roll-note-add"
+                            title="Add note"
+                            @click="startAnnotating(entry.id)"
+                        ><i class="fa-solid fa-pencil" /></button>
+                    </div>
+
+                    <div
+                        v-if="diceStore.annotations[entry.id]?.length || annotatingId === entry.id"
+                        class="ds-roll-notes"
+                    >
+                        <div
+                            v-for="ann in diceStore.annotations[entry.id] ?? []"
+                            :key="ann.id"
+                            class="ds-roll-note"
+                            :class="{ pending: String(ann.id).startsWith('pending-') }"
+                        >
+                            <span class="ds-roll-note-arrow">↳</span>
+                            <span class="ds-roll-note-who" :style="{ color: rollColor(ann.user_id) }">{{ gmName(ann.user_id, ann.display_name) }}</span>
+                            <span class="ds-roll-note-sep">·</span>
+                            <span class="ds-roll-note-body">{{ ann.body }}</span>
+                        </div>
+
+                        <div v-if="annotatingId === entry.id" class="ds-roll-note-edit">
+                            <span class="ds-roll-note-arrow">↳</span>
+                            <input
+                                :ref="el => { if (el) el.focus() }"
+                                v-model="annotationDraft"
+                                type="text"
+                                placeholder="Add note… (Enter)"
+                                maxlength="200"
+                                class="ds-roll-note-input"
+                                @keydown.enter.prevent="submitAnnotation(entry.id)"
+                                @keydown.escape="cancelAnnotation"
+                            />
+                            <button class="ds-roll-note-btn confirm" title="Save note" @click="submitAnnotation(entry.id)"><i class="fa-solid fa-check" /></button>
+                            <button class="ds-roll-note-btn cancel" title="Cancel" @click="cancelAnnotation">&times;</button>
+                        </div>
                     </div>
                 </div>
                 <div class="ds-roll-total">{{ entry.total }}</div>
@@ -500,6 +539,25 @@ function rollColor(userId) {
     return playerColorFor(userId);
 }
 
+const annotatingId = ref(null);
+const annotationDraft = ref("");
+
+function startAnnotating(rollId) {
+    annotatingId.value = rollId;
+    annotationDraft.value = "";
+}
+
+function cancelAnnotation() {
+    annotatingId.value = null;
+    annotationDraft.value = "";
+}
+
+async function submitAnnotation(rollId) {
+    const body = annotationDraft.value.trim();
+    cancelAnnotation();
+    if (body) await diceStore.addAnnotation(rollId, body);
+}
+
 const scrollEl = ref(null);
 const isAtTop = ref(true);
 const hasUnseen = ref(false);
@@ -560,6 +618,90 @@ watch(
     font-weight: 700;
 }
 .result-sep {
+    color: var(--ink-mute, #8a7a68);
+}
+
+.ds-roll-note-add {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-soft, #5a4a3a);
+    padding: 0 4px;
+    margin-left: 4px;
+    font-size: 9px;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+.ds-roll-row:hover .ds-roll-note-add {
+    opacity: 0.7;
+}
+.ds-roll-note-add:hover {
+    color: var(--gold, #c8a827);
+    opacity: 1;
+}
+.ds-roll-notes {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ds-roll-note,
+.ds-roll-note-edit {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-family: var(--font-body, serif);
+    font-size: 12px;
+    line-height: 1.35;
+}
+.ds-roll-note.pending {
+    opacity: 0.5;
+}
+.ds-roll-note-arrow,
+.ds-roll-note-sep {
+    color: var(--ink-soft, #5a4a3a);
+    flex-shrink: 0;
+}
+.ds-roll-note-who {
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.ds-roll-note-body {
+    color: var(--ink-mute, #8a7a68);
+    word-break: break-word;
+    min-width: 0;
+}
+.ds-roll-note-edit {
+    align-items: center;
+}
+.ds-roll-note-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-family: var(--font-body, serif);
+    font-size: 12px;
+    color: var(--ink);
+    outline: none;
+}
+.ds-roll-note-input:focus {
+    border-color: var(--gold, #c8a827);
+}
+.ds-roll-note-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 3px;
+    font-size: 12px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.ds-roll-note-btn.confirm {
+    color: var(--gold, #c8a827);
+}
+.ds-roll-note-btn.cancel {
     color: var(--ink-mute, #8a7a68);
 }
 </style>

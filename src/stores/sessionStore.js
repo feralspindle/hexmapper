@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import router from '@/router/index.js'
 
@@ -96,30 +97,25 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function createSession() {
-    const authStore = useAuthStore()
     loading.value = true
     error.value = null
     try {
-      const { data, error: err } = await supabase
-        .from('sessions')
-        .insert({ name: sessionName.value, owner_id: authStore.user?.id })
-        .select()
-        .single()
-      if (err) throw err
+      const data = await apiClient.post('/sessions', { name: sessionName.value }, 'create_session')
       _applySessionRow(data)
       userSessions.value = [data, ...userSessions.value]
       _subscribeToSession(data.id)
       router.push({ name: 'hex-map', params: { sessionId: data.id } })
     } catch (e) {
-      error.value = e.message
+      error.value = e instanceof ApiError ? e.message : e.message
     } finally {
       loading.value = false
     }
   }
 
   async function deleteSession(id) {
-    const { error: err } = await supabase.from('sessions').delete().eq('id', id)
-    if (err) { console.error('deleteSession:', err.message); return false }
+    try {
+      await apiClient.delete(`/sessions/${id}`, 'delete_session')
+    } catch (err) { console.error('deleteSession:', err instanceof ApiError ? err.message : err); return false }
     userSessions.value = userSessions.value.filter(s => s.id !== id)
     return true
   }
@@ -128,8 +124,7 @@ export const useSessionStore = defineStore('session', () => {
     loading.value = true
     error.value = null
     try {
-      const { data, error: err } = await supabase.rpc('join_session', { p_session_id: id })
-      if (err) throw err
+      const data = await apiClient.post(`/sessions/${id}/join`, undefined, 'join_session')
       _applySessionRow(data)
       _subscribeToSession(id)
     } catch (e) {
@@ -142,34 +137,34 @@ export const useSessionStore = defineStore('session', () => {
   async function updateSessionName(name) {
     const prev = sessionName.value
     sessionName.value = name
-    const { error: err } = await supabase
-      .from('sessions')
-      .update({ name })
-      .eq('id', sessionId.value)
-    if (err) sessionName.value = prev
-    else {
+    try {
+      await apiClient.patch(`/sessions/${sessionId.value}`, { name }, 'rename_session')
       const idx = userSessions.value.findIndex(s => s.id === sessionId.value)
       if (idx !== -1) userSessions.value[idx] = { ...userSessions.value[idx], name }
+    } catch (err) {
+      console.error('updateSessionName:', err instanceof ApiError ? err.message : err)
+      sessionName.value = prev
     }
   }
 
   async function setActiveMapId(mapId) {
     const prev = activeMapId.value
     activeMapId.value = mapId
-    const { error: err } = await supabase
-      .from('sessions')
-      .update({ active_map_id: mapId })
-      .eq('id', sessionId.value)
-    if (err) { console.error('setActiveMapId:', err.message); activeMapId.value = prev }
+    try {
+      await apiClient.patch(`/sessions/${sessionId.value}`, { active_map_id: mapId }, 'set_active_map')
+    } catch (err) {
+      console.error('setActiveMapId:', err instanceof ApiError ? err.message : err)
+      activeMapId.value = prev
+    }
   }
 
   async function setHexMode(mode) {
-    const { error: err } = await supabase
-      .from('sessions')
-      .update({ hex_mode: mode })
-      .eq('id', sessionId.value)
-    if (err) console.error('setHexMode:', err.message)
-    else hexMode.value = mode
+    try {
+      await apiClient.patch(`/sessions/${sessionId.value}`, { hex_mode: mode }, 'set_hex_mode')
+      hexMode.value = mode
+    } catch (err) {
+      console.error('setHexMode:', err instanceof ApiError ? err.message : err)
+    }
   }
 
   function initPresence(id) {
@@ -235,19 +230,22 @@ export const useSessionStore = defineStore('session', () => {
 
   async function torchStart() {
     torchRunning.value = true
-    const { error } = await supabase.rpc('session_torch_start', { p_session_id: sessionId.value })
-    if (error) console.error('session torchStart:', error.message)
+    try {
+      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'start' }, 'session_torch_start')
+    } catch (err) { console.error('session torchStart:', err instanceof ApiError ? err.message : err) }
   }
 
   async function torchPause() {
-    const { error } = await supabase.rpc('session_torch_pause', { p_session_id: sessionId.value })
-    if (error) console.error('session torchPause:', error.message)
+    try {
+      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'pause' }, 'session_torch_pause')
+    } catch (err) { console.error('session torchPause:', err instanceof ApiError ? err.message : err) }
   }
 
   async function torchReset() {
     torchElapsedMs.value = 0
-    const { error } = await supabase.rpc('session_torch_reset', { p_session_id: sessionId.value })
-    if (error) console.error('session torchReset:', error.message)
+    try {
+      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'reset' }, 'session_torch_reset')
+    } catch (err) { console.error('session torchReset:', err instanceof ApiError ? err.message : err) }
   }
 
   function cleanupPresence() {

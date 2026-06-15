@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { supabase } from "@/lib/supabase";
+import { apiClient, ApiError } from "@/lib/apiClient.js";
 import router from "@/router/index.js";
 import { useMapStore } from "@/stores/mapStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
@@ -207,11 +208,11 @@ export const useHexStore = defineStore("hex", () => {
   async function setPartyHex(q, r) {
     partyHex.value = { q, r };
     _savePartyHex();
-    const { error } = await supabase
-      .from("maps")
-      .update({ party_hex_q: q, party_hex_r: r })
-      .eq("id", currentMapId.value);
-    if (error) console.error("setPartyHex db update error:", error.message);
+    try {
+      await apiClient.patch(`/maps/${currentMapId.value}`, { party_hex_q: q, party_hex_r: r }, "move_party");
+    } catch (error) {
+      console.error("setPartyHex db update error:", error instanceof ApiError ? error.message : error);
+    }
     partyChannel?.send({
       type: "broadcast",
       event: "party",
@@ -222,11 +223,11 @@ export const useHexStore = defineStore("hex", () => {
   async function clearPartyHex() {
     partyHex.value = null;
     _savePartyHex();
-    const { error } = await supabase
-      .from("maps")
-      .update({ party_hex_q: null, party_hex_r: null })
-      .eq("id", currentMapId.value);
-    if (error) console.error("clearPartyHex db update error:", error.message);
+    try {
+      await apiClient.patch(`/maps/${currentMapId.value}`, { party_hex_q: null, party_hex_r: null }, "clear_party_hex");
+    } catch (error) {
+      console.error("clearPartyHex db update error:", error instanceof ApiError ? error.message : error);
+    }
     partyChannel?.send({
       type: "broadcast",
       event: "party",
@@ -279,7 +280,7 @@ export const useHexStore = defineStore("hex", () => {
       terrain_type: null,
       color: null,
       has_dungeon: false,
-      revealed: false,
+      revealed: true,
       ...existing,
       ...patch,
       session_id: currentSessionId.value,
@@ -290,22 +291,26 @@ export const useHexStore = defineStore("hex", () => {
     };
     hexCells.value.set(key, merged);
 
-    const { data, error } = await supabase
-      .from("hex_cells")
-      .upsert(merged, { onConflict: "map_id,q,r" })
-      .select()
-      .single();
+    // Visibility is GM-controlled: only send `revealed` when this is an explicit
+    // reveal/hide. Terrain/marker edits must not change a hex's visibility.
+    const body = { ...merged };
+    if (!("revealed" in patch)) delete body.revealed;
 
-    if (error) {
-      if (existing) hexCells.value.set(key, existing);
-      else hexCells.value.delete(key);
-      console.error("upsertHex error:", error.message);
-    } else if (data) {
+    const intent = "revealed" in patch
+      ? (patch.revealed ? "reveal_hex" : "hide_hex")
+      : "edit_hex";
+
+    try {
+      const data = await apiClient.post("/hex-cells/upsert", body, intent);
       const stored =
         merged.gm_markers != null && data.gm_markers == null
           ? { ...data, gm_markers: merged.gm_markers }
           : data;
       hexCells.value.set(key, stored);
+    } catch (error) {
+      if (existing) hexCells.value.set(key, existing);
+      else hexCells.value.delete(key);
+      console.error("upsertHex error:", error instanceof ApiError ? error.message : error);
     }
   }
 
@@ -357,16 +362,16 @@ export const useHexStore = defineStore("hex", () => {
     hexCells.value.delete(key);
     selectedHex.value = null;
 
-    const { error } = await supabase
-      .from("hex_cells")
-      .delete()
-      .eq("map_id", currentMapId.value)
-      .eq("q", q)
-      .eq("r", r);
-
-    if (error) {
+    try {
+      await apiClient.post("/hex-cells/delete", {
+        session_id: currentSessionId.value,
+        map_id: currentMapId.value,
+        q,
+        r,
+      }, "delete_hex");
+    } catch (error) {
       if (backup) hexCells.value.set(key, backup);
-      console.error("deleteHex error:", error.message);
+      console.error("deleteHex error:", error instanceof ApiError ? error.message : error);
     }
   }
 
@@ -395,38 +400,34 @@ export const useHexStore = defineStore("hex", () => {
 
     let hexId = cell?.id;
     if (!hexId) {
-      const { data, error } = await supabase
-        .from("hex_cells")
-        .upsert(
-          {
-            session_id: currentSessionId.value,
-            q,
-            r,
-            has_dungeon: true,
-            source_client: CLIENT_ID,
-            map_id: currentMapId.value,
-          },
-          { onConflict: "map_id,q,r" },
-        )
-        .select()
-        .single();
-      if (error) {
-        console.error("createDungeon upsert hex error:", error.message);
+      try {
+        const data = await apiClient.post("/hex-cells/upsert", {
+          session_id: currentSessionId.value,
+          map_id: currentMapId.value,
+          q,
+          r,
+          has_dungeon: true,
+          source_client: CLIENT_ID,
+        }, "create_dungeon");
+        hexId = data.id;
+        hexCells.value.set(key, data);
+      } catch (error) {
+        console.error("createDungeon upsert hex error:", error instanceof ApiError ? error.message : error);
         return;
       }
-      hexId = data.id;
-      hexCells.value.set(key, data);
     } else if (!cell.has_dungeon) {
       await upsertHex(q, r, { has_dungeon: true });
     }
 
-    const { data, error } = await supabase
-      .from("dungeons")
-      .insert({ session_id: currentSessionId.value, hex_id: hexId, name })
-      .select()
-      .single();
-    if (error) {
-      console.error("createDungeon insert error:", error.message);
+    let data;
+    try {
+      data = await apiClient.post("/dungeons", {
+        session_id: currentSessionId.value,
+        hex_id: hexId,
+        name,
+      }, "create_dungeon");
+    } catch (error) {
+      console.error("createDungeon insert error:", error instanceof ApiError ? error.message : error);
       return;
     }
 
@@ -442,27 +443,20 @@ export const useHexStore = defineStore("hex", () => {
     const existing = hexCells.value.get(key);
     if (existing?.id) return existing.id;
 
-    const { data, error } = await supabase
-      .from("hex_cells")
-      .upsert(
-        {
-          session_id: currentSessionId.value,
-          map_id: currentMapId.value,
-          q,
-          r,
-          source_client: CLIENT_ID,
-        },
-        { onConflict: "map_id,q,r" },
-      )
-      .select()
-      .single();
-
-    if (error || !data) {
-      console.error("ensureCellExists error:", error?.message);
+    try {
+      const data = await apiClient.post("/hex-cells/upsert", {
+        session_id: currentSessionId.value,
+        map_id: currentMapId.value,
+        q,
+        r,
+        source_client: CLIENT_ID,
+      }, "ensure_hex");
+      hexCells.value.set(key, data);
+      return data.id;
+    } catch (error) {
+      console.error("ensureCellExists error:", error instanceof ApiError ? error.message : error);
       return null;
     }
-    hexCells.value.set(key, data);
-    return data.id;
   }
 
   async function toggleRevealed(q, r) {
@@ -470,52 +464,31 @@ export const useHexStore = defineStore("hex", () => {
     await upsertHex(q, r, { revealed: !current });
   }
 
-  async function revealAll() {
-    const updates = [];
+  async function _bulkReveal(revealed) {
     for (const cell of hexCells.value.values()) {
-      if (!cell.revealed) {
-        hexCells.value.set(cellKey(cell.q, cell.r), {
-          ...cell,
-          revealed: true,
-        });
-        const row = { ...cell, revealed: true, source_client: CLIENT_ID };
-        if (!row.id) delete row.id;
-        updates.push(row);
+      if (cell.revealed !== revealed) {
+        hexCells.value.set(cellKey(cell.q, cell.r), { ...cell, revealed });
       }
     }
-    await useMapStore().setFogRevealAll(true);
-    if (!updates.length) return;
-    const { error } = await supabase
-      .from("hex_cells")
-      .upsert(updates, { onConflict: "map_id,q,r" });
-    if (error) {
-      console.error("revealAll error:", error.message);
+    await useMapStore().setFogRevealAll(revealed);
+    try {
+      await apiClient.post("/hex-cells/bulk-reveal", {
+        session_id: currentSessionId.value,
+        map_id: currentMapId.value,
+        revealed,
+      }, revealed ? "reveal_all_hexes" : "hide_all_hexes");
+    } catch (error) {
+      console.error("bulkReveal error:", error instanceof ApiError ? error.message : error);
       await init(currentSessionId.value, currentMapId.value);
     }
   }
 
+  async function revealAll() {
+    await _bulkReveal(true);
+  }
+
   async function hideAll() {
-    const updates = [];
-    for (const cell of hexCells.value.values()) {
-      if (cell.revealed) {
-        hexCells.value.set(cellKey(cell.q, cell.r), {
-          ...cell,
-          revealed: false,
-        });
-        const row = { ...cell, revealed: false, source_client: CLIENT_ID };
-        if (!row.id) delete row.id;
-        updates.push(row);
-      }
-    }
-    await useMapStore().setFogRevealAll(false);
-    if (!updates.length) return;
-    const { error } = await supabase
-      .from("hex_cells")
-      .upsert(updates, { onConflict: "map_id,q,r" });
-    if (error) {
-      console.error("hideAll error:", error.message);
-      await init(currentSessionId.value, currentMapId.value);
-    }
+    await _bulkReveal(false);
   }
 
   function navigateToDungeon(dungeonId) {
@@ -525,12 +498,13 @@ export const useHexStore = defineStore("hex", () => {
   }
 
   async function clearAll() {
-    const { error } = await supabase
-      .from("hex_cells")
-      .delete()
-      .eq("map_id", currentMapId.value);
-    if (error) {
-      console.error("clearAll:", error.message);
+    try {
+      await apiClient.post("/hex-cells/clear", {
+        session_id: currentSessionId.value,
+        map_id: currentMapId.value,
+      }, "clear_hexes");
+    } catch (error) {
+      console.error("clearAll:", error instanceof ApiError ? error.message : error);
       return false;
     }
     hexCells.value = new Map();

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
@@ -116,42 +117,28 @@ export const useNotesStore = defineStore('notes', () => {
     }
     notes.value = [...notes.value, optimistic]
 
-    let result
-    if (ctx.type === 'hex') {
-      result = await supabase
-        .from('hex_notes')
-        .insert({
+    try {
+      let data
+      if (ctx.type === 'hex') {
+        data = await apiClient.post('/hex-notes', {
           hex_cell_id: ctx.hexCellId,
           session_id: ctx.sessionId,
-          user_id: authStore.user?.id,
-          display_name: authStore.displayName ?? 'Adventurer',
           body: body.trim(),
         })
-        .select()
-        .single()
-    } else {
-      result = await supabase
-        .from('dungeon_element_notes')
-        .insert({
+      } else {
+        data = await apiClient.post('/dungeon-element-notes', {
           element_id: ctx.elementId,
           element_type: ctx.elementType,
           session_id: ctx.sessionId,
-          user_id: authStore.user?.id,
-          display_name: authStore.displayName ?? 'Adventurer',
           body: body.trim(),
         })
-        .select()
-        .single()
-    }
-
-    const { data, error } = result
-    if (error) {
-      notes.value = notes.value.filter(n => n.id !== optimisticId)
-      console.error('addNote error:', error.message)
-    } else {
+      }
       notes.value = notes.value.map(n => (n.id === optimisticId ? data : n))
       const where = ctx?.type === 'hex' ? 'hex cell' : (ctx?.elementType ?? 'element')
       useActivityStore().record('added note to', where)
+    } catch (error) {
+      notes.value = notes.value.filter(n => n.id !== optimisticId)
+      console.error('addNote error:', error instanceof ApiError ? error.message : (error.message ?? error))
     }
   }
 
@@ -164,15 +151,16 @@ export const useNotesStore = defineStore('notes', () => {
       n.id === id ? { ...n, body: body.trim(), updated_at: new Date().toISOString() } : n,
     )
 
-    const table = channel?._ctx?.type === 'hex' ? 'hex_notes' : 'dungeon_element_notes'
-    const { error } = await supabase
-      .from(table)
-      .update({ body: body.trim() })
-      .eq('id', id)
-
-    if (error) {
+    const isHex = channel?._ctx?.type === 'hex'
+    try {
+      if (isHex) {
+        await apiClient.patch(`/hex-notes/${id}`, { body: body.trim() })
+      } else {
+        await apiClient.patch(`/dungeon-element-notes/${id}`, { body: body.trim() })
+      }
+    } catch (error) {
       notes.value = notes.value.map(n => (n.id === id ? existing : n))
-      console.error('updateNote error:', error.message)
+      console.error('updateNote error:', error instanceof ApiError ? error.message : (error.message ?? error))
     }
   }
 
@@ -180,12 +168,16 @@ export const useNotesStore = defineStore('notes', () => {
     const backup = notes.value.find(n => n.id === id)
     notes.value = notes.value.filter(n => n.id !== id)
 
-    const table = channel?._ctx?.type === 'hex' ? 'hex_notes' : 'dungeon_element_notes'
-    const { error } = await supabase.from(table).delete().eq('id', id)
-
-    if (error) {
+    const isHex = channel?._ctx?.type === 'hex'
+    try {
+      if (isHex) {
+        await apiClient.delete(`/hex-notes/${id}`)
+      } else {
+        await apiClient.delete(`/dungeon-element-notes/${id}`)
+      }
+    } catch (error) {
       if (backup) notes.value = [...notes.value, backup].sort((a, b) => a.created_at.localeCompare(b.created_at))
-      console.error('deleteNote error:', error.message)
+      console.error('deleteNote error:', error instanceof ApiError ? error.message : (error.message ?? error))
     }
   }
 

@@ -56,6 +56,13 @@
                 <div style="display:flex;align-items:center;gap:6px">
                   <span class="ds-note-time">{{ timeAgo(note.created_at) }}</span>
                   <button
+                    v-if="note.user_id === authStore.user?.id && editingNoteId !== note.id"
+                    class="ds-x-btn"
+                    style="width:16px;height:16px;font-size:11px"
+                    title="Edit note"
+                    @click="startEditNote(note)"
+                  >✎</button>
+                  <button
                     v-if="note.user_id === authStore.user?.id"
                     class="ds-x-btn"
                     style="width:16px;height:16px;font-size:11px"
@@ -63,7 +70,20 @@
                   >×</button>
                 </div>
               </div>
-              <p style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:13px">{{ note.body }}</p>
+              <template v-if="editingNoteId === note.id">
+                <textarea
+                  v-model="editingNoteBody"
+                  class="ds-input"
+                  rows="2"
+                  @keydown.ctrl.enter.prevent="saveEditNote"
+                  @keydown.escape="editingNoteId = null"
+                />
+                <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px">
+                  <button class="ds-btn tiny" :disabled="!editingNoteBody.trim()" @click="saveEditNote">Save</button>
+                  <button class="ds-btn tiny" @click="editingNoteId = null">Cancel</button>
+                </div>
+              </template>
+              <p v-else style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:13px">{{ note.body }}</p>
             </div>
           </div>
 
@@ -161,6 +181,8 @@ const selectedCorridor = computed(() => dungeonStore.selectedElement?.type === '
 const roomLabel   = ref('')
 const newNote     = ref('')
 const savingNote  = ref(false)
+const editingNoteId   = ref(null)
+const editingNoteBody = ref('')
 
 watch(() => dungeonStore.selectedElement, (el) => {
   if (!el) { roomLabel.value = ''; return }
@@ -195,6 +217,18 @@ async function saveNote() {
   newNote.value = ''
   await notesStore.addNote(body)
   savingNote.value = false
+}
+
+function startEditNote(note) {
+  editingNoteId.value = note.id
+  editingNoteBody.value = note.body
+}
+
+async function saveEditNote() {
+  if (!editingNoteBody.value.trim()) return
+  const id = editingNoteId.value
+  editingNoteId.value = null
+  await notesStore.updateNote(id, editingNoteBody.value)
 }
 
 function noteColor(userId) {

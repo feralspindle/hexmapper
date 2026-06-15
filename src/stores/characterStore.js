@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playLuckSound } from '@/lib/diceSound.js'
 
@@ -123,10 +124,11 @@ export const useCharacterStore = defineStore('character', () => {
         event: 'active_character_changed',
         payload: { userId, characterId: id ?? null },
       })
-      supabase.from('session_members').upsert(
-        { session_id: currentSessionId.value, user_id: userId, active_character_id: id ?? null },
-        { onConflict: 'session_id,user_id' },
-      ).then(({ error }) => { if (error) console.warn('setActive upsert:', error.message) })
+      apiClient.post(
+        '/session-members/active',
+        { session_id: currentSessionId.value, active_character_id: id ?? null },
+        'set_active_character',
+      ).catch(err => console.warn('setActive:', err instanceof ApiError ? err.message : err))
     }
   }
 
@@ -135,26 +137,30 @@ export const useCharacterStore = defineStore('character', () => {
     if (!authStore.user?.id) return
 
     saving.value = true
-    const { data, error } = await supabase
-      .from('characters')
-      .insert({
-        user_id: authStore.user.id,
+    let data
+    try {
+      data = await apiClient.post('/characters', {
         session_id: currentSessionId.value,
         data: _augment(json),
       })
-      .select()
-      .single()
-    saving.value = false
-
-    if (error) { console.error('characterStore.importCharacter:', error.message); return null }
+    } catch (error) {
+      console.error('characterStore.importCharacter:', error instanceof ApiError ? error.message : error)
+      return null
+    } finally {
+      saving.value = false
+    }
     characters.value = [...characters.value, data]
     setActive(data.id)
     return data
   }
 
   async function deleteCharacter(id) {
-    const { error } = await supabase.from('characters').delete().eq('id', id)
-    if (error) { console.error('characterStore.deleteCharacter:', error.message); return }
+    try {
+      await apiClient.delete(`/characters/${id}`)
+    } catch (error) {
+      console.error('characterStore.deleteCharacter:', error instanceof ApiError ? error.message : error)
+      return
+    }
     characters.value = characters.value.filter(c => c.id !== id)
     if (activeId.value === id) {
       const mine = characters.value.filter(c => {
@@ -177,13 +183,10 @@ export const useCharacterStore = defineStore('character', () => {
 
   function _logSheet(what) {
     if (!currentSessionId.value) return
-    const authStore = useAuthStore()
-    supabase.from('character_sheet_log').insert({
-      session_id:   currentSessionId.value,
-      user_id:      authStore.user?.id ?? null,
-      display_name: authStore.displayName ?? 'Someone',
+    apiClient.post('/character-sheet-log', {
+      session_id: currentSessionId.value,
       what,
-    }).then(({ error }) => { if (error) console.error('characterStore._logSheet:', error.message) })
+    }).catch(error => console.error('characterStore._logSheet:', error instanceof ApiError ? error.message : error))
   }
 
   function updateField(field, value) {
@@ -391,8 +394,11 @@ export const useCharacterStore = defineStore('character', () => {
       event: 'initiative_cleared',
       payload: {},
     })
-    const { error } = await supabase.rpc('clear_initiative', { p_session_id: currentSessionId.value })
-    if (error) console.error('clearAllInitiative:', error.message)
+    try {
+      await apiClient.post('/characters/clear-initiative', { session_id: currentSessionId.value })
+    } catch (error) {
+      console.error('clearAllInitiative:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   function setGmInitiative(score) {
@@ -539,13 +545,14 @@ export const useCharacterStore = defineStore('character', () => {
     const char = characters.value.find(c => c.id === charId)
     if (!char) return
     saving.value = true
-    const { error } = await supabase
-      .from('characters')
-      .update({ data: char.data })
-      .eq('id', charId)
-    saving.value = false
-    if (error) console.error('characterStore._save:', error.message)
-    _saveTimers.delete(charId)
+    try {
+      await apiClient.patch(`/characters/${charId}`, { data: char.data })
+    } catch (error) {
+      console.error('characterStore._save:', error instanceof ApiError ? error.message : error)
+    } finally {
+      saving.value = false
+      _saveTimers.delete(charId)
+    }
   }
 
   function _scheduleSave(charId) {

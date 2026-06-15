@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { useAuthStore } from '@/stores/authStore.js'
-import { useSessionStore } from '@/stores/sessionStore.js'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
 
 const CLIENT_ID = crypto.randomUUID()
@@ -96,70 +95,68 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   async function addQuest() {
-    const authStore    = useAuthStore()
-    const sessionStore = useSessionStore()
-    const { data } = await supabase
-      .from('party_quests')
-      .insert({
+    try {
+      const data = await apiClient.post('/party-quests', {
         session_id:    _sessionId,
-        title:         '',
-        added_by_name: authStore.displayName ?? 'Adventurer',
-        is_gm_added:   sessionStore.isGM,
         display_order: quests.value.length,
         source_client: CLIENT_ID,
       })
-      .select()
-      .single()
-    if (data) quests.value.push(data)
-    return data
+      if (data) quests.value.push(data)
+      return data
+    } catch (error) {
+      console.error('addQuest:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function updateQuest(id, patch) {
     const idx = quests.value.findIndex(q => q.id === id)
     if (idx !== -1) Object.assign(quests.value[idx], patch)
-    await supabase
-      .from('party_quests')
-      .update({ ...patch, source_client: CLIENT_ID, updated_at: new Date().toISOString() })
-      .eq('id', id)
+    try {
+      await apiClient.patch(`/party-quests/${id}`, { ...patch, source_client: CLIENT_ID })
+    } catch (error) {
+      console.error('updateQuest:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function deleteQuest(id) {
     quests.value = quests.value.filter(q => q.id !== id)
-    await supabase.from('party_quests').delete().eq('id', id)
+    try {
+      await apiClient.delete(`/party-quests/${id}`)
+    } catch (error) {
+      console.error('deleteQuest:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function addNote() {
-    const authStore    = useAuthStore()
-    const sessionStore = useSessionStore()
-    const { data } = await supabase
-      .from('party_session_notes')
-      .insert({
-        session_id:     _sessionId,
-        title:          '',
-        content:        '',
-        author_name:    authStore.displayName ?? 'Adventurer',
-        author_user_id: authStore.user?.id ?? null,
-        is_gm_author:   sessionStore.isGM,
-        source_client:  CLIENT_ID,
+    try {
+      const data = await apiClient.post('/party-session-notes', {
+        session_id:    _sessionId,
+        source_client: CLIENT_ID,
       })
-      .select()
-      .single()
-    if (data) notes.value.unshift(data)
-    return data
+      if (data) notes.value.unshift(data)
+      return data
+    } catch (error) {
+      console.error('addNote:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function updateNote(id, patch) {
     const idx = notes.value.findIndex(n => n.id === id)
     if (idx !== -1) Object.assign(notes.value[idx], patch)
-    await supabase
-      .from('party_session_notes')
-      .update({ ...patch, source_client: CLIENT_ID, updated_at: new Date().toISOString() })
-      .eq('id', id)
+    try {
+      await apiClient.patch(`/party-session-notes/${id}`, { ...patch, source_client: CLIENT_ID })
+    } catch (error) {
+      console.error('updateNote:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   async function deleteNote(id) {
     notes.value = notes.value.filter(n => n.id !== id)
-    await supabase.from('party_session_notes').delete().eq('id', id)
+    try {
+      await apiClient.delete(`/party-session-notes/${id}`)
+    } catch (error) {
+      console.error('deleteNote:', error instanceof ApiError ? error.message : error)
+    }
   }
 
   return {
