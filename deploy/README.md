@@ -123,8 +123,7 @@ the client against the same DB throughout.
 
 ## Notes / gotchas
 
-- `DATABASE_URL` = Supabase **session-mode** (`:5432`), not the txn pooler; **literal `@`**
-  in the password (not `%40`).
+- `DATABASE_URL` = Supabase **direct** or **session-mode** connection (`:5432`), not the txn pooler.
 - Auth uses **JWKS from `SUPABASE_URL`** (ES256) — there is no `SUPABASE_JWT_SECRET`.
 - Realtime/Auth/Storage go from the browser **directly to `*.supabase.co`** (not through
   your domain), so they're unaffected by Cloudflare and must stay in the CSP `connect-src`.

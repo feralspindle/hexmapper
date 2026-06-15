@@ -64,7 +64,7 @@ cat <<EOF
 setup complete. next:
   1) edit $BASE/.env
        DOMAIN, API_IMAGE (ghcr.io/<owner>/hexmap-server:latest),
-       DATABASE_URL (Supabase direct/session, literal @ in password),
+       DATABASE_URL (Supabase direct or session-mode connection),
        SUPABASE_URL, CORS_ALLOWED_ORIGIN (=https://<domain>), PORT=8080
   2) docker login ghcr.io        # only if the GHCR package is private
   3) push to main (or run the Deploy workflows) — first push builds the image + deploys
