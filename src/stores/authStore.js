@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { setFaroUser } from '@/lib/faro.js'
 import router from '@/router/index.js'
 import { useSessionStore }   from '@/stores/sessionStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
@@ -27,6 +28,8 @@ function cleanupAllStores() {
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(true)
+
+  watch(user, (u) => setFaroUser(u), { immediate: true })
 
   const isAuthenticated = computed(() => !!user.value)
 

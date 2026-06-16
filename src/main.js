@@ -5,6 +5,9 @@ import App from './App.vue'
 import './style.css'
 import '@fortawesome/fontawesome-free/css/all.min.css'
 import { vTooltip } from './directives/tooltip.js'
+import { initFaro } from './lib/faro.js'
+
+initFaro()
 
 const app = createApp(App)
 app.use(createPinia())
