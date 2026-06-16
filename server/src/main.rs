@@ -1,18 +1,19 @@
 use axum::routing::get;
 use axum::Router;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::trace::TraceLayer;
 
 use hexmap_server::auth;
 use hexmap_server::config::Config;
 use hexmap_server::db;
 use hexmap_server::domains;
+use hexmap_server::observability;
 use hexmap_server::state::AppState;
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt::init();
+    observability::init_tracing();
+    let metrics = observability::install_metrics();
 
     let config = Config::from_env();
 
@@ -49,13 +50,16 @@ async fn main() {
         .merge(domains::hex::router())
         .merge(domains::session::router())
         .merge(domains::dungeon::router())
+        .layer(axum::middleware::from_fn(observability::track_metrics))
         .with_state(state);
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
+        // Internal only (Alloy scrapes api:8080/metrics on the compose network; Caddy
+        // proxies /api/* and serves static, so /metrics is never publicly reachable).
+        .route("/metrics", get(move || { let m = metrics.clone(); async move { m.render() } }))
         .nest("/api", api)
-        .layer(cors)
-        .layer(TraceLayer::new_for_http());
+        .layer(cors);
 
     let addr = format!("0.0.0.0:{}", config.port);
     tracing::info!("listening on {addr}");

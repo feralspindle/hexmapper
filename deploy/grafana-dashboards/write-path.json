@@ -1,0 +1,68 @@
+{
+  "title": "hex_map — write path",
+  "uid": "hexmap-write-path",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Requests / sec",
+      "datasource": "${ds}",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total[5m]))", "legendFormat": "req/s" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Error rate (4xx/5xx) / sec",
+      "datasource": "${ds}",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.1 } ] } } },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{status=~\"[45]..\"}[5m]))", "legendFormat": "errors/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by route",
+      "datasource": "${ds}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum by (path) (rate(http_requests_total[5m]))", "legendFormat": "{{path}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency by route (seconds)",
+      "datasource": "${ds}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "max by (path) (http_request_duration_seconds{quantile=\"0.95\"})", "legendFormat": "{{path}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors by route + status",
+      "datasource": "${ds}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum by (path, status) (rate(http_requests_total{status=~\"[45]..\"}[5m]))", "legendFormat": "{{path}} {{status}}" }
+      ]
+    }
+  ]
+}

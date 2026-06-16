@@ -1,0 +1,50 @@
+// Grafana Alloy collector for the hex_map droplet.
+// Scrapes the API's /metrics → Grafana Cloud Prometheus, and tails the Docker
+// container logs → Grafana Cloud Loki. (OTLP traces → Tempo get added with #3.)
+//
+// Credentials come from /opt/hexmap/.env (GC_* vars). Enable the `alloy` compose
+// service with the `observability` profile once these are set.
+//
+// NOTE: Alloy config syntax is version-sensitive — validate against your Alloy
+// version with `alloy fmt` / `alloy run --dry-run` before relying on it.
+
+// ---- metrics: scrape api:8080/metrics, remote-write to Grafana Cloud ----
+prometheus.scrape "api" {
+	targets = [{
+		"__address__"      = "api:8080",
+		"__metrics_path__" = "/metrics",
+	}]
+	scrape_interval = "15s"
+	forward_to      = [prometheus.remote_write.gc.receiver]
+}
+
+prometheus.remote_write "gc" {
+	endpoint {
+		url = sys.env("GC_PROM_URL")
+		basic_auth {
+			username = sys.env("GC_PROM_USER")
+			password = sys.env("GC_PROM_PASS")
+		}
+	}
+}
+
+// ---- logs: tail Docker container stdout, push to Grafana Cloud Loki ----
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+loki.source.docker "logs" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.docker.containers.targets
+	forward_to = [loki.write.gc.receiver]
+}
+
+loki.write "gc" {
+	endpoint {
+		url = sys.env("GC_LOKI_URL")
+		basic_auth {
+			username = sys.env("GC_LOKI_USER")
+			password = sys.env("GC_LOKI_PASS")
+		}
+	}
+}

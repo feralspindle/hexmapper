@@ -31,16 +31,18 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-  # Observability collector — uncomment once Grafana Cloud + §11 instrumentation
-  # (app /metrics + OTLP) are in place. Needs GC_* creds in /opt/hexmap/.env.
-  # alloy:
-  #   image: grafana/alloy:latest
-  #   restart: unless-stopped
-  #   env_file: /opt/hexmap/.env
-  #   volumes:
-  #     - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #   command: run /etc/alloy/config.alloy
+  # Observability collector. Off by default — set the GC_* creds in /opt/hexmap/.env,
+  # then start it with the profile:
+  #   docker compose --env-file /opt/hexmap/.env --profile observability up -d
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    profiles: ["observability"]
+    env_file: /opt/hexmap/.env
+    volumes:
+      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: run /etc/alloy/config.alloy
 
 volumes:
   caddy_data:
