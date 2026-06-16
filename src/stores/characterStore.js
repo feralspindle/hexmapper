@@ -142,7 +142,7 @@ export const useCharacterStore = defineStore('character', () => {
       data = await apiClient.post('/characters', {
         session_id: currentSessionId.value,
         data: _augment(json),
-      })
+      }, 'import_character')
     } catch (error) {
       console.error('characterStore.importCharacter:', error instanceof ApiError ? error.message : error)
       return null
@@ -156,7 +156,7 @@ export const useCharacterStore = defineStore('character', () => {
 
   async function deleteCharacter(id) {
     try {
-      await apiClient.delete(`/characters/${id}`)
+      await apiClient.delete(`/characters/${id}`, 'delete_character')
     } catch (error) {
       console.error('characterStore.deleteCharacter:', error instanceof ApiError ? error.message : error)
       return
@@ -186,7 +186,7 @@ export const useCharacterStore = defineStore('character', () => {
     apiClient.post('/character-sheet-log', {
       session_id: currentSessionId.value,
       what,
-    }).catch(error => console.error('characterStore._logSheet:', error instanceof ApiError ? error.message : error))
+    }, 'log_sheet_change').catch(error => console.error('characterStore._logSheet:', error instanceof ApiError ? error.message : error))
   }
 
   function updateField(field, value) {
@@ -395,7 +395,7 @@ export const useCharacterStore = defineStore('character', () => {
       payload: {},
     })
     try {
-      await apiClient.post('/characters/clear-initiative', { session_id: currentSessionId.value })
+      await apiClient.post('/characters/clear-initiative', { session_id: currentSessionId.value }, 'clear_initiative')
     } catch (error) {
       console.error('clearAllInitiative:', error instanceof ApiError ? error.message : error)
     }
@@ -546,7 +546,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!char) return
     saving.value = true
     try {
-      await apiClient.patch(`/characters/${charId}`, { data: char.data })
+      await apiClient.patch(`/characters/${charId}`, { data: char.data }, 'save_character')
     } catch (error) {
       console.error('characterStore._save:', error instanceof ApiError ? error.message : error)
     } finally {

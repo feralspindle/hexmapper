@@ -93,7 +93,7 @@ export const useDiceStore = defineStore('dice', () => {
         modifier:     modifier ?? 0,
         label:        label ?? null,
         character_id: characterId ?? null,
-      })
+      }, 'roll_dice')
 
       rolls.value = [data, ...rolls.value].slice(0, HISTORY_LIMIT)
       latestRoll.value = data

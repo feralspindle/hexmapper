@@ -23,6 +23,9 @@ fn header_capped(parts: &Parts, name: &str) -> Option<String> {
 
 pub struct AuthUser {
     pub user_id: Uuid,
+    /// Resolved from the JWT (mirrors `fill_display_name`), carried alongside user_id
+    /// so events are human-readable without a join.
+    pub display_name: String,
     /// Semantic frontend action (`X-Intent`), e.g. `paint_terrain` vs `reveal_hex` —
     /// the highest-signal forensic field.
     pub intent: Option<String>,
@@ -46,6 +49,7 @@ impl AuthUser {
     pub fn metadata(&self) -> Value {
         let mut m = serde_json::Map::new();
         m.insert("user_id".into(), json!(self.user_id));
+        m.insert("display_name".into(), json!(self.display_name));
         m.insert("request_id".into(), json!(self.request_id));
         m.insert("route".into(), json!(self.route));
         if let Some(v) = &self.intent {
@@ -101,6 +105,7 @@ impl FromRequestParts<AppState> for AuthUser {
 
         Ok(AuthUser {
             user_id: claims.sub,
+            display_name: claims.display_name(),
             intent: header_capped(parts, "x-intent"),
             request_id: header_capped(parts, "x-request-id").unwrap_or_else(|| Uuid::new_v4().to_string()),
             client_id: header_capped(parts, "x-client-id"),

@@ -60,7 +60,7 @@ export const useChatStore = defineStore('chat', () => {
       const data = await apiClient.post('/chat-messages', {
         session_id: _sessionId,
         body:       body.trim(),
-      })
+      }, 'send_chat')
       messages.value = messages.value.map(m => m.id === tempId ? data : m)
       latestMessage.value = data
       playChatSound()

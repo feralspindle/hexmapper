@@ -9,6 +9,22 @@ pub struct SupabaseClaims {
     pub sub: Uuid,
     pub role: String,
     pub email: Option<String>,
+    #[serde(default)]
+    pub user_metadata: serde_json::Value,
+}
+
+impl SupabaseClaims {
+    /// Display name, mirroring the `fill_display_name` SQL trigger's coalesce order,
+    /// resolved straight from the token (no DB round trip).
+    pub fn display_name(&self) -> String {
+        let m = &self.user_metadata;
+        ["full_name", "global_name", "name", "user_name"]
+            .iter()
+            .find_map(|k| m.get(*k).and_then(|v| v.as_str()))
+            .or(self.email.as_deref())
+            .unwrap_or("Adventurer")
+            .to_string()
+    }
 }
 
 pub async fn fetch_jwks(supabase_url: &str) -> Result<JwkSet, reqwest::Error> {
