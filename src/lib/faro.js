@@ -1,5 +1,6 @@
 import { initializeFaro, getWebInstrumentations, UserActionInstrumentation } from '@grafana/faro-web-sdk'
 import { TracingInstrumentation } from '@grafana/faro-web-tracing'
+import { installAutoUserActions } from './faroUserActions'
 
 const FARO_URL = import.meta.env.VITE_FARO_URL
 
@@ -24,6 +25,7 @@ export function initFaro() {
       new TracingInstrumentation(),
     ],
   })
+  installAutoUserActions(faro)
   return faro
 }
 
