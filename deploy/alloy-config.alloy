@@ -60,3 +60,28 @@ loki.write "gc" {
 		}
 	}
 }
+
+// ---- traces: receive the Rust server's OTLP spans, push to Grafana Cloud Tempo ----
+// The api container exports to alloy:4317 (OTEL_EXPORTER_OTLP_ENDPOINT). Frontend
+// (Faro) traces go browser → Faro collector → Tempo directly; they join the server
+// spans in Tempo by sharing the trace id (Faro propagates traceparent to /api).
+otelcol.receiver.otlp "in" {
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+	output {
+		traces = [otelcol.exporter.otlphttp.gc.input]
+	}
+}
+
+otelcol.auth.basic "gc" {
+	username = sys.env("GC_OTLP_USER")
+	password = sys.env("GC_OTLP_PASS")
+}
+
+otelcol.exporter.otlphttp "gc" {
+	client {
+		endpoint = sys.env("GC_OTLP_URL")
+		auth     = otelcol.auth.basic.gc.handler
+	}
+}

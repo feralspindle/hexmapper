@@ -1,4 +1,5 @@
 import { initializeFaro, getWebInstrumentations, UserActionInstrumentation } from '@grafana/faro-web-sdk'
+import { TracingInstrumentation } from '@grafana/faro-web-tracing'
 
 const FARO_URL = import.meta.env.VITE_FARO_URL
 
@@ -14,7 +15,14 @@ export function initFaro() {
       version: import.meta.env.VITE_APP_VERSION || 'dev',
       environment: import.meta.env.VITE_APP_ENV || 'development',
     },
-    instrumentations: [...getWebInstrumentations(), new UserActionInstrumentation()],
+    instrumentations: [
+      ...getWebInstrumentations(),
+      new UserActionInstrumentation(),
+      // Browser OTel tracing: emits spans to the Faro collector and propagates the
+      // W3C traceparent on fetches — same-origin /api is covered by default, so the
+      // Rust server can continue the same trace.
+      new TracingInstrumentation(),
+    ],
   })
   return faro
 }

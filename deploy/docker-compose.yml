@@ -25,11 +25,16 @@ services:
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in /opt/hexmap/.env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Mount the whole deploy dir, not the single file: git pull replaces config
+      # files via atomic rename (new inode), and a single-file bind mount stays
+      # pinned to the old inode — so `caddy reload` would read stale config until a
+      # --force-recreate. A directory mount resolves the path fresh each read.
+      - ./:/etc/caddy/conf:ro
       - /opt/hexmap/certs:/etc/caddy/certs:ro   # Cloudflare Origin cert: origin.pem + origin.key
       - /opt/hexmap/www:/srv/www:ro             # CI rsyncs the built SPA here
       - caddy_data:/data
       - caddy_config:/config
+    command: caddy run --config /etc/caddy/conf/Caddyfile --adapter caddyfile
 
   # Observability collector. Off by default — set the GC_* creds in /opt/hexmap/.env,
   # then start it with the profile:
@@ -40,9 +45,10 @@ services:
     profiles: ["observability"]
     env_file: /opt/hexmap/.env
     volumes:
-      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+      # Directory mount (not the single file) for the same stale-inode reason as caddy.
+      - ./:/etc/alloy/conf:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: run /etc/alloy/config.alloy
+    command: run /etc/alloy/conf/alloy-config.alloy
 
 volumes:
   caddy_data:
