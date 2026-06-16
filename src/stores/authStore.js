@@ -29,8 +29,6 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(true)
 
-  watch(user, (u) => setFaroUser(u), { immediate: true })
-
   const isAuthenticated = computed(() => !!user.value)
 
   const displayName = computed(() => {
@@ -49,6 +47,8 @@ export const useAuthStore = defineStore('auth', () => {
       'Adventurer'
     )
   })
+
+  watch(user, (u) => setFaroUser(u, u ? displayName.value : null), { immediate: true })
 
   const avatarUrl = computed(() => {
     const m = user.value?.user_metadata ?? {}

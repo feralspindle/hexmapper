@@ -29,10 +29,11 @@ export function initFaro() {
   return faro
 }
 
-// Associate frontend errors/sessions with the user (id only — keep PII out of
-// frontend telemetry; user_id is the forensic join key back to the event log).
-export function setFaroUser(user) {
+// Associate frontend errors/sessions with the user: id (the forensic join key
+// back to the event log) plus the display name so the Grafana UI is readable.
+// Email and other PII are deliberately still kept out of frontend telemetry.
+export function setFaroUser(user, displayName) {
   if (!faro) return
-  if (user?.id) faro.api.setUser({ id: user.id })
+  if (user?.id) faro.api.setUser({ id: user.id, fullName: displayName ?? undefined })
   else faro.api.resetUser()
 }
