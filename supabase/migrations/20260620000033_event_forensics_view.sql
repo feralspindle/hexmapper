@@ -3,8 +3,13 @@
 -- sessions/session_members. Deriving keeps it accurate retroactively (all existing
 -- events too) without a 53-handler change, and session ownership is stable so it
 -- matches what a write-time capture would record. Idempotent (create or replace).
+--
+-- security_invoker = on: the view enforces the *querying* role's RLS (not the
+-- owner's), so it can't leak the whole event log through PostgREST. It's an
+-- admin/forensic tool anyway, so we also revoke it from the API roles — only
+-- service_role / a direct admin connection should read it.
 
-create or replace view event_forensics as
+create or replace view event_forensics with (security_invoker = on) as
 select
     e.id,
     e.created_at,
@@ -36,3 +41,7 @@ select
     e.metadata
 from events e
 left join sessions s on s.id = e.session_id;
+
+-- Keep the forensic view off the end-user API surface (revoke the default grants
+-- Supabase hands new public objects). Admin/service_role access is unaffected.
+revoke all on public.event_forensics from anon, authenticated;
