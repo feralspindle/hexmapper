@@ -1,4 +1,4 @@
-import { initializeFaro, getWebInstrumentations } from '@grafana/faro-web-sdk'
+import { initializeFaro, getWebInstrumentations, UserActionInstrumentation } from '@grafana/faro-web-sdk'
 
 const FARO_URL = import.meta.env.VITE_FARO_URL
 
@@ -14,7 +14,7 @@ export function initFaro() {
       version: import.meta.env.VITE_APP_VERSION || 'dev',
       environment: import.meta.env.VITE_APP_ENV || 'development',
     },
-    instrumentations: getWebInstrumentations(),
+    instrumentations: [...getWebInstrumentations(), new UserActionInstrumentation()],
   })
   return faro
 }
