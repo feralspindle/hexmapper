@@ -7,30 +7,64 @@ use crate::auth::jwt;
 use crate::error::AppError;
 use crate::state::AppState;
 
-/// Max stored length of the client-supplied `X-Intent` value (it lands in the
-/// durable event log, so cap it defensively).
-const INTENT_MAX_LEN: usize = 64;
+/// Header-supplied forensic values land in the durable event log, so cap them.
+const FIELD_MAX_LEN: usize = 80;
+
+/// Trims, drops empties, and caps a request header value.
+fn header_capped(parts: &Parts, name: &str) -> Option<String> {
+    parts
+        .headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(FIELD_MAX_LEN).collect())
+}
 
 pub struct AuthUser {
     pub user_id: Uuid,
-    /// Semantic frontend action (`X-Intent` header), e.g. `paint_terrain` vs
-    /// `reveal_hex` — the highest-signal field for forensic debugging. None when
-    /// the caller didn't supply it (older clients / non-instrumented calls).
+    /// Semantic frontend action (`X-Intent`), e.g. `paint_terrain` vs `reveal_hex` —
+    /// the highest-signal forensic field.
     pub intent: Option<String>,
+    /// Per-action correlation id (`X-Request-Id`), minted by the frontend so a client
+    /// log line, the server span, and the resulting event all share one id. Always
+    /// present (generated server-side if the caller didn't send one).
+    pub request_id: String,
+    /// Which browser tab/device issued it (`X-Client-Id`).
+    pub client_id: Option<String>,
+    /// Frontend build that issued it (`X-App-Version`) — catches "stale client".
+    pub app_version: Option<String>,
+    /// W3C trace id (from `traceparent`), for log↔trace correlation once tracing is on.
+    pub trace_id: Option<String>,
+    /// `METHOD /path` of the command, so the event records which endpoint produced it.
+    pub route: String,
 }
 
 impl AuthUser {
-    /// The base event-metadata envelope: `user_id` plus `intent` when present.
+    /// The forensic event-metadata envelope. `user_id`, `request_id`, and `route` are
+    /// always present; the rest are included when the caller supplied them.
     pub fn metadata(&self) -> Value {
         let mut m = serde_json::Map::new();
         m.insert("user_id".into(), json!(self.user_id));
-        if let Some(intent) = &self.intent {
-            m.insert("intent".into(), json!(intent));
+        m.insert("request_id".into(), json!(self.request_id));
+        m.insert("route".into(), json!(self.route));
+        if let Some(v) = &self.intent {
+            m.insert("intent".into(), json!(v));
+        }
+        if let Some(v) = &self.client_id {
+            m.insert("client_id".into(), json!(v));
+        }
+        if let Some(v) = &self.app_version {
+            m.insert("app_version".into(), json!(v));
+        }
+        if let Some(v) = &self.trace_id {
+            m.insert("trace_id".into(), json!(v));
         }
         Value::Object(m)
     }
 
-    /// `metadata()` merged with extra fields (e.g. server-resolved display_name).
+    /// `metadata()` merged with extra fields (e.g. server-resolved display_name, or a
+    /// handler-supplied `actor_role`).
     pub fn metadata_with(&self, extra: Value) -> Value {
         let mut base = self.metadata();
         if let (Value::Object(b), Value::Object(e)) = (&mut base, extra) {
@@ -61,17 +95,18 @@ impl FromRequestParts<AppState> for AuthUser {
             AppError::Unauthorized
         })?;
 
-        let intent = parts
-            .headers
-            .get("x-intent")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.chars().take(INTENT_MAX_LEN).collect());
+        // traceparent format: 00-<32hex trace-id>-<16hex span-id>-<flags>
+        let trace_id = header_capped(parts, "traceparent")
+            .and_then(|tp| tp.split('-').nth(1).filter(|s| s.len() == 32).map(str::to_string));
 
         Ok(AuthUser {
             user_id: claims.sub,
-            intent,
+            intent: header_capped(parts, "x-intent"),
+            request_id: header_capped(parts, "x-request-id").unwrap_or_else(|| Uuid::new_v4().to_string()),
+            client_id: header_capped(parts, "x-client-id"),
+            app_version: header_capped(parts, "x-app-version"),
+            trace_id,
+            route: format!("{} {}", parts.method.as_str(), parts.uri.path()),
         })
     }
 }

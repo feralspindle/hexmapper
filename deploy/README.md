@@ -123,7 +123,10 @@ the client against the same DB throughout.
 
 ## Notes / gotchas
 
-- `DATABASE_URL` = Supabase **direct** or **session-mode** connection (`:5432`), not the txn pooler.
+- `DATABASE_URL` = Supabase **Session pooler** (`...pooler.supabase.com:5432`). **Not** the
+  Direct endpoint (`db.<ref>.supabase.co` is IPv6-only → the Docker container can't reach it,
+  crash-loops with "Network is unreachable"), and **not** the transaction pooler (`:6543`,
+  which breaks multi-statement transactions + prepared statements).
 - Auth uses **JWKS from `SUPABASE_URL`** (ES256) — there is no `SUPABASE_JWT_SECRET`.
 - Realtime/Auth/Storage go from the browser **directly to `*.supabase.co`** (not through
   your domain), so they're unaffected by Cloudflare and must stay in the CSP `connect-src`.
