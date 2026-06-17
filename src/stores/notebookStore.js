@@ -3,16 +3,81 @@ import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
+import { useAuthStore } from '@/stores/authStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
 
 export const useNotebookStore = defineStore('notebook', () => {
-  const quests = ref([])
-  const notes  = ref([])
+  const quests    = ref([])
+  const notes     = ref([])
+  const editingBy = ref({}) // { 'quest:id': string[], 'note:id': string[] }
 
   let questsChannel = null
   let notesChannel  = null
+  let editChannel   = null
   let _sessionId    = null
+
+  const _editByUser  = {}   // { key: { userId: name } }  — internal dedup map
+  const _staleTimers = {}   // clear stale indicators if 'done' is never received (tab close)
+
+  function _applyEditing(kind, id, userId, name) {
+    const key = `${kind}:${id}`
+    if (!_editByUser[key]) _editByUser[key] = {}
+    _editByUser[key][userId] = name
+    clearTimeout(_staleTimers[`${key}:${userId}`])
+    _staleTimers[`${key}:${userId}`] = setTimeout(() => _applyDone(kind, id, userId), 30_000)
+    editingBy.value = { ...editingBy.value, [key]: Object.values(_editByUser[key]) }
+  }
+
+  function _applyDone(kind, id, userId) {
+    const key = `${kind}:${id}`
+    if (!_editByUser[key]) return
+    delete _editByUser[key][userId]
+    clearTimeout(_staleTimers[`${key}:${userId}`])
+    const names = Object.values(_editByUser[key])
+    if (names.length) {
+      editingBy.value = { ...editingBy.value, [key]: names }
+    } else {
+      const next = { ...editingBy.value }
+      delete next[key]
+      editingBy.value = next
+    }
+  }
+
+  function _subscribeEditing(sessionId) {
+    editChannel = supabase
+      .channel(`notebook:editing:${sessionId}:${crypto.randomUUID()}`)
+      .on('broadcast', { event: 'editing' }, ({ payload }) => {
+        const authStore = useAuthStore()
+        if (payload.user_id === (authStore.user?.id ?? CLIENT_ID)) return
+        _applyEditing(payload.kind, payload.id, payload.user_id, payload.name)
+      })
+      .on('broadcast', { event: 'done' }, ({ payload }) => {
+        const authStore = useAuthStore()
+        if (payload.user_id === (authStore.user?.id ?? CLIENT_ID)) return
+        _applyDone(payload.kind, payload.id, payload.user_id)
+      })
+      .subscribe()
+  }
+
+  function setEditing(kind, id) {
+    if (!editChannel) return
+    const authStore = useAuthStore()
+    editChannel.send({ type: 'broadcast', event: 'editing', payload: {
+      kind, id,
+      user_id: authStore.user?.id ?? CLIENT_ID,
+      name:    authStore.displayName ?? 'Adventurer',
+    }})
+  }
+
+  function clearEditing(kind, id) {
+    if (!editChannel) return
+    const authStore = useAuthStore()
+    editChannel.send({ type: 'broadcast', event: 'done', payload: {
+      kind, id,
+      user_id: authStore.user?.id ?? CLIENT_ID,
+    }})
+  }
 
   async function init(sessionId) {
     if (_sessionId === sessionId) return
@@ -21,14 +86,19 @@ export const useNotebookStore = defineStore('notebook', () => {
     await Promise.all([_loadQuests(sessionId), _loadNotes(sessionId)])
     _subscribeQuests(sessionId)
     _subscribeNotes(sessionId)
+    _subscribeEditing(sessionId)
   }
 
   function cleanup() {
     if (questsChannel) { supabase.removeChannel(questsChannel); questsChannel = null }
     if (notesChannel)  { supabase.removeChannel(notesChannel);  notesChannel  = null }
+    if (editChannel)   { supabase.removeChannel(editChannel);   editChannel   = null }
     _sessionId = null
-    quests.value = []
-    notes.value  = []
+    quests.value    = []
+    notes.value     = []
+    editingBy.value = {}
+    for (const k of Object.keys(_editByUser))  delete _editByUser[k]
+    for (const k of Object.keys(_staleTimers)) { clearTimeout(_staleTimers[k]); delete _staleTimers[k] }
   }
 
   async function _loadQuests(sessionId) {
@@ -162,9 +232,10 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   return {
-    quests, notes,
+    quests, notes, editingBy,
     init, cleanup,
     addQuest, updateQuest, deleteQuest,
     addNote,  updateNote,  deleteNote,
+    setEditing, clearEditing,
   }
 })

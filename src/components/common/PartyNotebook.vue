@@ -50,8 +50,14 @@
               class="pn-quest-title"
               :value="quest.title"
               placeholder="Quest title…"
+              @focus="onItemFocus('quest', quest.id)"
+              @blur="onItemBlur('quest', quest.id)"
               @input="debounceSaveQuest(quest.id, { title: $event.target.value })"
             />
+          </div>
+          <div v-if="editorsFor('quest', quest.id).length" class="pn-editing-indicator">
+            <span class="pn-editing-dot" />
+            {{ editorsFor('quest', quest.id).join(', ') }} {{ editorsFor('quest', quest.id).length === 1 ? 'is' : 'are' }} editing…
           </div>
           <div v-if="quest.goals?.length" class="pn-progress-row">
             <div class="pn-progress-bar">
@@ -68,6 +74,8 @@
             :value="quest.description"
             placeholder="Quest description…"
             rows="2"
+            @focus="onItemFocus('quest', quest.id)"
+            @blur="onItemBlur('quest', quest.id)"
             @input="debounceSaveQuest(quest.id, { description: $event.target.value })"
           />
           <div class="pn-goals-section">
@@ -83,6 +91,8 @@
                 :class="{ done: goal.completed }"
                 :value="goal.text"
                 placeholder="Goal…"
+                @focus="onItemFocus('quest', quest.id)"
+                @blur="onItemBlur('quest', quest.id)"
                 @input="updateGoalText(quest, goal.id, $event.target.value)"
               />
               <button class="pn-goal-del" @click="removeGoal(quest, goal.id)">
@@ -232,6 +242,8 @@
               :value="note.title"
               placeholder="Entry title…"
               :readonly="!canEditNote(note)"
+              @focus="canEditNote(note) && onItemFocus('note', note.id)"
+              @blur="canEditNote(note) && onItemBlur('note', note.id)"
               @input="debounceSaveNote(note.id, { title: $event.target.value })"
             />
             <span class="pn-note-author-badge" :style="{ '--bc': authorColor(note) }">
@@ -244,11 +256,17 @@
             </button>
           </div>
           <div class="pn-note-ts">{{ formatTs(note.created_at) }}</div>
+          <div v-if="editorsFor('note', note.id).length" class="pn-editing-indicator">
+            <span class="pn-editing-dot" />
+            {{ editorsFor('note', note.id).join(', ') }} {{ editorsFor('note', note.id).length === 1 ? 'is' : 'are' }} editing…
+          </div>
           <textarea
             class="pn-note-content"
             :value="note.content"
             placeholder="Write something…"
             :readonly="!canEditNote(note)"
+            @focus="canEditNote(note) && onItemFocus('note', note.id)"
+            @blur="canEditNote(note) && onItemBlur('note', note.id)"
             @input="debounceSaveNote(note.id, { content: $event.target.value })"
           />
         </div>
@@ -862,6 +880,19 @@ function deleteNote(id) {
 
 function canEditNote(note) {
   return sessionStore.isGM || note.author_user_id === authStore.user?.id
+}
+
+function editorsFor(kind, id) {
+  return notebookStore.editingBy[`${kind}:${id}`] ?? []
+}
+
+const _itemBlurTimers = new Map()
+function onItemFocus(kind, id) {
+  clearTimeout(_itemBlurTimers.get(`${kind}:${id}`))
+  notebookStore.setEditing(kind, id)
+}
+function onItemBlur(kind, id) {
+  _itemBlurTimers.set(`${kind}:${id}`, setTimeout(() => notebookStore.clearEditing(kind, id), 150))
 }
 
 function authorColor(note) {
@@ -1785,6 +1816,27 @@ async function submitNewItem(containerId) {
 .pn-note-title[readonly]::selection,
 .pn-note-content[readonly]::selection {
   background: transparent;
+}
+.pn-editing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin: 2px 0 4px;
+}
+.pn-editing-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #4a7c59);
+  animation: pn-editing-pulse 1.4s ease-in-out infinite;
+}
+@keyframes pn-editing-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%       { opacity: 1; }
 }
 
 
