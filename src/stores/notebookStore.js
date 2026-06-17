@@ -57,10 +57,11 @@ export const useNotebookStore = defineStore('notebook', () => {
         event: '*', schema: 'public', table: 'party_quests',
         filter: `session_id=eq.${sessionId}`,
       }, e => {
-        if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
+          if (e.new?.source_client === CLIENT_ID) return
           if (!quests.value.find(q => q.id === e.new.id)) quests.value.push(e.new)
         } else if (e.eventType === 'UPDATE') {
+          if (e.new?.source_client === CLIENT_ID) return
           const idx = quests.value.findIndex(q => q.id === e.new.id)
           const wasComplete = idx !== -1 ? !!quests.value[idx].completed : false
           if (idx !== -1) quests.value[idx] = e.new; else quests.value.push(e.new)
@@ -81,10 +82,11 @@ export const useNotebookStore = defineStore('notebook', () => {
         event: '*', schema: 'public', table: 'party_session_notes',
         filter: `session_id=eq.${sessionId}`,
       }, e => {
-        if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
+          if (e.new?.source_client === CLIENT_ID) return
           if (!notes.value.find(n => n.id === e.new.id)) notes.value.unshift(e.new)
         } else if (e.eventType === 'UPDATE') {
+          if (e.new?.source_client === CLIENT_ID) return
           const idx = notes.value.findIndex(n => n.id === e.new.id)
           if (idx !== -1) notes.value[idx] = e.new; else notes.value.unshift(e.new)
         } else if (e.eventType === 'DELETE') {

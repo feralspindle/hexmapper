@@ -138,6 +138,20 @@ pub async fn character_owner_session(pool: &PgPool, id: Uuid) -> Result<Option<(
     Ok(row)
 }
 
+/// Returns (author_user_id, session_id) for a party_session_note, or None if it does
+/// not exist. Enforces the `author or session GM` update/delete policy. author_user_id
+/// is stored as text.
+pub async fn party_session_note_author_session(pool: &PgPool, note_id: Uuid) -> Result<Option<(Option<String>, Uuid)>, AppError> {
+    let row: Option<(Option<String>, Uuid)> = sqlx::query_as(
+        "select author_user_id, session_id from party_session_notes where id = $1",
+    )
+    .bind(note_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
+
 /// Returns the session_id for a row in `table` by id, or None if it does not exist.
 /// For session-scoped collection tables whose write policy is simply "session member"
 /// (party_quests, party_session_notes, etc.). `table` is a trusted internal constant.

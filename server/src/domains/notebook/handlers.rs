@@ -132,10 +132,12 @@ pub async fn update_session_note(
     Path(id): Path<Uuid>,
     Json(patch): Json<Value>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_session_notes", id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+    let (author_user_id, session_id) =
+        authz::party_session_note_author_session(state.pool(), id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    let is_author = author_user_id.as_deref() == Some(auth.user_id.to_string().as_str());
+    if !is_author && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
 
@@ -152,10 +154,12 @@ pub async fn delete_session_note(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_session_notes", id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+    let (author_user_id, session_id) =
+        authz::party_session_note_author_session(state.pool(), id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    let is_author = author_user_id.as_deref() == Some(auth.user_id.to_string().as_str());
+    if !is_author && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
 

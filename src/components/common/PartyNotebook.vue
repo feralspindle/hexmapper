@@ -231,12 +231,13 @@
               class="pn-note-title"
               :value="note.title"
               placeholder="Entry title…"
+              :readonly="!canEditNote(note)"
               @input="debounceSaveNote(note.id, { title: $event.target.value })"
             />
             <span class="pn-note-author-badge" :style="{ '--bc': authorColor(note) }">
               {{ note.is_gm_author ? 'Game Master' : note.author_name }}
             </span>
-            <button class="pn-del-btn" @click="deleteNote(note.id)">
+            <button v-if="canEditNote(note)" class="pn-del-btn" @click="deleteNote(note.id)">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
               </svg>
@@ -247,6 +248,7 @@
             class="pn-note-content"
             :value="note.content"
             placeholder="Write something…"
+            :readonly="!canEditNote(note)"
             @input="debounceSaveNote(note.id, { content: $event.target.value })"
           />
         </div>
@@ -623,6 +625,7 @@ import { useCharacterStore } from '@/stores/characterStore.js'
 import { useNotebookStore } from '@/stores/notebookStore.js'
 import { useVaultStore } from '@/stores/vaultStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useAuthStore } from '@/stores/authStore.js'
 import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
@@ -635,6 +638,7 @@ const notebookStore   = useNotebookStore()
 const characterStore  = useCharacterStore()
 const vaultStore      = useVaultStore()
 const sessionStore    = useSessionStore()
+const authStore       = useAuthStore()
 
 const showCompleted = ref(false)
 const POS_KEY  = 'dm.partyNotebook.pos'
@@ -854,6 +858,10 @@ async function newNote() {
 
 function deleteNote(id) {
   notebookStore.deleteNote(id)
+}
+
+function canEditNote(note) {
+  return sessionStore.isGM || note.author_user_id === authStore.user?.id
 }
 
 function authorColor(note) {
