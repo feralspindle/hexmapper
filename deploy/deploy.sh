@@ -19,8 +19,10 @@ docker compose --env-file "$ENV_FILE" pull api
 echo "==> recreating changed services"
 docker compose --env-file "$ENV_FILE" up -d
 
-# pick up Caddyfile edits without a full restart (no-op if unchanged)
-docker compose --env-file "$ENV_FILE" exec -T caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || true
+# pick up Caddyfile edits without a full restart (no-op if unchanged).
+# Path must match the container's run command (--config /etc/caddy/conf/Caddyfile);
+# /etc/caddy/Caddyfile is the image's stock :80-only default and would clobber TLS.
+docker compose --env-file "$ENV_FILE" exec -T caddy caddy reload --config /etc/caddy/conf/Caddyfile --adapter caddyfile 2>/dev/null || true
 
 echo "==> pruning dangling images"
 docker image prune -f >/dev/null
