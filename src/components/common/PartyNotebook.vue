@@ -1777,6 +1777,15 @@ async function submitNewItem(containerId) {
   field-sizing: content;
   min-height: 4.65em;
 }
+.pn-note-title[readonly],
+.pn-note-content[readonly] {
+  cursor: default;
+  caret-color: transparent;
+}
+.pn-note-title[readonly]::selection,
+.pn-note-content[readonly]::selection {
+  background: transparent;
+}
 
 
 .pv-section-bar {
