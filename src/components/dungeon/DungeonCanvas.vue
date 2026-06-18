@@ -967,9 +967,7 @@ function drawFog() {
   const d = dungeonStore.dungeon
   if (!d) return
   if (d.fog_reveal_all) return
-  if (!d.fog_mode) {
-    if (sessionStore.isGM) return
-  }
+  if (!d.fog_mode) return
 
   const cs = cellPx.value
   const colMin = Math.floor(viewport.value.offsetX / cs) - 1
