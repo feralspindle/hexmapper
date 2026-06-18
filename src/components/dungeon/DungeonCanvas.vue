@@ -281,6 +281,17 @@
       </div>
     </Transition>
 
+    <Transition name="ds-banner">
+      <div v-if="dungeonStore.drawMode === 'fog' && sessionStore.isGM" class="ds-fog-size-picker">
+        <button
+          v-for="opt in FOG_BRUSH_SIZES"
+          :key="opt.r"
+          :class="['ds-fog-size-btn', fogBrushRadius === opt.r && 'ds-fog-size-btn--active']"
+          @click="fogBrushRadius = opt.r"
+        >{{ opt.label }}</button>
+      </div>
+    </Transition>
+
     <div
       v-if="dimEntry"
       class="ds-dim-input"
@@ -579,6 +590,8 @@ watch(() => dungeonStore.dungeonImageUrl, (url) => {
 
 let fogBrush = null
 let _fogFlushTimer = null
+const FOG_BRUSH_SIZES = [{ label: '1×1', r: 0 }, { label: '3×3', r: 1 }, { label: '5×5', r: 2 }]
+const fogBrushRadius = ref(0)
 
 
 const viewport = ref({ offsetX: -100, offsetY: -100, zoom: 1 })
@@ -1495,7 +1508,7 @@ function onMouseDown(e) {
     const rect = getRect()
     const { cellX, cellY } = pixelToCell(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
     const brushMode = e.shiftKey ? 'hide' : 'reveal'
-    fogBrush = { mode: brushMode, seen: new Set([`${cellX}:${cellY}`]) }
+    fogBrush = { mode: brushMode, seen: new Set() }
     _applyFogBrush(cellX, cellY)
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
@@ -1611,11 +1624,7 @@ function onMouseMove(e) {
   if (fogBrush) {
     const rect = getRect()
     const { cellX, cellY } = pixelToCell(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
-    const key = `${cellX}:${cellY}`
-    if (!fogBrush.seen.has(key)) {
-      fogBrush.seen.add(key)
-      _applyFogBrush(cellX, cellY)
-    }
+    _applyFogBrush(cellX, cellY)
     return
   }
 
@@ -1922,10 +1931,22 @@ function openAnnotation(type, id) {
 
 function _applyFogBrush(cellX, cellY) {
   if (!fogBrush || !props.dungeonId) return
+  const r = fogBrushRadius.value
+  const cells = []
+  for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -r; dy <= r; dy++) {
+      const key = `${cellX + dx}:${cellY + dy}`
+      if (!fogBrush.seen.has(key)) {
+        fogBrush.seen.add(key)
+        cells.push({ cellX: cellX + dx, cellY: cellY + dy })
+      }
+    }
+  }
+  if (!cells.length) return
   if (fogBrush.mode === 'reveal') {
-    dungeonStore.revealFogCell(props.dungeonId, cellX, cellY)
+    dungeonStore.revealFogCells(props.dungeonId, cells)
   } else {
-    dungeonStore.hideFogCell(props.dungeonId, cellX, cellY)
+    dungeonStore.hideFogCells(props.dungeonId, cells)
   }
 }
 
@@ -2062,4 +2083,32 @@ onUnmounted(() => {
 .ds-dim-btn:hover { background: var(--accent, #8a1c1c); border-color: var(--accent, #8a1c1c); }
 .ds-dim-ghost { background: transparent; color: rgba(237,225,199,.5); }
 .ds-dim-ghost:hover { background: rgba(237,225,199,.1); border-color: rgba(237,225,199,.3); color: var(--paper, #ede1c7); }
+
+.ds-fog-size-picker {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  z-index: 25;
+  pointer-events: auto;
+}
+.ds-fog-size-btn {
+  background: var(--ink, #1a1410);
+  color: rgba(237,225,199,.65);
+  border: 1px solid rgba(237,225,199,.2);
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.ds-fog-size-btn:hover { color: var(--paper, #ede1c7); border-color: rgba(237,225,199,.4); }
+.ds-fog-size-btn--active {
+  background: var(--accent, #8a1c1c);
+  border-color: var(--accent, #8a1c1c);
+  color: var(--paper, #ede1c7);
+}
 </style>
