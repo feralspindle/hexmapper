@@ -101,7 +101,7 @@ async fn member_for_dungeon(state: &AppState, user_id: Uuid, dungeon_id: Uuid) -
     Ok(session_id)
 }
 
-async fn member_for_row(state: &AppState, user_id: Uuid, table: &str, id: Uuid) -> Result<Uuid, AppError> {
+async fn member_for_row(state: &AppState, user_id: Uuid, table: authz::SessionTable, id: Uuid) -> Result<Uuid, AppError> {
     let session_id = authz::row_session_id(state.pool(), table, id).await?.ok_or(AppError::NotFound)?;
     if !authz::is_session_member(state.pool(), user_id, session_id).await? {
         return Err(AppError::Forbidden);
@@ -138,7 +138,7 @@ pub async fn update_room(
     Path(id): Path<Uuid>,
     Json(patch): Json<Value>,
 ) -> Result<StatusCode, AppError> {
-    member_for_row(&state, auth.user_id, "dungeon_rooms", id).await?;
+    member_for_row(&state, auth.user_id, authz::SessionTable::DungeonRooms, id).await?;
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
     room_projection::update(&mut tx, id, &patch, &metadata).await?;
@@ -151,7 +151,7 @@ pub async fn delete_room(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    member_for_row(&state, auth.user_id, "dungeon_rooms", id).await?;
+    member_for_row(&state, auth.user_id, authz::SessionTable::DungeonRooms, id).await?;
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
     room_projection::delete(&mut tx, id, &metadata).await?;
@@ -179,7 +179,7 @@ pub async fn update_corridor(
     Path(id): Path<Uuid>,
     Json(patch): Json<Value>,
 ) -> Result<StatusCode, AppError> {
-    member_for_row(&state, auth.user_id, "dungeon_corridors", id).await?;
+    member_for_row(&state, auth.user_id, authz::SessionTable::DungeonCorridors, id).await?;
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
     corridor_projection::update(&mut tx, id, &patch, &metadata).await?;
@@ -192,7 +192,7 @@ pub async fn delete_corridor(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    member_for_row(&state, auth.user_id, "dungeon_corridors", id).await?;
+    member_for_row(&state, auth.user_id, authz::SessionTable::DungeonCorridors, id).await?;
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
     corridor_projection::delete(&mut tx, id, &metadata).await?;

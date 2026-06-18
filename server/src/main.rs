@@ -63,6 +63,6 @@ async fn main() {
 
     let addr = format!("0.0.0.0:{}", config.port);
     tracing::info!("listening on {addr}");
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.expect("failed to bind listener");
+    axum::serve(listener, app).await.expect("server error");
 }

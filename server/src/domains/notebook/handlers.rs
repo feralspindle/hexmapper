@@ -55,7 +55,7 @@ pub async fn update_quest(
     Path(id): Path<Uuid>,
     Json(patch): Json<Value>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_quests", id)
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::PartyQuests, id)
         .await?
         .ok_or(AppError::NotFound)?;
     if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
@@ -75,7 +75,7 @@ pub async fn delete_quest(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_quests", id)
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::PartyQuests, id)
         .await?
         .ok_or(AppError::NotFound)?;
     if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {

@@ -51,7 +51,7 @@ pub async fn delete_container(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_vault_containers", id)
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::PartyVaultContainers, id)
         .await?
         .ok_or(AppError::NotFound)?;
     if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
@@ -109,7 +109,7 @@ pub async fn delete_loot(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_vault_loot", id).await?.ok_or(AppError::NotFound)?;
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::PartyVaultLoot, id).await?.ok_or(AppError::NotFound)?;
     if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
@@ -166,7 +166,7 @@ pub async fn update_item(
     Path(id): Path<Uuid>,
     Json(patch): Json<Value>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_vault_items", id).await?.ok_or(AppError::NotFound)?;
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::PartyVaultItems, id).await?.ok_or(AppError::NotFound)?;
     if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
@@ -182,7 +182,7 @@ pub async fn delete_item(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "party_vault_items", id).await?.ok_or(AppError::NotFound)?;
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::PartyVaultItems, id).await?.ok_or(AppError::NotFound)?;
     if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }

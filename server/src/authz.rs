@@ -152,14 +152,42 @@ pub async fn party_session_note_author_session(pool: &PgPool, note_id: Uuid) -> 
     Ok(row)
 }
 
-/// Returns the session_id for a row in `table` by id, or None if it does not exist.
-/// For session-scoped collection tables whose write policy is simply "session member"
-/// (party_quests, party_session_notes, etc.). `table` is a trusted internal constant.
-pub async fn row_session_id(pool: &PgPool, table: &str, id: Uuid) -> Result<Option<Uuid>, AppError> {
-    let session_id: Option<Uuid> = sqlx::query_scalar(&format!("select session_id from {table} where id = $1"))
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
+/// Tables that `row_session_id` is permitted to query. All callers pass a variant
+/// directly, so any attempt to introduce a dynamic/user-controlled table name is a
+/// compile error rather than a runtime SQL injection risk.
+#[derive(Clone, Copy)]
+pub enum SessionTable {
+    Maps,
+    PartyQuests,
+    PartyVaultContainers,
+    PartyVaultLoot,
+    PartyVaultItems,
+    DungeonRooms,
+    DungeonCorridors,
+}
+
+impl SessionTable {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Maps                  => "maps",
+            Self::PartyQuests           => "party_quests",
+            Self::PartyVaultContainers  => "party_vault_containers",
+            Self::PartyVaultLoot        => "party_vault_loot",
+            Self::PartyVaultItems       => "party_vault_items",
+            Self::DungeonRooms          => "dungeon_rooms",
+            Self::DungeonCorridors      => "dungeon_corridors",
+        }
+    }
+}
+
+/// Returns the session_id for a row by id, or None if it does not exist.
+/// Accepts only `SessionTable` variants — table names are never user-controlled.
+pub async fn row_session_id(pool: &PgPool, table: SessionTable, id: Uuid) -> Result<Option<Uuid>, AppError> {
+    let session_id: Option<Uuid> =
+        sqlx::query_scalar(&format!("select session_id from {} where id = $1", table.as_str()))
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
 
     Ok(session_id)
 }

@@ -40,7 +40,7 @@ pub async fn update_map(
     Path(id): Path<Uuid>,
     Json(patch): Json<Value>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "maps", id).await?.ok_or(AppError::NotFound)?;
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::Maps, id).await?.ok_or(AppError::NotFound)?;
     if !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
@@ -58,7 +58,7 @@ pub async fn delete_map(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let session_id = authz::row_session_id(state.pool(), "maps", id).await?.ok_or(AppError::NotFound)?;
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::Maps, id).await?.ok_or(AppError::NotFound)?;
     if !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
