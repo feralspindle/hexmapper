@@ -184,6 +184,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function withdrawFromBank(item) {
     if (item.currency) {
       await _addLedgerEntry({ description: 'withdrew', [`${item.currency}Change`]: -item.quantity })
+      useCharacterStore().adjustMoney(item.currency, item.quantity)
     }
     await removeVaultItem(item.id)
   }
@@ -205,6 +206,7 @@ export const useVaultStore = defineStore('vault', () => {
       }
     }
     await _addLedgerEntry({ description: 'withdrew', [`${currency}Change`]: -amount })
+    useCharacterStore().adjustMoney(currency, amount)
   }
 
   async function addLoot(name, quantity = 1, notes = '', lootType = 'item', currency = null) {
