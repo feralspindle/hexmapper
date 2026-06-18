@@ -283,6 +283,7 @@
 
     <Transition name="ds-banner">
       <div v-if="dungeonStore.drawMode === 'fog' && sessionStore.isGM" class="ds-fog-size-picker">
+        <span class="ds-fog-size-label">Brush</span>
         <button
           v-for="opt in FOG_BRUSH_SIZES"
           :key="opt.r"
@@ -593,6 +594,18 @@ let _fogFlushTimer = null
 const FOG_BRUSH_SIZES = [{ label: '1×1', r: 0 }, { label: '3×3', r: 1 }, { label: '5×5', r: 2 }]
 const fogBrushRadius = ref(0)
 
+const FOG_BRUSH_CURSOR = (() => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+    <line x1="19" y1="2" x2="10" y2="11" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <line x1="19" y1="2" x2="10" y2="11" stroke="#3a2a1a" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="8.5" y1="11.5" x2="11.5" y2="14.5" stroke="white" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="8.5" y1="11.5" x2="11.5" y2="14.5" stroke="#c0a060" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M4 15 Q1 18 2 20 Q5 21 9 18 L11.5 15 L8.5 12 Z" fill="white"/>
+    <path d="M4 15 Q1 18 2 20 Q5 21 9 18 L11.5 15 L8.5 12 Z" fill="#8a1c1c"/>
+  </svg>`
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 2 20, crosshair`
+})()
+
 
 const viewport = ref({ offsetX: -100, offsetY: -100, zoom: 1 })
 const cellPx = computed(() => CELL_SIZE * viewport.value.zoom)
@@ -826,7 +839,7 @@ function applyResize(handle, original, startGx, startGy, gx, gy) {
 
 const cursorStyle = computed(() => {
   if (props.mapMoveMode === 'image') return isPanning ? 'grabbing' : 'move'
-  if (dungeonStore.drawMode === 'fog') return 'cell'
+  if (dungeonStore.drawMode === 'fog') return FOG_BRUSH_CURSOR
   if (dungeonStore.drawMode === 'pan') return isPanning ? 'grabbing' : 'grab'
   if (dungeonStore.drawMode === 'edit') {
     if (isMoving || corridorDrag) return 'grabbing'
@@ -2090,25 +2103,45 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
   z-index: 25;
   pointer-events: auto;
+  background: rgba(13,10,7,.94);
+  border: 1px solid rgba(237,225,199,.35);
+  border-radius: 5px;
+  padding: 5px 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.6);
+}
+.ds-fog-size-label {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  color: rgba(237,225,199,.55);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding-right: 4px;
+  border-right: 1px solid rgba(237,225,199,.15);
+  margin-right: 2px;
 }
 .ds-fog-size-btn {
-  background: var(--ink, #1a1410);
-  color: rgba(237,225,199,.65);
-  border: 1px solid rgba(237,225,199,.2);
+  background: rgba(237,225,199,.08);
+  color: var(--paper, #ede1c7);
+  border: 1px solid rgba(237,225,199,.3);
   border-radius: 3px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
   cursor: pointer;
-  transition: background .12s, border-color .12s, color .12s;
+  transition: background .12s, border-color .12s, box-shadow .12s;
 }
-.ds-fog-size-btn:hover { color: var(--paper, #ede1c7); border-color: rgba(237,225,199,.4); }
+.ds-fog-size-btn:hover {
+  background: rgba(237,225,199,.16);
+  border-color: rgba(237,225,199,.55);
+}
 .ds-fog-size-btn--active {
   background: var(--accent, #8a1c1c);
-  border-color: var(--accent, #8a1c1c);
+  border-color: rgba(237,225,199,.5);
   color: var(--paper, #ede1c7);
+  box-shadow: 0 0 8px rgba(138,28,28,.5);
 }
 </style>
