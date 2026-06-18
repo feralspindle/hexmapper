@@ -46,7 +46,7 @@ export const useNotebookStore = defineStore('notebook', () => {
 
   function _subscribeEditing(sessionId) {
     editChannel = supabase
-      .channel(`notebook:editing:${sessionId}:${crypto.randomUUID()}`)
+      .channel(`notebook:editing:${sessionId}`)
       .on('broadcast', { event: 'editing' }, ({ payload }) => {
         const authStore = useAuthStore()
         if (payload.user_id === (authStore.user?.id ?? CLIENT_ID)) return
