@@ -659,9 +659,10 @@ const { timeAgo } = useTimeAgo();
 const selectedHexVisibleToPlayer = computed(() => {
   if (sessionStore.isGM) return true
   const fogMode = mapStore.activeMap?.fog_mode ?? false
-  if (!fogMode) return mapStore.mapFogRevealAll
+  if (!fogMode) return true
   const cell = hexStore.selectedCell
-  return cell != null ? (cell.revealed ?? mapStore.mapFogRevealAll) : mapStore.mapFogRevealAll
+  if (cell == null) return mapStore.mapFogRevealAll
+  return cell.revealed !== false
 })
 
 const open = ref(true);
