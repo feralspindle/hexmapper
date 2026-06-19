@@ -679,7 +679,11 @@ export const useD = defineStore('dungeon', () => {
 
   async function torchReset() {
     if (!dungeon.value?.id) return
-    dungeon.value = { ...dungeon.value, torch_elapsed_ms: 0 }
+    dungeon.value = {
+      ...dungeon.value,
+      torch_elapsed_ms: 0,
+      torch_started_at: dungeon.value.torch_running ? new Date().toISOString() : null,
+    }
     try {
       await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'reset' }, 'torch_reset')
     } catch (err) { console.error('torchReset error:', err instanceof ApiError ? err.message : err) }
