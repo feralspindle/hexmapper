@@ -280,7 +280,7 @@ export const useHexStore = defineStore("hex", () => {
       terrain_type: null,
       color: null,
       has_dungeon: false,
-      revealed: true,
+      revealed: false,
       ...existing,
       ...patch,
       session_id: currentSessionId.value,

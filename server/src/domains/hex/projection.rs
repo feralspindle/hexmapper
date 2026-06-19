@@ -61,7 +61,7 @@ pub async fn upsert(
                 $2->>'terrain_type',
                 $2->>'color',
                 coalesce(($2->>'has_dungeon')::boolean, false),
-                coalesce(($2->>'revealed')::boolean, true),
+                coalesce(($2->>'revealed')::boolean, false),
                 $2->>'marker_color',
                 $2->>'marker_label',
                 $2->>'gm_markers',

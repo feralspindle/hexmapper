@@ -86,6 +86,7 @@
                 </button>
             </div>
 
+            <template v-if="selectedHexVisibleToPlayer">
             <div>
                 <div
                     style="
@@ -225,6 +226,7 @@
                     </button>
                 </div>
             </div>
+            </template>
 
             <div v-if="sessionStore.isGM">
                 <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px">
@@ -653,6 +655,14 @@ const sessionStore = useSessionStore();
 const authStore = useAuthStore();
 const { confirm } = useConfirmDialog();
 const { timeAgo } = useTimeAgo();
+
+const selectedHexVisibleToPlayer = computed(() => {
+  if (sessionStore.isGM) return true
+  const fogMode = mapStore.activeMap?.fog_mode ?? false
+  if (!fogMode) return mapStore.mapFogRevealAll
+  const cell = hexStore.selectedCell
+  return cell != null ? (cell.revealed ?? mapStore.mapFogRevealAll) : mapStore.mapFogRevealAll
+})
 
 const open = ref(true);
 const hexLabel = ref("");
