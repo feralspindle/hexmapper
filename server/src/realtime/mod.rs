@@ -41,7 +41,12 @@ struct Client {
     tx: mpsc::Sender<ServerMessage>,
     close: mpsc::Sender<()>,
     sessions: HashMap<Uuid, bool>,
-    presence: HashMap<String, Value>,
+    presence: HashMap<String, TrackedPresence>,
+}
+
+struct TrackedPresence {
+    session_id: Uuid,
+    payload: Value,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -234,6 +239,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             }
             _ = heartbeat.tick() => {
                 if state.realtime().expired(connection_id).await { break; }
+                if !revalidate_subscriptions(connection_id, &state).await { break; }
                 if last_pong.elapsed() > CLIENT_STALE_TIMEOUT {
                     metrics::counter!("realtime_disconnects_total", "reason" => "pong_timeout").increment(1);
                     break;
@@ -257,6 +263,27 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     state.realtime().remove(connection_id).await;
     metrics::gauge!("realtime_connections").decrement(1.0);
+}
+
+async fn revalidate_subscriptions(connection_id: Uuid, state: &AppState) -> bool {
+    let Some((user_id, session_ids)) = state.realtime().subscription_identity(connection_id).await
+    else {
+        return false;
+    };
+    let roles = match authz::authorized_session_roles(state.pool(), user_id, &session_ids).await {
+        Ok(roles) => roles.into_iter().collect(),
+        Err(error) => {
+            tracing::warn!(%error, %connection_id, "realtime membership revalidation failed");
+            metrics::counter!("realtime_disconnects_total", "reason" => "authz_revalidation")
+                .increment(1);
+            return false;
+        }
+    };
+    state
+        .realtime()
+        .reconcile_subscriptions(connection_id, &roles)
+        .await;
+    true
 }
 
 async fn send_json(
@@ -483,6 +510,15 @@ impl RealtimeHub {
             .map(|c| (c.user_id, c.tx.clone()))
     }
 
+    async fn subscription_identity(&self, id: Uuid) -> Option<(Uuid, Vec<Uuid>)> {
+        self.0.lock().await.clients.get(&id).map(|client| {
+            (
+                client.user_id,
+                client.sessions.keys().copied().collect::<Vec<_>>(),
+            )
+        })
+    }
+
     async fn refresh_identity(
         &self,
         id: Uuid,
@@ -524,6 +560,54 @@ impl RealtimeHub {
     async fn unsubscribe(&self, id: Uuid, session_id: Uuid) {
         if let Some(client) = self.0.lock().await.clients.get_mut(&id) {
             client.sessions.remove(&session_id);
+        }
+    }
+
+    async fn reconcile_subscriptions(&self, id: Uuid, authorized: &HashMap<Uuid, bool>) {
+        let (revoked, presence_channels) = {
+            let mut hub = self.0.lock().await;
+            let Some(client) = hub.clients.get_mut(&id) else {
+                return;
+            };
+            let revoked = client
+                .sessions
+                .keys()
+                .filter(|session_id| !authorized.contains_key(session_id))
+                .copied()
+                .collect::<HashSet<_>>();
+
+            client.sessions.retain(|session_id, is_gm| {
+                let Some(current_is_gm) = authorized.get(session_id) else {
+                    return false;
+                };
+                *is_gm = *current_is_gm;
+                true
+            });
+
+            let mut presence_channels = Vec::new();
+            client.presence.retain(|channel, presence| {
+                if revoked.contains(&presence.session_id) {
+                    presence_channels.push(channel.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            for session_id in &revoked {
+                let _ = client.tx.try_send(ServerMessage::Unsubscribed {
+                    request_id: None,
+                    session_id: *session_id,
+                });
+            }
+            (revoked, presence_channels)
+        };
+
+        if !revoked.is_empty() {
+            metrics::counter!("realtime_subscriptions_revoked_total")
+                .increment(revoked.len() as u64);
+        }
+        for channel in presence_channels {
+            self.broadcast_presence(&channel).await;
         }
     }
 
@@ -614,7 +698,13 @@ impl RealtimeHub {
                 object.insert("display_name".into(), json!(client.display_name));
                 object.insert("connection_id".into(), json!(id));
             }
-            client.presence.insert(channel.clone(), payload);
+            client.presence.insert(
+                channel.clone(),
+                TrackedPresence {
+                    session_id,
+                    payload,
+                },
+            );
         }
         self.broadcast_presence(&channel).await;
     }
@@ -638,8 +728,8 @@ impl RealtimeHub {
             let mut hub = self.0.lock().await;
             let mut by_user = HashMap::<Uuid, Value>::new();
             for client in hub.clients.values() {
-                if let Some(value) = client.presence.get(channel) {
-                    by_user.insert(client.user_id, value.clone());
+                if let Some(presence) = client.presence.get(channel) {
+                    by_user.insert(client.user_id, presence.payload.clone());
                 }
             }
             let presences = by_user.into_values().collect::<Vec<_>>();
@@ -844,5 +934,54 @@ mod tests {
         let (event, payload) = visible_event(&row, false).unwrap();
         assert_eq!(event, "hex_cell.deleted");
         assert!(payload.get("gm_markers").is_none());
+    }
+
+    #[tokio::test]
+    async fn membership_revalidation_revokes_subscription_and_presence() {
+        let hub = RealtimeHub::default();
+        let connection_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let revoked_session = Uuid::new_v4();
+        let retained_session = Uuid::new_v4();
+        let (tx, mut rx) = mpsc::channel(8);
+        let (close, _close_rx) = mpsc::channel(1);
+
+        hub.register(
+            connection_id,
+            user_id,
+            "Player".into(),
+            usize::MAX,
+            tx,
+            close,
+        )
+        .await;
+        assert!(hub.subscribe(connection_id, revoked_session, false).await);
+        assert!(hub.subscribe(connection_id, retained_session, true).await);
+        hub.track_presence(
+            connection_id,
+            revoked_session,
+            "revoked:presence".into(),
+            json!({}),
+        )
+        .await;
+        while rx.try_recv().is_ok() {}
+
+        hub.reconcile_subscriptions(connection_id, &HashMap::from([(retained_session, false)]))
+            .await;
+
+        let state = hub.0.lock().await;
+        let client = state.clients.get(&connection_id).unwrap();
+        assert!(!client.sessions.contains_key(&revoked_session));
+        assert_eq!(client.sessions.get(&retained_session), Some(&false));
+        assert!(!client.presence.contains_key("revoked:presence"));
+        drop(state);
+
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(ServerMessage::Unsubscribed {
+                session_id,
+                request_id: None,
+            }) if session_id == revoked_session
+        ));
     }
 }

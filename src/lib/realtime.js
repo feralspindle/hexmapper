@@ -234,6 +234,16 @@ class RustRealtime {
       }
       return
     }
+    if (message.type === 'unsubscribed') {
+      this.subscribedSessions.delete(message.session_id)
+      for (const channel of this.channels) {
+        if (channel.sessionId !== message.session_id) continue
+        channel.hasPresenceSnapshot = false
+        channel.presences = []
+        channel.statusCallback?.('CLOSED')
+      }
+      return
+    }
     if (message.type === 'error') {
       console.warn('[realtime]', message.code, message.message)
       return

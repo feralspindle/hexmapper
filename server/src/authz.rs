@@ -23,6 +23,43 @@ pub async fn is_session_member(pool: &PgPool, user_id: Uuid, session_id: Uuid) -
     Ok(is_member)
 }
 
+/// Returns the currently authorized subscriptions and whether the user owns each
+/// session. A single query keeps heartbeat revalidation bounded per connection.
+pub async fn authorized_session_roles(
+    pool: &PgPool,
+    user_id: Uuid,
+    session_ids: &[Uuid],
+) -> Result<Vec<(Uuid, bool)>, AppError> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let roles = sqlx::query_as::<_, (Uuid, bool)>(
+        r#"
+        select requested.session_id,
+               exists (
+                   select 1 from sessions s
+                   where s.id = requested.session_id and s.owner_id = $1
+               ) as is_gm
+        from unnest($2::uuid[]) as requested(session_id)
+        where exists (
+            select 1 from sessions s
+            where s.id = requested.session_id and s.owner_id = $1
+        )
+        or exists (
+            select 1 from session_members sm
+            where sm.session_id = requested.session_id and sm.user_id = $1
+        )
+        "#,
+    )
+    .bind(user_id)
+    .bind(session_ids)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(roles)
+}
+
 /// Mirrors the ownership check in roll_dice: the character must belong to the caller.
 pub async fn owns_character(pool: &PgPool, user_id: Uuid, character_id: Uuid) -> Result<bool, AppError> {
     let owns: bool = sqlx::query_scalar(
