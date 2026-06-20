@@ -7,7 +7,7 @@
 //! record one event per affected cell, so the changes stay in the log.
 
 use serde_json::Value;
-use sqlx::{Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -37,6 +37,62 @@ fn snapshot_columns(s: &str) -> String {
 }
 
 const COLS: &str = "id, session_id, q, r, label, notes, terrain_type, color, has_dungeon, source_client, created_at, updated_at, revealed, map_id, marker_color, marker_label, gm_markers";
+
+/// Returns hex cells for a session, optionally scoped to one map. GM callers get
+/// complete rows; player callers get only revealed rows with server-only fields
+/// removed before the data leaves Postgres.
+pub async fn list(
+    pool: &PgPool,
+    session_id: Uuid,
+    map_id: Option<Uuid>,
+    include_gm_data: bool,
+) -> Result<Value, AppError> {
+    let rows: Value = sqlx::query_scalar(
+        r#"
+        select coalesce(
+            jsonb_agg(
+                case
+                    when $3 then to_jsonb(h)
+                    else to_jsonb(h) - 'gm_markers' - 'source_client'
+                end
+                order by h.map_id, h.q, h.r
+            ),
+            '[]'::jsonb
+        )
+        from hex_cells h
+        where h.session_id = $1
+          and ($2::uuid is null or h.map_id = $2)
+          and ($3 or h.revealed = true)
+        "#,
+    )
+    .bind(session_id)
+    .bind(map_id)
+    .bind(include_gm_data)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(rows)
+}
+
+/// Player edits are limited to cells that are already visible to players. This
+/// also prevents an upsert from being used as a hidden-cell read oracle.
+pub async fn is_revealed(pool: &PgPool, map_id: Uuid, q: i32, r: i32) -> Result<bool, AppError> {
+    let revealed: bool = sqlx::query_scalar(
+        r#"
+        select coalesce(
+            (select revealed from hex_cells where map_id = $1 and q = $2 and r = $3),
+            false
+        )
+        "#,
+    )
+    .bind(map_id)
+    .bind(q)
+    .bind(r)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(revealed)
+}
 
 /// Upserts a hex cell (insert-or-partial-update by map_id,q,r) and records a
 /// `hex_cell.upserted` snapshot. `body` carries the cell fields; session_id is bound

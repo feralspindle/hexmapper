@@ -57,6 +57,8 @@ function cellKey(q, r) {
   return `${q}:${r}`;
 }
 
+const PLAYER_HEX_REFRESH_MS = 5000;
+
 export const useHexStore = defineStore("hex", () => {
   const CLIENT_ID = crypto.randomUUID();
   const hexCells = ref(new Map());
@@ -69,6 +71,9 @@ export const useHexStore = defineStore("hex", () => {
   const currentMapId = ref(null);
   let channel = null;
   let partyChannel = null;
+  let playerRefreshTimer = null;
+  let playerRefreshDebounce = null;
+  let playerRefreshInFlight = false;
 
   const selectedCell = computed(() => {
     if (!selectedHex.value) return null;
@@ -78,31 +83,105 @@ export const useHexStore = defineStore("hex", () => {
     );
   });
 
-  async function init(sessionId, mapId) {
-    loading.value = true;
-    currentSessionId.value = sessionId;
-    currentMapId.value = mapId;
-    hexCells.value = new Map();
-    selectedHex.value = null;
+  function _replaceHexCells(rows) {
+    const next = new Map();
+    for (const row of rows) {
+      next.set(cellKey(row.q, row.r), row);
+    }
+    hexCells.value = next;
+  }
+
+  async function _fetchHexRows(sessionId, mapId, isGM) {
+    if (!isGM) {
+      const query = new URLSearchParams({
+        session_id: sessionId,
+        map_id: mapId,
+      });
+      return apiClient.get(`/hex-cells?${query.toString()}`);
+    }
 
     const { data, error } = await supabase
       .from("hex_cells")
       .select("*")
       .eq("map_id", mapId);
 
-    if (!error && data) {
-      const map = new Map();
-      const isGM = useSessionStore().isGM;
-      for (const row of data) {
-        if (isGM) {
-          map.set(cellKey(row.q, row.r), row);
-        } else {
-          const stripped = { ...row };
-          delete stripped.gm_markers;
-          map.set(cellKey(row.q, row.r), stripped);
-        }
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async function _refreshPlayerHexes() {
+    if (
+      playerRefreshInFlight ||
+      useSessionStore().isGM ||
+      !currentSessionId.value ||
+      !currentMapId.value
+    ) {
+      return;
+    }
+
+    const sessionId = currentSessionId.value;
+    const mapId = currentMapId.value;
+    playerRefreshInFlight = true;
+    try {
+      const rows = await _fetchHexRows(sessionId, mapId, false);
+      if (
+        currentSessionId.value === sessionId &&
+        currentMapId.value === mapId &&
+        !useSessionStore().isGM
+      ) {
+        _replaceHexCells(rows);
       }
-      hexCells.value = map;
+    } catch (error) {
+      console.error(
+        "refreshPlayerHexes error:",
+        error instanceof ApiError ? error.message : error,
+      );
+    } finally {
+      playerRefreshInFlight = false;
+    }
+  }
+
+  function _schedulePlayerRefresh() {
+    if (playerRefreshDebounce || useSessionStore().isGM) return;
+    playerRefreshDebounce = setTimeout(() => {
+      playerRefreshDebounce = null;
+      void _refreshPlayerHexes();
+    }, 100);
+  }
+
+  function _stopPlayerRefresh() {
+    if (playerRefreshTimer) clearInterval(playerRefreshTimer);
+    playerRefreshTimer = null;
+    if (playerRefreshDebounce) clearTimeout(playerRefreshDebounce);
+    playerRefreshDebounce = null;
+    playerRefreshInFlight = false;
+  }
+
+  function _notifyHexChanged() {
+    void channel?.send({
+      type: "broadcast",
+      event: "refresh",
+      payload: {},
+    });
+  }
+
+  async function init(sessionId, mapId) {
+    loading.value = true;
+    currentSessionId.value = sessionId;
+    currentMapId.value = mapId;
+    hexCells.value = new Map();
+    selectedHex.value = null;
+    _stopPlayerRefresh();
+
+    const isGM = useSessionStore().isGM;
+    try {
+      const rows = await _fetchHexRows(sessionId, mapId, isGM);
+      _replaceHexCells(rows);
+    } catch (error) {
+      console.error(
+        "hex init error:",
+        error instanceof ApiError ? error.message : error,
+      );
     }
     loading.value = false;
 
@@ -111,7 +190,12 @@ export const useHexStore = defineStore("hex", () => {
     if (channel) supabase.removeChannel(channel);
     channel = supabase
       .channel(`map:${mapId}:hex`)
-      .on(
+      .on("broadcast", { event: "refresh" }, () => {
+        _schedulePlayerRefresh();
+      });
+
+    if (isGM) {
+      channel.on(
         "postgres_changes",
         {
           event: "*",
@@ -120,8 +204,15 @@ export const useHexStore = defineStore("hex", () => {
           filter: `map_id=eq.${mapId}`,
         },
         handleRealtimeEvent,
-      )
-      .subscribe();
+      );
+    } else {
+      playerRefreshTimer = setInterval(
+        () => void _refreshPlayerHexes(),
+        PLAYER_HEX_REFRESH_MS,
+      );
+    }
+
+    channel.subscribe();
 
     if (partyChannel) supabase.removeChannel(partyChannel);
     partyChannel = supabase
@@ -307,6 +398,7 @@ export const useHexStore = defineStore("hex", () => {
           ? { ...data, gm_markers: merged.gm_markers }
           : data;
       hexCells.value.set(key, stored);
+      _notifyHexChanged();
     } catch (error) {
       if (existing) hexCells.value.set(key, existing);
       else hexCells.value.delete(key);
@@ -369,6 +461,7 @@ export const useHexStore = defineStore("hex", () => {
         q,
         r,
       }, "delete_hex");
+      _notifyHexChanged();
     } catch (error) {
       if (backup) hexCells.value.set(key, backup);
       console.error("deleteHex error:", error instanceof ApiError ? error.message : error);
@@ -477,6 +570,7 @@ export const useHexStore = defineStore("hex", () => {
         map_id: currentMapId.value,
         revealed,
       }, revealed ? "reveal_all_hexes" : "hide_all_hexes");
+      _notifyHexChanged();
     } catch (error) {
       console.error("bulkReveal error:", error instanceof ApiError ? error.message : error);
       await init(currentSessionId.value, currentMapId.value);
@@ -509,10 +603,12 @@ export const useHexStore = defineStore("hex", () => {
     }
     hexCells.value = new Map();
     selectedHex.value = null;
+    _notifyHexChanged();
     return true;
   }
 
   function cleanup() {
+    _stopPlayerRefresh();
     if (channel) supabase.removeChannel(channel);
     channel = null;
     if (partyChannel) supabase.removeChannel(partyChannel);

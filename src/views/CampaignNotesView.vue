@@ -66,6 +66,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 const route = useRoute()
 const sessionId = route.params.sessionId
@@ -73,23 +74,30 @@ const sessionId = route.params.sessionId
 const loading     = ref(true)
 const sessionName = ref('')
 const rawCells    = ref([])
+const mapNames    = ref(new Map())
 
 onMounted(async () => {
-  const [{ data: session }, { data: cells }] = await Promise.all([
+  const [{ data: session }, { data: maps }] = await Promise.all([
     supabase.from('sessions').select('name').eq('id', sessionId).single(),
     supabase
-      .from('hex_cells')
-      .select('id, q, r, label, notes, terrain_type, map_id, maps(id, name)')
+      .from('maps')
+      .select('id, name')
       .eq('session_id', sessionId)
-      .not('notes', 'is', null)
-      .neq('notes', '')
-      .order('map_id')
-      .order('q')
-      .order('r'),
   ])
 
   if (session) sessionName.value = session.name
-  if (cells)   rawCells.value    = cells
+  mapNames.value = new Map((maps ?? []).map(map => [map.id, map.name]))
+
+  try {
+    const query = new URLSearchParams({ session_id: sessionId })
+    const cells = await apiClient.get(`/hex-cells?${query.toString()}`)
+    rawCells.value = cells.filter(cell => cell.notes)
+  } catch (error) {
+    console.error(
+      'campaign notes hex load error:',
+      error instanceof ApiError ? error.message : error,
+    )
+  }
   loading.value = false
 })
 
@@ -99,7 +107,7 @@ const notesByMap = computed(() => {
     if (!groups.has(cell.map_id)) {
       groups.set(cell.map_id, {
         mapId:   cell.map_id,
-        mapName: cell.maps?.name ?? 'Unknown Map',
+        mapName: mapNames.value.get(cell.map_id) ?? 'Unknown Map',
         cells:   [],
       })
     }
