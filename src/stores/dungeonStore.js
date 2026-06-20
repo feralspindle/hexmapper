@@ -195,6 +195,7 @@ export const useD = defineStore('dungeon', () => {
     const dbPatch = {}
     if (patch.fogMode          !== undefined) dbPatch.fog_mode            = patch.fogMode
     if (patch.fogRevealAll     !== undefined) dbPatch.fog_reveal_all      = patch.fogRevealAll
+    if (patch.gmInitiative     !== undefined) dbPatch.gm_initiative       = patch.gmInitiative ?? null
     if (patch.mapImagePath     !== undefined) dbPatch.map_image_path      = patch.mapImagePath
     if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x  = patch.mapImageOffsetX
     if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y  = patch.mapImageOffsetY

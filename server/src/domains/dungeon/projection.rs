@@ -28,12 +28,13 @@ fn snapshot_columns(s: &str) -> String {
         ({s}->>'map_image_rotation')::int,
         ({s}->>'fog_mode')::boolean,
         ({s}->>'fog_reveal_all')::boolean,
-        ({s}->>'map_offset_locked')::boolean
+        ({s}->>'map_offset_locked')::boolean,
+        ({s}->>'gm_initiative')::integer
         "#
     )
 }
 
-const COLS: &str = "id, session_id, hex_id, name, created_at, updated_at, torch_running, torch_elapsed_ms, torch_started_at, map_image_path, map_image_offset_x, map_image_offset_y, map_image_scale, map_image_rotation, fog_mode, fog_reveal_all, map_offset_locked";
+const COLS: &str = "id, session_id, hex_id, name, created_at, updated_at, torch_running, torch_elapsed_ms, torch_started_at, map_image_path, map_image_offset_x, map_image_offset_y, map_image_scale, map_image_rotation, fog_mode, fog_reveal_all, map_offset_locked, gm_initiative";
 
 /// Wraps a `dungeons` mutation that exposes `s` (the updated row) in a
 /// `dungeon.<event>` snapshot event. Returns the row JSON (or None if 0 rows).
@@ -114,6 +115,7 @@ pub async fn update(
             fog_mode           = case when $3 ? 'fog_mode' then ($3->>'fog_mode')::boolean else fog_mode end,
             fog_reveal_all     = case when $3 ? 'fog_reveal_all' then ($3->>'fog_reveal_all')::boolean else fog_reveal_all end,
             map_offset_locked  = case when $3 ? 'map_offset_locked' then ($3->>'map_offset_locked')::boolean else map_offset_locked end,
+            gm_initiative      = case when $3 ? 'gm_initiative' then ($3->>'gm_initiative')::integer else gm_initiative end,
             torch_running      = case when $3 ? 'torch_running' then ($3->>'torch_running')::boolean else torch_running end,
             torch_elapsed_ms   = case when $3 ? 'torch_elapsed_ms' then ($3->>'torch_elapsed_ms')::bigint else torch_elapsed_ms end,
             torch_started_at   = case when $3 ? 'torch_started_at' then ($3->>'torch_started_at')::timestamptz else torch_started_at end,
