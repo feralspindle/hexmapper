@@ -8,6 +8,7 @@ use crate::auth::AuthUser;
 use crate::authz;
 use crate::domains::map::projection;
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 /// Body is the full set of map fields to set; must include `session_id`.
@@ -27,9 +28,9 @@ pub async fn create_map(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::create(&mut tx, Uuid::new_v4(), session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::create(&mut tx, Uuid::new_v4(), session_id, &body, &metadata).await
+    })?;
 
     Ok(Json(row))
 }
@@ -46,9 +47,9 @@ pub async fn update_map(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -64,9 +65,9 @@ pub async fn delete_map(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::delete(&mut tx, id, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

@@ -8,6 +8,7 @@ use crate::auth::AuthUser;
 use crate::authz;
 use crate::domains::calendar::projection;
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -26,9 +27,9 @@ pub async fn update_settings(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::update_settings(&mut tx, req.session_id, &req.settings, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::update_settings(&mut tx, req.session_id, &req.settings, &metadata).await
+    })?;
 
     Ok(Json(row))
 }
@@ -52,18 +53,18 @@ pub async fn upsert_day(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::upsert_day(
-        &mut tx,
-        req.session_id,
-        req.year,
-        req.month,
-        req.day,
-        &req.patch,
-        &metadata,
-    )
-    .await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::upsert_day(
+            &mut tx,
+            req.session_id,
+            req.year,
+            req.month,
+            req.day,
+            &req.patch,
+            &metadata,
+        )
+        .await
+    })?;
 
     Ok(Json(row))
 }

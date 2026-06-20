@@ -13,6 +13,7 @@ use crate::authz;
 use crate::domains::dice::{annotation_projection, projection};
 use crate::error::AppError;
 use crate::events::NewEvent;
+use crate::retry_tx;
 use crate::state::AppState;
 
 const ALLOWED_DICE: &[&str] = &["d1", "d4", "d6", "d8", "d10", "d12", "d20", "d100"];
@@ -95,9 +96,9 @@ pub async fn create_annotation(
         metadata: auth.metadata_with(json!({ "display_name": display_name })),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = annotation_projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        annotation_projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
@@ -139,9 +140,9 @@ pub async fn roll_dice(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }

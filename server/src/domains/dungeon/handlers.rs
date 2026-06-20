@@ -9,6 +9,7 @@ use crate::auth::AuthUser;
 use crate::authz;
 use crate::domains::dungeon::{corridor_projection, fog_projection, projection, room_projection};
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 fn body_uuid(body: &Value, key: &str) -> Result<Uuid, AppError> {
@@ -37,9 +38,9 @@ pub async fn create_dungeon(
     }
     let name = req.name.as_deref().unwrap_or("Unnamed Dungeon");
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::create(&mut tx, Uuid::new_v4(), req.session_id, req.hex_id, name, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::create(&mut tx, Uuid::new_v4(), req.session_id, req.hex_id, name, &metadata).await
+    })?;
     Ok(Json(row))
 }
 
@@ -54,9 +55,9 @@ pub async fn update_dungeon(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -77,14 +78,15 @@ pub async fn torch(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    match req.action.as_str() {
-        "start" => projection::torch_start(&mut tx, id, &metadata).await?,
-        "pause" => projection::torch_pause(&mut tx, id, &metadata).await?,
-        "reset" => projection::torch_reset(&mut tx, id, &metadata).await?,
-        other => return Err(AppError::BadRequest(format!("unknown torch action: {other}"))),
-    }
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        match req.action.as_str() {
+            "start" => projection::torch_start(&mut tx, id, &metadata).await?,
+            "pause" => projection::torch_pause(&mut tx, id, &metadata).await?,
+            "reset" => projection::torch_reset(&mut tx, id, &metadata).await?,
+            other => return Err(AppError::BadRequest(format!("unknown torch action: {other}"))),
+        }
+        Ok(())
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -126,9 +128,9 @@ pub async fn create_room(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = member_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = room_projection::create(&mut tx, dungeon_id, session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        room_projection::create(&mut tx, dungeon_id, session_id, &body, &metadata).await
+    })?;
     Ok(Json(row))
 }
 
@@ -140,9 +142,9 @@ pub async fn update_room(
 ) -> Result<StatusCode, AppError> {
     member_for_row(&state, auth.user_id, authz::SessionTable::DungeonRooms, id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    room_projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        room_projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -153,9 +155,9 @@ pub async fn delete_room(
 ) -> Result<StatusCode, AppError> {
     member_for_row(&state, auth.user_id, authz::SessionTable::DungeonRooms, id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    room_projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        room_projection::delete(&mut tx, id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -167,9 +169,9 @@ pub async fn create_corridor(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = member_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = corridor_projection::create(&mut tx, dungeon_id, session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        corridor_projection::create(&mut tx, dungeon_id, session_id, &body, &metadata).await
+    })?;
     Ok(Json(row))
 }
 
@@ -181,9 +183,9 @@ pub async fn update_corridor(
 ) -> Result<StatusCode, AppError> {
     member_for_row(&state, auth.user_id, authz::SessionTable::DungeonCorridors, id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    corridor_projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        corridor_projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -194,9 +196,9 @@ pub async fn delete_corridor(
 ) -> Result<StatusCode, AppError> {
     member_for_row(&state, auth.user_id, authz::SessionTable::DungeonCorridors, id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    corridor_projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        corridor_projection::delete(&mut tx, id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -210,9 +212,9 @@ pub async fn fog_reveal(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = gm_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    fog_projection::reveal_one(&mut tx, session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        fog_projection::reveal_one(&mut tx, session_id, &body, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -224,9 +226,9 @@ pub async fn fog_hide(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = gm_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    fog_projection::hide_one(&mut tx, session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        fog_projection::hide_one(&mut tx, session_id, &body, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -238,9 +240,9 @@ pub async fn fog_reveal_bulk(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = gm_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    fog_projection::reveal_bulk(&mut tx, session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        fog_projection::reveal_bulk(&mut tx, session_id, &body, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -252,9 +254,9 @@ pub async fn fog_hide_bulk(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = gm_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    fog_projection::hide_bulk(&mut tx, session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        fog_projection::hide_bulk(&mut tx, session_id, &body, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -266,8 +268,8 @@ pub async fn fog_clear(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = gm_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    fog_projection::clear_all(&mut tx, dungeon_id, session_id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        fog_projection::clear_all(&mut tx, dungeon_id, session_id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }

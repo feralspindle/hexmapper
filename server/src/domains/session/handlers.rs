@@ -10,6 +10,7 @@ use crate::authz;
 use crate::domains::session::member_projection;
 use crate::domains::session::projection;
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -24,9 +25,9 @@ pub async fn create_session(
 ) -> Result<Json<Value>, AppError> {
     let name = req.name.as_deref().unwrap_or("Untitled Campaign");
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::create(&mut tx, Uuid::new_v4(), auth.user_id, name, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::create(&mut tx, Uuid::new_v4(), auth.user_id, name, &metadata).await
+    })?;
     Ok(Json(row))
 }
 
@@ -41,9 +42,9 @@ pub async fn update_session(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
     row.map(Json).ok_or(AppError::NotFound)
 }
 
@@ -56,9 +57,9 @@ pub async fn delete_session(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::delete(&mut tx, id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -78,14 +79,15 @@ pub async fn torch(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    match req.action.as_str() {
-        "start" => projection::torch_start(&mut tx, id, &metadata).await?,
-        "pause" => projection::torch_pause(&mut tx, id, &metadata).await?,
-        "reset" => projection::torch_reset(&mut tx, id, &metadata).await?,
-        other => return Err(AppError::BadRequest(format!("unknown torch action: {other}"))),
-    }
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        match req.action.as_str() {
+            "start" => projection::torch_start(&mut tx, id, &metadata).await?,
+            "pause" => projection::torch_pause(&mut tx, id, &metadata).await?,
+            "reset" => projection::torch_reset(&mut tx, id, &metadata).await?,
+            other => return Err(AppError::BadRequest(format!("unknown torch action: {other}"))),
+        }
+        Ok(())
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -99,15 +101,16 @@ pub async fn join_session(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, AppError> {
-    let mut tx = state.pool().begin().await?;
-    let session: Option<Value> = sqlx::query_scalar("select to_jsonb(s) from sessions s where id = $1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    let session = session.ok_or(AppError::NotFound)?;
     let metadata = auth.metadata();
-    member_projection::join(&mut tx, id, auth.user_id, &metadata).await?;
-    tx.commit().await?;
+    let session = retry_tx!(state.pool(), |tx| {
+        let session: Option<Value> = sqlx::query_scalar("select to_jsonb(s) from sessions s where id = $1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+        let session = session.ok_or(AppError::NotFound)?;
+        member_projection::join(&mut tx, id, auth.user_id, &metadata).await?;
+        Ok(session)
+    })?;
     Ok(Json(session))
 }
 
@@ -125,8 +128,8 @@ pub async fn set_active_member(
     Json(req): Json<SetActiveRequest>,
 ) -> Result<StatusCode, AppError> {
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    member_projection::set_active(&mut tx, req.session_id, auth.user_id, req.active_character_id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        member_projection::set_active(&mut tx, req.session_id, auth.user_id, req.active_character_id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }

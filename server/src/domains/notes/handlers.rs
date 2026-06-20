@@ -11,6 +11,7 @@ use crate::authz;
 use crate::domains::notes::{dungeon_projection, projection};
 use crate::error::AppError;
 use crate::events::NewEvent;
+use crate::retry_tx;
 use crate::state::AppState;
 
 const MAX_BODY_LEN: usize = 5000;
@@ -70,9 +71,9 @@ pub async fn create_hex_note(
         metadata: auth.metadata_with(json!({ "display_name": display_name })),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
@@ -100,9 +101,9 @@ pub async fn edit_hex_note(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_edit(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_edit(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
@@ -128,9 +129,9 @@ pub async fn delete_hex_note(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    projection::append_and_unproject(&mut tx, &event).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::append_and_unproject(&mut tx, &event).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -176,9 +177,9 @@ pub async fn create_dungeon_note(
         metadata: auth.metadata_with(json!({ "display_name": display_name })),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = dungeon_projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        dungeon_projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
@@ -206,9 +207,9 @@ pub async fn edit_dungeon_note(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = dungeon_projection::append_and_edit(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        dungeon_projection::append_and_edit(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
@@ -234,9 +235,9 @@ pub async fn delete_dungeon_note(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    dungeon_projection::append_and_unproject(&mut tx, &event).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        dungeon_projection::append_and_unproject(&mut tx, &event).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

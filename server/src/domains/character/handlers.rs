@@ -9,6 +9,7 @@ use crate::auth::AuthUser;
 use crate::authz;
 use crate::domains::character::projection;
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -29,9 +30,9 @@ pub async fn create_character(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::create(&mut tx, Uuid::new_v4(), req.session_id, auth.user_id, &req.data, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::create(&mut tx, Uuid::new_v4(), req.session_id, auth.user_id, &req.data, &metadata).await
+    })?;
 
     Ok(Json(row))
 }
@@ -62,9 +63,9 @@ pub async fn update_character_data(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::update_data(&mut tx, id, &req.data, &metadata).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::update_data(&mut tx, id, &req.data, &metadata).await
+    })?;
 
     Ok(Json(row))
 }
@@ -82,9 +83,9 @@ pub async fn delete_character(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::delete(&mut tx, id, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -104,9 +105,9 @@ pub async fn clear_initiative(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::clear_initiative(&mut tx, req.session_id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::clear_initiative(&mut tx, req.session_id, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -128,18 +129,18 @@ pub async fn record_sheet_log(
 
     let display_name = authz::resolve_display_name(state.pool(), auth.user_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_sheet_log(
-        &mut tx,
-        Uuid::new_v4(),
-        req.session_id,
-        auth.user_id,
-        &display_name,
-        &req.what,
-        &metadata,
-    )
-    .await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_sheet_log(
+            &mut tx,
+            Uuid::new_v4(),
+            req.session_id,
+            auth.user_id,
+            &display_name,
+            &req.what,
+            &metadata,
+        )
+        .await
+    })?;
 
     Ok(Json(row))
 }

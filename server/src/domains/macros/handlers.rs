@@ -13,6 +13,7 @@ use crate::authz;
 use crate::domains::macros::projection;
 use crate::error::AppError;
 use crate::events::NewEvent;
+use crate::retry_tx;
 use crate::state::AppState;
 
 const MAX_LABEL_LEN: usize = 100;
@@ -63,9 +64,9 @@ pub async fn save_macro(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
@@ -88,9 +89,9 @@ pub async fn delete_macro(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    projection::append_and_unproject(&mut tx, &event).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::append_and_unproject(&mut tx, &event).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

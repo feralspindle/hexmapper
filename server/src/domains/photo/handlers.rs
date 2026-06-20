@@ -11,6 +11,7 @@ use crate::authz;
 use crate::domains::photo::projection;
 use crate::error::AppError;
 use crate::events::NewEvent;
+use crate::retry_tx;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -53,9 +54,9 @@ pub async fn create_photo(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project_photo(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project_photo(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
@@ -93,9 +94,9 @@ pub async fn delete_photo(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    projection::append_and_unproject_photo(&mut tx, &event).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::append_and_unproject_photo(&mut tx, &event).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -143,9 +144,9 @@ pub async fn broadcast_photo(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project_broadcast(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project_broadcast(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }

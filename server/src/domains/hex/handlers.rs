@@ -9,6 +9,7 @@ use crate::auth::AuthUser;
 use crate::authz;
 use crate::domains::hex::projection;
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 fn uuid_body_field(body: &Value, field: &str) -> Result<Uuid, AppError> {
@@ -107,9 +108,9 @@ pub async fn upsert_hex(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let mut row = projection::upsert(&mut tx, session_id, &body, &metadata).await?;
-    tx.commit().await?;
+    let mut row = retry_tx!(state.pool(), |tx| {
+        projection::upsert(&mut tx, session_id, &body, &metadata).await
+    })?;
 
     if !is_gm {
         row = player_visible_row(row).ok_or(AppError::Forbidden)?;
@@ -136,9 +137,9 @@ pub async fn delete_hex(
     }
     ensure_map_in_session(&state, req.map_id, req.session_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::delete_one(&mut tx, req.map_id, req.q, req.r, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::delete_one(&mut tx, req.map_id, req.q, req.r, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -159,9 +160,9 @@ pub async fn bulk_reveal(
     }
     ensure_map_in_session(&state, req.map_id, req.session_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::set_revealed(&mut tx, req.map_id, req.revealed, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::set_revealed(&mut tx, req.map_id, req.revealed, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -181,9 +182,9 @@ pub async fn clear_hex(
     }
     ensure_map_in_session(&state, req.map_id, req.session_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::clear_all(&mut tx, req.map_id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::clear_all(&mut tx, req.map_id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -8,6 +8,7 @@ use crate::auth::AuthUser;
 use crate::domains::prefs::projection;
 use crate::error::AppError;
 use crate::events::NewEvent;
+use crate::retry_tx;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -53,9 +54,9 @@ pub async fn save_prefs(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }

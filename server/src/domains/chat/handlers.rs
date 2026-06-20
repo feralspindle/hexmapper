@@ -10,6 +10,7 @@ use crate::authz;
 use crate::domains::chat::projection;
 use crate::error::AppError;
 use crate::events::NewEvent;
+use crate::retry_tx;
 use crate::state::AppState;
 
 const MAX_BODY_LEN: usize = 2000;
@@ -58,9 +59,9 @@ pub async fn send_message(
         metadata: auth.metadata(),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }

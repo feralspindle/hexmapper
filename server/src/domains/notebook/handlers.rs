@@ -9,6 +9,7 @@ use crate::auth::AuthUser;
 use crate::authz;
 use crate::domains::notebook::{projection, session_note_projection};
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -32,19 +33,19 @@ pub async fn create_quest(
     let is_gm_added = authz::is_session_gm(state.pool(), auth.user_id, req.session_id).await?;
     let metadata = auth.metadata();
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::create(
-        &mut tx,
-        Uuid::new_v4(),
-        req.session_id,
-        &added_by_name,
-        is_gm_added,
-        req.display_order,
-        req.source_client.as_deref(),
-        &metadata,
-    )
-    .await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::create(
+            &mut tx,
+            Uuid::new_v4(),
+            req.session_id,
+            &added_by_name,
+            is_gm_added,
+            req.display_order,
+            req.source_client.as_deref(),
+            &metadata,
+        )
+        .await
+    })?;
 
     Ok(Json(row))
 }
@@ -63,9 +64,9 @@ pub async fn update_quest(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -83,9 +84,9 @@ pub async fn delete_quest(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        projection::delete(&mut tx, id, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -109,19 +110,19 @@ pub async fn create_session_note(
     let is_gm_author = authz::is_session_gm(state.pool(), auth.user_id, req.session_id).await?;
     let metadata = auth.metadata();
 
-    let mut tx = state.pool().begin().await?;
-    let row = session_note_projection::create(
-        &mut tx,
-        Uuid::new_v4(),
-        req.session_id,
-        &author_name,
-        &auth.user_id.to_string(),
-        is_gm_author,
-        req.source_client.as_deref(),
-        &metadata,
-    )
-    .await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        session_note_projection::create(
+            &mut tx,
+            Uuid::new_v4(),
+            req.session_id,
+            &author_name,
+            &auth.user_id.to_string(),
+            is_gm_author,
+            req.source_client.as_deref(),
+            &metadata,
+        )
+        .await
+    })?;
 
     Ok(Json(row))
 }
@@ -142,9 +143,9 @@ pub async fn update_session_note(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    session_note_projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        session_note_projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -164,9 +165,9 @@ pub async fn delete_session_note(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    session_note_projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        session_note_projection::delete(&mut tx, id, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

@@ -9,6 +9,7 @@ use crate::auth::AuthUser;
 use crate::authz;
 use crate::domains::vault::{container_projection, item_projection, ledger_projection, loot_projection};
 use crate::error::AppError;
+use crate::retry_tx;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -30,18 +31,18 @@ pub async fn create_container(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = container_projection::create(
-        &mut tx,
-        Uuid::new_v4(),
-        req.session_id,
-        req.name.trim(),
-        req.gear_slots,
-        req.source_client.as_deref(),
-        &metadata,
-    )
-    .await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        container_projection::create(
+            &mut tx,
+            Uuid::new_v4(),
+            req.session_id,
+            req.name.trim(),
+            req.gear_slots,
+            req.source_client.as_deref(),
+            &metadata,
+        )
+        .await
+    })?;
 
     Ok(Json(row))
 }
@@ -59,9 +60,9 @@ pub async fn delete_container(
     }
 
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    container_projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        container_projection::delete(&mut tx, id, &metadata).await
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -95,12 +96,12 @@ pub async fn create_loot(
     }
     let added_by_name = authz::resolve_display_name(state.pool(), auth.user_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = loot_projection::create(
-        &mut tx, Uuid::new_v4(), req.session_id, req.name.trim(), req.quantity, &req.notes,
-        &req.loot_type, req.currency.as_deref(), &added_by_name, req.source_client.as_deref(), &metadata,
-    ).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        loot_projection::create(
+            &mut tx, Uuid::new_v4(), req.session_id, req.name.trim(), req.quantity, &req.notes,
+            &req.loot_type, req.currency.as_deref(), &added_by_name, req.source_client.as_deref(), &metadata,
+        ).await
+    })?;
     Ok(Json(row))
 }
 
@@ -114,9 +115,9 @@ pub async fn delete_loot(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    loot_projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        loot_projection::delete(&mut tx, id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -151,12 +152,12 @@ pub async fn create_item(
     }
     let added_by_name = authz::resolve_display_name(state.pool(), auth.user_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = item_projection::create(
-        &mut tx, Uuid::new_v4(), req.session_id, req.container_id, req.name.trim(), req.quantity, &req.notes,
-        req.slots, &req.item_type, req.currency.as_deref(), &added_by_name, req.source_client.as_deref(), &metadata,
-    ).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        item_projection::create(
+            &mut tx, Uuid::new_v4(), req.session_id, req.container_id, req.name.trim(), req.quantity, &req.notes,
+            req.slots, &req.item_type, req.currency.as_deref(), &added_by_name, req.source_client.as_deref(), &metadata,
+        ).await
+    })?;
     Ok(Json(row))
 }
 
@@ -171,9 +172,9 @@ pub async fn update_item(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    item_projection::update(&mut tx, id, &patch, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        item_projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -187,9 +188,9 @@ pub async fn delete_item(
         return Err(AppError::Forbidden);
     }
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    item_projection::delete(&mut tx, id, &metadata).await?;
-    tx.commit().await?;
+    retry_tx!(state.pool(), |tx| {
+        item_projection::delete(&mut tx, id, &metadata).await
+    })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -218,11 +219,11 @@ pub async fn create_ledger_entry(
     }
     let display_name = authz::resolve_display_name(state.pool(), auth.user_id).await?;
     let metadata = auth.metadata();
-    let mut tx = state.pool().begin().await?;
-    let row = ledger_projection::create(
-        &mut tx, Uuid::new_v4(), req.session_id, &req.description, req.character_name.as_deref(),
-        &display_name, req.gold_change, req.silver_change, req.copper_change, &metadata,
-    ).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        ledger_projection::create(
+            &mut tx, Uuid::new_v4(), req.session_id, &req.description, req.character_name.as_deref(),
+            &display_name, req.gold_change, req.silver_change, req.copper_change, &metadata,
+        ).await
+    })?;
     Ok(Json(row))
 }

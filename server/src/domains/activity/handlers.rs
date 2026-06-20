@@ -10,6 +10,7 @@ use crate::authz;
 use crate::domains::activity::projection;
 use crate::error::AppError;
 use crate::events::NewEvent;
+use crate::retry_tx;
 use crate::state::AppState;
 
 const MAX_LEN: usize = 500;
@@ -71,9 +72,9 @@ pub async fn record_activity(
         metadata: auth.metadata_with(json!({ "display_name": display_name })),
     };
 
-    let mut tx = state.pool().begin().await?;
-    let row = projection::append_and_project(&mut tx, &event).await?;
-    tx.commit().await?;
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::append_and_project(&mut tx, &event).await
+    })?;
 
     Ok(Json(row))
 }
