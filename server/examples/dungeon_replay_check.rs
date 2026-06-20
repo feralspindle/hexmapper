@@ -47,7 +47,7 @@ async fn main() {
 
     let aggs = [
         Agg { name: "dungeon", table: "dungeons",
-            diff_cols: "id, session_id, hex_id, name, created_at, updated_at, torch_running, torch_elapsed_ms, torch_started_at, map_image_path, map_image_offset_x, map_image_offset_y, map_image_scale, map_image_rotation, fog_mode, fog_reveal_all, map_offset_locked",
+            diff_cols: "id, session_id, hex_id, name, created_at, updated_at, torch_running, torch_elapsed_ms, torch_started_at, map_image_path, map_image_offset_x, map_image_offset_y, map_image_scale, map_image_rotation, fog_mode, fog_reveal_all, map_offset_locked, gm_initiative",
             replay: projection::replay_select },
         Agg { name: "dungeon_room", table: "dungeon_rooms",
             diff_cols: "id, dungeon_id, session_id, origin_x, origin_y, width, height, label, notes, color, source_client, created_at, updated_at, items, doors, shape, points",

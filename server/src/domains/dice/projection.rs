@@ -17,7 +17,17 @@ use super::handlers::DiceRollRow;
 /// `display_name` is intentionally omitted — it is filled by the
 /// `fill_dice_display_name` trigger (a denormalized snapshot of the user's name at
 /// insert time), not carried in the event.
-fn projection_columns(src: &str) -> String {
+fn projection_columns(src: &str, reconcile_character_fk: bool) -> String {
+    let event_character_id = format!("nullif({src}.payload->>'character_id', '')::uuid");
+    let character_id = if reconcile_character_fk {
+        format!(
+            "case when exists (select 1 from characters c where c.id = {event_character_id}) \
+             then {event_character_id} else null end"
+        )
+    } else {
+        event_character_id
+    };
+
     format!(
         r#"
         {src}.aggregate_id,
@@ -28,7 +38,7 @@ fn projection_columns(src: &str) -> String {
         {src}.payload->'results',
         ({src}.payload->>'total')::int,
         {src}.payload->>'label',
-        nullif({src}.payload->>'character_id', '')::uuid,
+        {character_id},
         {src}.created_at
         "#
     )
@@ -52,7 +62,7 @@ pub async fn append_and_project(
         from evt
         returning id, session_id, user_id, display_name, pending, modifier, results, total, created_at, label, character_id
         "#,
-        cols = projection_columns("evt"),
+        cols = projection_columns("evt", false),
     );
 
     let row: DiceRollRow = sqlx::query_as(&sql)
@@ -80,6 +90,19 @@ pub fn replay_select(target_table: &str) -> String {
         where aggregate_type = 'dice_roll' and event_type = 'dice_roll.rolled'
         order by aggregate_id, sequence
         "#,
-        cols = projection_columns("events"),
+        cols = projection_columns("events", true),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::replay_select;
+
+    #[test]
+    fn replay_nulls_character_ids_that_no_longer_exist() {
+        let sql = replay_select("shadow_dice_rolls");
+
+        assert!(sql.contains("exists (select 1 from characters"));
+        assert!(sql.contains("then nullif(events.payload->>'character_id', '')::uuid else null"));
+    }
 }
