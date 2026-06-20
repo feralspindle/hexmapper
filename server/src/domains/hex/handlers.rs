@@ -11,17 +11,37 @@ use crate::domains::hex::projection;
 use crate::error::AppError;
 use crate::state::AppState;
 
+fn uuid_body_field(body: &Value, field: &str) -> Result<Uuid, AppError> {
+    body.get(field)
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or_else(|| AppError::BadRequest(format!("{field} required")))
+}
+
+async fn ensure_map_in_session(
+    state: &AppState,
+    map_id: Uuid,
+    session_id: Uuid,
+) -> Result<(), AppError> {
+    let map_session_id = authz::row_session_id(state.pool(), authz::SessionTable::Maps, map_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    if map_session_id != session_id {
+        return Err(AppError::Forbidden);
+    }
+
+    Ok(())
+}
+
 /// Body carries the cell fields, including `session_id`, `map_id`, `q`, `r`.
 pub async fn upsert_hex(
     State(state): State<AppState>,
     auth: AuthUser,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, AppError> {
-    let session_id = body
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or_else(|| AppError::BadRequest("session_id required".to_string()))?;
+    let session_id = uuid_body_field(&body, "session_id")?;
+    let map_id = uuid_body_field(&body, "map_id")?;
 
     // Members can paint terrain/markers; only the GM may change a hex's visibility.
     let changes_visibility = body.get("revealed").is_some();
@@ -33,6 +53,7 @@ pub async fn upsert_hex(
     if !authorized {
         return Err(AppError::Forbidden);
     }
+    ensure_map_in_session(&state, map_id, session_id).await?;
 
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
@@ -58,6 +79,7 @@ pub async fn delete_hex(
     if !authz::is_session_gm(state.pool(), auth.user_id, req.session_id).await? {
         return Err(AppError::Forbidden);
     }
+    ensure_map_in_session(&state, req.map_id, req.session_id).await?;
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
     projection::delete_one(&mut tx, req.map_id, req.q, req.r, &metadata).await?;
@@ -80,6 +102,7 @@ pub async fn bulk_reveal(
     if !authz::is_session_gm(state.pool(), auth.user_id, req.session_id).await? {
         return Err(AppError::Forbidden);
     }
+    ensure_map_in_session(&state, req.map_id, req.session_id).await?;
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
     projection::set_revealed(&mut tx, req.map_id, req.revealed, &metadata).await?;
@@ -101,6 +124,7 @@ pub async fn clear_hex(
     if !authz::is_session_gm(state.pool(), auth.user_id, req.session_id).await? {
         return Err(AppError::Forbidden);
     }
+    ensure_map_in_session(&state, req.map_id, req.session_id).await?;
     let metadata = auth.metadata();
     let mut tx = state.pool().begin().await?;
     projection::clear_all(&mut tx, req.map_id, &metadata).await?;
