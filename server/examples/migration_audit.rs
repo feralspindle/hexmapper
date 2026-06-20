@@ -78,4 +78,25 @@ async fn main() {
     let locked: i64 = sqlx::query_scalar("select count(*) from pg_policies where policyname like 'es_lock_%'").fetch_one(&p).await.unwrap();
     println!("\nRLS write-lock: {} es_lock policies -> {}", locked,
         if locked == 0 { "NOT locked (parallel run; old site writes allowed) ✓ for now" } else { "LOCKED (client writes blocked)" });
+
+    let events_select_policy: bool = sqlx::query_scalar(
+        "select exists (
+            select 1 from pg_policies
+            where schemaname = 'public' and tablename = 'events' and cmd = 'SELECT'
+              and exists (
+                select 1 from unnest(roles) role
+                where lower(role::text) in ('authenticated', 'public')
+              )
+        )",
+    )
+    .fetch_one(&p).await.unwrap();
+    let authenticated_select_grant: bool = sqlx::query_scalar(
+        "select has_table_privilege('authenticated', 'public.events', 'SELECT')",
+    )
+    .fetch_one(&p).await.unwrap();
+    println!("Raw client event reads: {}", if !events_select_policy && !authenticated_select_grant {
+        "BLOCKED (no SELECT policy or authenticated grant) ✓"
+    } else {
+        "EXPOSED — apply 20260620000043_drop_client_event_reads.sql"
+    });
 }

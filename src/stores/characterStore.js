@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playLuckSound } from '@/lib/diceSound.js'
@@ -432,9 +433,9 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   function _subscribeRealtime(sessionId) {
-    if (_realtimeChannel) supabase.removeChannel(_realtimeChannel)
-    _realtimeChannel = supabase
-      .channel(`characters:${sessionId}`)
+    if (_realtimeChannel) realtime.removeChannel(_realtimeChannel)
+    _realtimeChannel = realtime
+      .channel(`characters:${sessionId}`, { sessionId, onReconnect: () => loadAll(sessionId) })
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -579,7 +580,7 @@ export const useCharacterStore = defineStore('character', () => {
     _saveTimers.clear()
     for (const timer of _broadcastTimers.values()) clearTimeout(timer)
     _broadcastTimers.clear()
-    if (_realtimeChannel) { supabase.removeChannel(_realtimeChannel); _realtimeChannel = null }
+    if (_realtimeChannel) { realtime.removeChannel(_realtimeChannel); _realtimeChannel = null }
     characters.value = []
     activeId.value = null
     currentSessionId.value = null

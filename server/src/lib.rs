@@ -6,4 +6,5 @@ pub mod domains;
 pub mod error;
 pub mod events;
 pub mod observability;
+pub mod realtime;
 pub mod state;

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
@@ -103,10 +104,10 @@ export const useD = defineStore('dungeon', () => {
     }
   }
 
-  function _subscribeUndoChannel(dungeonId) {
-    if (undoChannel) supabase.removeChannel(undoChannel)
-    undoChannel = supabase
-      .channel(`dungeon:${dungeonId}:undo`)
+  function _subscribeUndoChannel(sessionId, dungeonId) {
+    if (undoChannel) realtime.removeChannel(undoChannel)
+    undoChannel = realtime
+      .channel(`dungeon:${dungeonId}:undo`, { sessionId })
       .on('broadcast', { event: 'undo_push' }, ({ payload }) => {
         if (payload._src === CLIENT_ID) return
         const { _src, ...action } = payload
@@ -116,10 +117,10 @@ export const useD = defineStore('dungeon', () => {
       .subscribe()
   }
 
-  function _subscribeChangesChannel(dungeonId) {
-    if (changesChannel) supabase.removeChannel(changesChannel)
-    changesChannel = supabase
-      .channel(`dungeon:${dungeonId}:changes`)
+  function _subscribeChangesChannel(sessionId, dungeonId) {
+    if (changesChannel) realtime.removeChannel(changesChannel)
+    changesChannel = realtime
+      .channel(`dungeon:${dungeonId}:changes`, { sessionId })
       .on('broadcast', { event: 'room_upsert' }, ({ payload }) => {
         if (payload._src === CLIENT_ID) return
         const editing = _editingRoom.value
@@ -338,15 +339,15 @@ export const useD = defineStore('dungeon', () => {
       loading.value = false
     }
 
-    if (dungeonChannel) supabase.removeChannel(dungeonChannel)
-    if (roomChannel) supabase.removeChannel(roomChannel)
-    if (corridorChannel) supabase.removeChannel(corridorChannel)
-    if (fogChannel) supabase.removeChannel(fogChannel)
-    _subscribeUndoChannel(dungeonId)
-    _subscribeChangesChannel(dungeonId)
+    if (dungeonChannel) realtime.removeChannel(dungeonChannel)
+    if (roomChannel) realtime.removeChannel(roomChannel)
+    if (corridorChannel) realtime.removeChannel(corridorChannel)
+    if (fogChannel) realtime.removeChannel(fogChannel)
+    _subscribeUndoChannel(sessionId, dungeonId)
+    _subscribeChangesChannel(sessionId, dungeonId)
 
-    dungeonChannel = supabase
-      .channel(`dungeon:${dungeonId}:meta`)
+    dungeonChannel = realtime
+      .channel(`dungeon:${dungeonId}:meta`, { sessionId, onReconnect: () => init(sessionId, dungeonId) })
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'dungeons', filter: `id=eq.${dungeonId}` },
@@ -357,8 +358,8 @@ export const useD = defineStore('dungeon', () => {
       )
       .subscribe()
 
-    fogChannel = supabase
-      .channel(`dungeon:${dungeonId}:fog`)
+    fogChannel = realtime
+      .channel(`dungeon:${dungeonId}:fog`, { sessionId })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'dungeon_fog_cells', filter: `dungeon_id=eq.${dungeonId}` },
@@ -375,8 +376,8 @@ export const useD = defineStore('dungeon', () => {
       )
       .subscribe()
 
-    roomChannel = supabase
-      .channel(`session:${sessionId}:dungeon:${dungeonId}:rooms`)
+    roomChannel = realtime
+      .channel(`session:${sessionId}:dungeon:${dungeonId}:rooms`, { sessionId })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'dungeon_rooms', filter: `dungeon_id=eq.${dungeonId}` },
@@ -404,8 +405,8 @@ export const useD = defineStore('dungeon', () => {
       )
       .subscribe()
 
-    corridorChannel = supabase
-      .channel(`session:${sessionId}:dungeon:${dungeonId}:corridors`)
+    corridorChannel = realtime
+      .channel(`session:${sessionId}:dungeon:${dungeonId}:corridors`, { sessionId })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'dungeon_corridors', filter: `dungeon_id=eq.${dungeonId}` },
@@ -420,7 +421,7 @@ export const useD = defineStore('dungeon', () => {
       .subscribe()
 
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
-    if (presenceChannel) supabase.removeChannel(presenceChannel)
+    if (presenceChannel) realtime.removeChannel(presenceChannel)
     const authStore = useAuthStore()
 
     const syncViewers = () => {
@@ -431,7 +432,8 @@ export const useD = defineStore('dungeon', () => {
       viewers.value = [...byUser.values()]
     }
 
-    presenceChannel = supabase.channel(`dungeon:${dungeonId}:presence`, {
+    presenceChannel = realtime.channel(`dungeon:${dungeonId}:presence`, {
+      sessionId,
       config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
     })
       .on('presence', { event: 'sync' }, syncViewers)
@@ -692,13 +694,13 @@ export const useD = defineStore('dungeon', () => {
 
   function cleanup() {
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
-    if (dungeonChannel)  supabase.removeChannel(dungeonChannel)
-    if (roomChannel)     supabase.removeChannel(roomChannel)
-    if (corridorChannel) supabase.removeChannel(corridorChannel)
-    if (presenceChannel) supabase.removeChannel(presenceChannel)
-    if (fogChannel)      supabase.removeChannel(fogChannel)
-    if (undoChannel)     supabase.removeChannel(undoChannel)
-    if (changesChannel)  supabase.removeChannel(changesChannel)
+    if (dungeonChannel)  realtime.removeChannel(dungeonChannel)
+    if (roomChannel)     realtime.removeChannel(roomChannel)
+    if (corridorChannel) realtime.removeChannel(corridorChannel)
+    if (presenceChannel) realtime.removeChannel(presenceChannel)
+    if (fogChannel)      realtime.removeChannel(fogChannel)
+    if (undoChannel)     realtime.removeChannel(undoChannel)
+    if (changesChannel)  realtime.removeChannel(changesChannel)
     if (_urlTimer)       { clearTimeout(_urlTimer); _urlTimer = null }
     dungeonChannel  = null
     roomChannel     = null

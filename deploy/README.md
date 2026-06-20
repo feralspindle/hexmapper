@@ -63,6 +63,7 @@ Browser → Cloudflare (edge TLS, CDN, /api/* cache-bypass)
    | `DEPLOY_SSH_KEY` | private key (matching an authorized key on the droplet) |
    | `VITE_SUPABASE_URL` | `https://<ref>.supabase.co` |
    | `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Supabase publishable/anon key |
+   | `VITE_REALTIME_TRANSPORT` | `supabase` during rollout, then `rust` after migrations through `20260620000043` are applied |
 
    (Pushing the image uses the built-in `GITHUB_TOKEN` — no secret needed.)
 

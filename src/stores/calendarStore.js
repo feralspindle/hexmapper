@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 const DEFAULT_SETTINGS = {
@@ -35,8 +36,8 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   function cleanup() {
-    if (settingsChannel) { supabase.removeChannel(settingsChannel); settingsChannel = null }
-    if (daysChannel)     { supabase.removeChannel(daysChannel);     daysChannel     = null }
+    if (settingsChannel) { realtime.removeChannel(settingsChannel); settingsChannel = null }
+    if (daysChannel)     { realtime.removeChannel(daysChannel);     daysChannel     = null }
     _sessionId = null
     settings.value = { ...DEFAULT_SETTINGS }
     days.value = []
@@ -72,8 +73,8 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   function _subscribeSettings(sessionId) {
-    settingsChannel = supabase
-      .channel(`calendar:settings:${sessionId}:${crypto.randomUUID()}`)
+    settingsChannel = realtime
+      .channel(`calendar:settings:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_calendar_settings',
         filter: `session_id=eq.${sessionId}`,
@@ -86,8 +87,8 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   function _subscribeDays(sessionId) {
-    daysChannel = supabase
-      .channel(`calendar:days:${sessionId}:${crypto.randomUUID()}`)
+    daysChannel = realtime
+      .channel(`calendar:days:${sessionId}:${crypto.randomUUID()}`, { sessionId })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_calendar_days',
         filter: `session_id=eq.${sessionId}`,

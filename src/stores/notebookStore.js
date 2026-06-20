@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
 import { useAuthStore } from '@/stores/authStore.js'
@@ -45,8 +46,8 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   function _subscribeEditing(sessionId) {
-    editChannel = supabase
-      .channel(`notebook:editing:${sessionId}`)
+    editChannel = realtime
+      .channel(`notebook:editing:${sessionId}`, { sessionId })
       .on('broadcast', { event: 'editing' }, ({ payload }) => {
         const authStore = useAuthStore()
         if (payload.user_id === (authStore.user?.id ?? CLIENT_ID)) return
@@ -90,9 +91,9 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   function cleanup() {
-    if (questsChannel) { supabase.removeChannel(questsChannel); questsChannel = null }
-    if (notesChannel)  { supabase.removeChannel(notesChannel);  notesChannel  = null }
-    if (editChannel)   { supabase.removeChannel(editChannel);   editChannel   = null }
+    if (questsChannel) { realtime.removeChannel(questsChannel); questsChannel = null }
+    if (notesChannel)  { realtime.removeChannel(notesChannel);  notesChannel  = null }
+    if (editChannel)   { realtime.removeChannel(editChannel);   editChannel   = null }
     _sessionId = null
     quests.value    = []
     notes.value     = []
@@ -121,8 +122,8 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   function _subscribeQuests(sessionId) {
-    questsChannel = supabase
-      .channel(`notebook:quests:${sessionId}:${crypto.randomUUID()}`)
+    questsChannel = realtime
+      .channel(`notebook:quests:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_quests',
         filter: `session_id=eq.${sessionId}`,
@@ -146,8 +147,8 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   function _subscribeNotes(sessionId) {
-    notesChannel = supabase
-      .channel(`notebook:notes:${sessionId}:${crypto.randomUUID()}`)
+    notesChannel = realtime
+      .channel(`notebook:notes:${sessionId}:${crypto.randomUUID()}`, { sessionId })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_session_notes',
         filter: `session_id=eq.${sessionId}`,

@@ -4,8 +4,10 @@
 
 drop policy if exists "hex_cells_player_select" on public.hex_cells;
 
--- Hex-cell event payloads contain complete snapshots, so the event log would
--- otherwise remain an alternate path to hidden cells and gm_markers.
+-- During the legacy Supabase Realtime rollout, preserve member reads for non-hex
+-- events while preventing hex event payloads from bypassing the API projection.
+-- Migration 00043 removes client event-log access entirely for the Rust WebSocket
+-- cutover and must remain ordered after this compatibility policy.
 drop policy if exists "events_select" on public.events;
 
 create policy "events_select" on public.events

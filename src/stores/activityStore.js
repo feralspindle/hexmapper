@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 export const useActivityStore = defineStore('activity', () => {
@@ -10,7 +11,7 @@ export const useActivityStore = defineStore('activity', () => {
 
   async function init(sessionId, dungeonId) {
     _dungeonId = dungeonId
-    if (channel) supabase.removeChannel(channel)
+    if (channel) realtime.removeChannel(channel)
 
     const { data } = await supabase
       .from('dungeon_activity')
@@ -21,8 +22,8 @@ export const useActivityStore = defineStore('activity', () => {
 
     activities.value = data ?? []
 
-    channel = supabase
-      .channel(`dungeon:${dungeonId}:activity`)
+    channel = realtime
+      .channel(`dungeon:${dungeonId}:activity`, { sessionId, onReconnect: () => init(sessionId, dungeonId) })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dungeon_activity', filter: `dungeon_id=eq.${dungeonId}` },
@@ -56,7 +57,7 @@ export const useActivityStore = defineStore('activity', () => {
   }
 
   function cleanup() {
-    if (channel) { supabase.removeChannel(channel); channel = null }
+    if (channel) { realtime.removeChannel(channel); channel = null }
     activities.value = []
     _dungeonId = null
   }

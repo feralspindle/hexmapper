@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playChatSound } from '@/lib/diceSound.js'
@@ -24,9 +25,9 @@ export const useChatStore = defineStore('chat', () => {
 
     if (data) messages.value = data
 
-    if (channel) supabase.removeChannel(channel)
-    channel = supabase
-      .channel(`session:${sessionId}:chat`)
+    if (channel) realtime.removeChannel(channel)
+    channel = realtime
+      .channel(`session:${sessionId}:chat`, { sessionId, onReconnect: () => init(sessionId) })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `session_id=eq.${sessionId}` },
@@ -72,7 +73,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function cleanup() {
-    if (channel) { supabase.removeChannel(channel); channel = null }
+    if (channel) { realtime.removeChannel(channel); channel = null }
     messages.value      = []
     latestMessage.value = null
     _sessionId          = null

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 
@@ -23,8 +24,8 @@ export const usePhotoStore = defineStore('photo', () => {
 
     await Promise.all([_loadPhotos(sessionId), _loadBroadcastHistory(sessionId)])
 
-    channel = supabase
-      .channel(`photo_broadcasts:${sessionId}`)
+    channel = realtime
+      .channel(`photo_broadcasts:${sessionId}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
       .on(
         'postgres_changes',
         {
@@ -146,7 +147,7 @@ export const usePhotoStore = defineStore('photo', () => {
   }
 
   function cleanup() {
-    if (channel) { supabase.removeChannel(channel); channel = null }
+    if (channel) { realtime.removeChannel(channel); channel = null }
     photos.value           = []
     broadcastHistory.value = []
     currentBroadcast.value = null

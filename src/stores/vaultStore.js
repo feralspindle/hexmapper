@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
@@ -44,11 +45,11 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function cleanup() {
-    if (lootChannel)       { supabase.removeChannel(lootChannel);       lootChannel       = null }
-    if (itemsChannel)      { supabase.removeChannel(itemsChannel);      itemsChannel      = null }
-    if (containersChannel) { supabase.removeChannel(containersChannel); containersChannel = null }
-    if (ledgerChannel)     { supabase.removeChannel(ledgerChannel);     ledgerChannel     = null }
-    if (toastChannel)      { supabase.removeChannel(toastChannel);      toastChannel      = null }
+    if (lootChannel)       { realtime.removeChannel(lootChannel);       lootChannel       = null }
+    if (itemsChannel)      { realtime.removeChannel(itemsChannel);      itemsChannel      = null }
+    if (containersChannel) { realtime.removeChannel(containersChannel); containersChannel = null }
+    if (ledgerChannel)     { realtime.removeChannel(ledgerChannel);     ledgerChannel     = null }
+    if (toastChannel)      { realtime.removeChannel(toastChannel);      toastChannel      = null }
     _sessionId       = null
     loot.value       = []
     items.value      = []
@@ -84,8 +85,8 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function _subscribeToasts(sessionId) {
-    toastChannel = supabase
-      .channel(`vault:toasts:${sessionId}`, { config: { broadcast: { self: true } } })
+    toastChannel = realtime
+      .channel(`vault:toasts:${sessionId}`, { sessionId, config: { broadcast: { self: true } } })
       .on('broadcast', { event: 'loot_toast' }, ({ payload }) => {
         useLootToast().push(payload)
       })
@@ -97,8 +98,8 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function _subscribeLoot(sessionId) {
-    lootChannel = supabase
-      .channel(`vault:loot:${sessionId}:${crypto.randomUUID()}`)
+    lootChannel = realtime
+      .channel(`vault:loot:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_loot', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
@@ -111,8 +112,8 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function _subscribeItems(sessionId) {
-    itemsChannel = supabase
-      .channel(`vault:items:${sessionId}:${crypto.randomUUID()}`)
+    itemsChannel = realtime
+      .channel(`vault:items:${sessionId}:${crypto.randomUUID()}`, { sessionId })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_items', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
@@ -128,8 +129,8 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function _subscribeContainers(sessionId) {
-    containersChannel = supabase
-      .channel(`vault:containers:${sessionId}:${crypto.randomUUID()}`)
+    containersChannel = realtime
+      .channel(`vault:containers:${sessionId}:${crypto.randomUUID()}`, { sessionId })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_containers', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
@@ -156,8 +157,8 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function _subscribeLedger(sessionId) {
-    ledgerChannel = supabase
-      .channel(`vault:ledger:${sessionId}:${crypto.randomUUID()}`)
+    ledgerChannel = realtime
+      .channel(`vault:ledger:${sessionId}:${crypto.randomUUID()}`, { sessionId })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'party_bank_ledger', filter: `session_id=eq.${sessionId}` }, e => {
         if (!ledger.value.find(l => l.id === e.new.id)) ledger.value = [e.new, ...ledger.value]
       })

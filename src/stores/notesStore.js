@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
@@ -34,8 +35,8 @@ export const useNotesStore = defineStore('notes', () => {
         if (currentContextKey !== key) return
         if (data) notes.value = data
 
-        channel = supabase
-          .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`)
+        channel = realtime
+          .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return initForHex(hexCellId, sessionId) } })
           .on('postgres_changes', {
             event: '*',
             schema: 'public',
@@ -72,8 +73,8 @@ export const useNotesStore = defineStore('notes', () => {
         if (currentContextKey !== key) return
         if (data) notes.value = data
 
-        channel = supabase
-          .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`)
+        channel = realtime
+          .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return initForDungeon(elementId, elementType, sessionId) } })
           .on('postgres_changes', {
             event: '*',
             schema: 'public',
@@ -183,7 +184,7 @@ export const useNotesStore = defineStore('notes', () => {
 
   function cleanup() {
     if (channel) {
-      supabase.removeChannel(channel)
+      realtime.removeChannel(channel)
       channel = null
     }
     notes.value = []

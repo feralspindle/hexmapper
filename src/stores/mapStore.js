@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 
@@ -139,9 +140,9 @@ export const useMapStore = defineStore('map', () => {
     const activeImgPath = activeMap.value?.map_image_path
     if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
 
-    if (mapChannel) supabase.removeChannel(mapChannel)
-    mapChannel = supabase
-      .channel(`session:${sessionId}:maps`)
+    if (mapChannel) realtime.removeChannel(mapChannel)
+    mapChannel = realtime
+      .channel(`session:${sessionId}:maps`, { sessionId, onReconnect: () => init(sessionId) })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'maps', filter: `session_id=eq.${sessionId}` },
@@ -166,7 +167,7 @@ export const useMapStore = defineStore('map', () => {
   }
 
   function cleanup() {
-    if (mapChannel) { supabase.removeChannel(mapChannel); mapChannel = null }
+    if (mapChannel) { realtime.removeChannel(mapChannel); mapChannel = null }
     Object.values(_urlTimers).forEach(clearTimeout)
     Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
     activeMapImageUrl.value = null

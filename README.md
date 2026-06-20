@@ -20,7 +20,7 @@ Live at [squeak.guru](https://squeak.guru) but signups are currently closed
 
 **Calendar** — in-world campaign calendar
 
-**Real-time sync** — state syncs across connected clients via supabase realtime (postgres_changes + broadcast) 
+**Real-time sync** — state syncs across connected clients through the Rust WebSocket server, with Supabase Realtime available during rollout
 
 
 ## Auth model
@@ -68,6 +68,8 @@ cargo run                   # http://localhost:8080
 ```
 
 The frontend `VITE_API_BASE_URL` defaults to `http://localhost:8080/api` in development.
+Set `VITE_REALTIME_TRANSPORT=rust` after applying the realtime notification migration;
+use `supabase` to retain the previous transport during rollout.
 
 The short version:
 

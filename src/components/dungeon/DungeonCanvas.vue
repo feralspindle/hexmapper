@@ -332,7 +332,7 @@ import { useDungeonDraw, CELL_SIZE, pixelToGrid, pixelToCell, corridorSegments }
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
-import { supabase } from '@/lib/supabase.js'
+import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 
 const FLOOR = '#ffffff'
@@ -415,10 +415,10 @@ function cursorColorFor(userId) {
 }
 
 function initCursorChannel(dungeonId) {
-  if (cursorChannel) supabase.removeChannel(cursorChannel)
+  if (cursorChannel) realtime.removeChannel(cursorChannel)
   if (_stopCursorWatch) { _stopCursorWatch(); _stopCursorWatch = null }
-  cursorChannel = supabase
-    .channel(`dungeon:${dungeonId}:cursors`)
+  cursorChannel = realtime
+    .channel(`dungeon:${dungeonId}:cursors`, { sessionId: sessionStore.sessionId })
     .on('broadcast', { event: 'cursor' }, ({ payload }) => {
       if (!payload?.userId || payload.userId === authStore.user?.id) return
       if (payload.hidden) {
@@ -2045,7 +2045,7 @@ onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
   resizeObserver.disconnect()
   window.removeEventListener('keydown', onKeyDown)
-  if (cursorChannel) supabase.removeChannel(cursorChannel)
+  if (cursorChannel) realtime.removeChannel(cursorChannel)
   if (_stopCursorWatch) _stopCursorWatch()
 })
 </script>

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import router from '@/router/index.js'
@@ -47,9 +48,15 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function _subscribeToSession(id) {
-    if (sessionChannel) supabase.removeChannel(sessionChannel)
-    sessionChannel = supabase
-      .channel(`session:${id}:config`)
+    if (sessionChannel) realtime.removeChannel(sessionChannel)
+    sessionChannel = realtime
+      .channel(`session:${id}:config`, {
+        sessionId: id,
+        onReconnect: async () => {
+          const { data } = await supabase.from('sessions').select('*').eq('id', id).maybeSingle()
+          if (data) _applySessionRow(data)
+        },
+      })
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${id}` },
@@ -169,17 +176,25 @@ export const useSessionStore = defineStore('session', () => {
 
   function initPresence(id) {
     const authStore = useAuthStore()
-    if (presenceChannel) supabase.removeChannel(presenceChannel)
+    if (presenceChannel) realtime.removeChannel(presenceChannel)
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
 
     let _ready = false
 
-    const channel = supabase
+    const channel = realtime
       .channel(`session:${id}:presence`, {
+        sessionId: id,
         config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
       })
 
     presenceChannel = channel
+
+    const trackPresence = () => channel.track({
+      user_id:      authStore.user?.id ?? null,
+      _clientId:    CLIENT_ID,
+      display_name: authStore.displayName ?? 'Adventurer',
+      avatar_url:   authStore.avatarUrl ?? null,
+    })
 
     const syncUsers = () => {
       const state = channel.presenceState()
@@ -202,30 +217,25 @@ export const useSessionStore = defineStore('session', () => {
       .on('presence', { event: 'leave' }, syncUsers)
       .subscribe(status => {
         if (status !== 'SUBSCRIBED') return
-        channel.track({
-          user_id:      authStore.user?.id ?? null,
-          _clientId:    CLIENT_ID,
-          display_name: authStore.displayName ?? 'Adventurer',
-          avatar_url:   authStore.avatarUrl ?? null,
-        })
+        trackPresence()
       })
 
     _stopAuthWatch = watch(
       () => authStore.user?.id,
       (userId, prev) => {
         if (!userId || userId === prev || !presenceChannel) return
-        presenceChannel.track({
-          user_id:      userId,
-          _clientId:    CLIENT_ID,
-          display_name: authStore.displayName ?? 'Adventurer',
-          avatar_url:   authStore.avatarUrl ?? null,
-        })
+        trackPresence()
       },
     )
 
     const handlePageHide = () => { if (presenceChannel) presenceChannel.untrack() }
+    const handlePageShow = () => { if (presenceChannel) trackPresence() }
     window.addEventListener('pagehide', handlePageHide)
-    _stopPageHide = () => window.removeEventListener('pagehide', handlePageHide)
+    window.addEventListener('pageshow', handlePageShow)
+    _stopPageHide = () => {
+      window.removeEventListener('pagehide', handlePageHide)
+      window.removeEventListener('pageshow', handlePageShow)
+    }
   }
 
   async function torchStart() {
@@ -251,13 +261,13 @@ export const useSessionStore = defineStore('session', () => {
   function cleanupPresence() {
     if (_stopPageHide)  { _stopPageHide(); _stopPageHide = null }
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
-    if (presenceChannel) { supabase.removeChannel(presenceChannel); presenceChannel = null }
+    if (presenceChannel) { realtime.removeChannel(presenceChannel); presenceChannel = null }
     onlineUsers.value = []
     latestJoin.value  = null
   }
 
   function cleanup() {
-    if (sessionChannel) { supabase.removeChannel(sessionChannel); sessionChannel = null }
+    if (sessionChannel) { realtime.removeChannel(sessionChannel); sessionChannel = null }
     cleanupPresence()
     sessionId.value      = null
     sessionName.value    = 'Untitled Campaign'

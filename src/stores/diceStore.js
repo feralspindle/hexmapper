@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { realtime } from '@/lib/realtime.js'
+import { mergeRealtimeSnapshot } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playDiceSound } from '@/lib/diceSound.js'
@@ -15,12 +17,9 @@ export const useDiceStore = defineStore('dice', () => {
   const latestRoll  = ref(null)
   let channel = null
   let currentSessionId = null
+  let loadGeneration = 0
 
-  async function init(sessionId) {
-    if (currentSessionId === sessionId) return
-    cleanup()
-    currentSessionId = sessionId
-
+  async function refreshHistory(sessionId, generation = loadGeneration) {
     const { data } = await supabase
       .from('dice_rolls')
       .select('*')
@@ -28,30 +27,39 @@ export const useDiceStore = defineStore('dice', () => {
       .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT)
 
-    if (data) {
-      rolls.value = data
+    if (currentSessionId !== sessionId || generation !== loadGeneration || !data) return
 
-      const rollIds = data.map(r => r.id)
-      if (rollIds.length) {
-        const { data: anns } = await supabase
-          .from('dice_roll_annotations')
-          .select('*')
-          .in('roll_id', rollIds)
-          .order('created_at', { ascending: true })
+    rolls.value = mergeRealtimeSnapshot(data, rolls.value, HISTORY_LIMIT)
 
-        if (anns) {
-          const map = {}
-          for (const a of anns) {
-            if (!map[a.roll_id]) map[a.roll_id] = []
-            map[a.roll_id].push(a)
+    const rollIds = rolls.value.map(r => r.id)
+    if (rollIds.length) {
+      const { data: anns } = await supabase
+        .from('dice_roll_annotations')
+        .select('*')
+        .in('roll_id', rollIds)
+        .order('created_at', { ascending: true })
+
+      if (currentSessionId === sessionId && generation === loadGeneration && anns) {
+        const map = { ...annotations.value }
+        for (const annotation of anns) {
+          const existing = map[annotation.roll_id] ?? []
+          if (!existing.some(item => item.id === annotation.id)) {
+            map[annotation.roll_id] = [...existing, annotation]
           }
-          annotations.value = map
         }
+        annotations.value = map
       }
     }
+  }
 
-    channel = supabase
-      .channel(`dice:${sessionId}`)
+  async function init(sessionId) {
+    if (currentSessionId === sessionId) return
+    cleanup()
+    currentSessionId = sessionId
+    const generation = loadGeneration
+
+    channel = realtime
+      .channel(`dice:${sessionId}`, { sessionId, onReconnect: () => refreshHistory(sessionId, generation) })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dice_rolls', filter: `session_id=eq.${sessionId}` },
@@ -74,7 +82,11 @@ export const useDiceStore = defineStore('dice', () => {
           }
         },
       )
-      .subscribe()
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') refreshHistory(sessionId, generation)
+      })
+
+    return refreshHistory(sessionId, generation)
   }
 
   async function rollDice(pending, modifier, label = null, characterId = null) {
@@ -145,8 +157,9 @@ export const useDiceStore = defineStore('dice', () => {
   }
 
   function cleanup() {
+    loadGeneration += 1
     if (channel) {
-      supabase.removeChannel(channel)
+      realtime.removeChannel(channel)
       channel = null
     }
     rolls.value       = []

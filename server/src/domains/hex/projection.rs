@@ -167,13 +167,13 @@ pub async fn delete_one(
     sqlx::query(
         r#"
         with del as (
-            delete from hex_cells where map_id = $1 and q = $2 and r = $3 returning id, session_id
+            delete from hex_cells where map_id = $1 and q = $2 and r = $3 returning *
         ),
         evt as (
             insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
             select 'hex_cell', del.id, del.session_id,
                 coalesce((select max(sequence) from events e where e.aggregate_type = 'hex_cell' and e.aggregate_id = del.id), 0) + 1,
-                'hex_cell.deleted', '{}'::jsonb, $4
+                'hex_cell.deleted', to_jsonb(del), $4
             from del
         )
         select 1
@@ -225,13 +225,13 @@ pub async fn clear_all(
     let count: i64 = sqlx::query_scalar(
         r#"
         with del as (
-            delete from hex_cells where map_id = $1 returning id, session_id
+            delete from hex_cells where map_id = $1 returning *
         ),
         evt as (
             insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
             select 'hex_cell', d.id, d.session_id,
                 coalesce((select max(sequence) from events e where e.aggregate_type = 'hex_cell' and e.aggregate_id = d.id), 0) + 1,
-                'hex_cell.deleted', '{}'::jsonb, $2
+                'hex_cell.deleted', to_jsonb(d), $2
             from del d
         )
         select count(*)::bigint from del

@@ -36,6 +36,7 @@ jobs:
           VITE_API_BASE_URL: /api
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+          VITE_REALTIME_TRANSPORT: ${{ secrets.VITE_REALTIME_TRANSPORT || 'supabase' }}
           VITE_APP_ENV: production
           VITE_APP_VERSION: ${{ github.sha }}
           VITE_FARO_URL: ${{ secrets.VITE_FARO_URL }}

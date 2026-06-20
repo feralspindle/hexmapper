@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { supabase } from "@/lib/supabase";
+import { realtime, usingRustRealtime } from "@/lib/realtime.js";
 import { apiClient, ApiError } from "@/lib/apiClient.js";
 import router from "@/router/index.js";
 import { useMapStore } from "@/stores/mapStore.js";
@@ -187,14 +188,14 @@ export const useHexStore = defineStore("hex", () => {
 
     await _loadPartyHexFromDb();
 
-    if (channel) supabase.removeChannel(channel);
-    channel = supabase
-      .channel(`map:${mapId}:hex`)
+    if (channel) realtime.removeChannel(channel);
+    channel = realtime
+      .channel(`map:${mapId}:hex`, { sessionId, onReconnect: () => init(sessionId, mapId) })
       .on("broadcast", { event: "refresh" }, () => {
         _schedulePlayerRefresh();
       });
 
-    if (isGM) {
+    if (isGM || usingRustRealtime) {
       channel.on(
         "postgres_changes",
         {
@@ -214,9 +215,9 @@ export const useHexStore = defineStore("hex", () => {
 
     channel.subscribe();
 
-    if (partyChannel) supabase.removeChannel(partyChannel);
-    partyChannel = supabase
-      .channel(`map:${mapId}:party`)
+    if (partyChannel) realtime.removeChannel(partyChannel);
+    partyChannel = realtime
+      .channel(`map:${mapId}:party`, { sessionId })
       .on("broadcast", { event: "party" }, ({ payload }) => {
         const next = payload.q != null ? { q: payload.q, r: payload.r } : null;
         const prev = partyHex.value;
@@ -252,9 +253,9 @@ export const useHexStore = defineStore("hex", () => {
   let mapPartyChannel = null;
 
   function _setupMapPartyChannel(mapId) {
-    if (mapPartyChannel) supabase.removeChannel(mapPartyChannel);
-    mapPartyChannel = supabase
-      .channel(`map:${mapId}:party_db`)
+    if (mapPartyChannel) realtime.removeChannel(mapPartyChannel);
+    mapPartyChannel = realtime
+      .channel(`map:${mapId}:party_db`, { sessionId: currentSessionId.value })
       .on(
         "postgres_changes",
         {
@@ -609,11 +610,11 @@ export const useHexStore = defineStore("hex", () => {
 
   function cleanup() {
     _stopPlayerRefresh();
-    if (channel) supabase.removeChannel(channel);
+    if (channel) realtime.removeChannel(channel);
     channel = null;
-    if (partyChannel) supabase.removeChannel(partyChannel);
+    if (partyChannel) realtime.removeChannel(partyChannel);
     partyChannel = null;
-    if (mapPartyChannel) supabase.removeChannel(mapPartyChannel);
+    if (mapPartyChannel) realtime.removeChannel(mapPartyChannel);
     mapPartyChannel = null;
     currentMapId.value = null;
     currentSessionId.value = null;

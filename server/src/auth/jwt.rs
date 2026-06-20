@@ -7,6 +7,7 @@ use uuid::Uuid;
 #[allow(dead_code)]
 pub struct SupabaseClaims {
     pub sub: Uuid,
+    pub exp: usize,
     pub role: String,
     pub email: Option<String>,
     #[serde(default)]
@@ -28,14 +29,20 @@ impl SupabaseClaims {
 }
 
 pub async fn fetch_jwks(supabase_url: &str) -> Result<JwkSet, reqwest::Error> {
-    let url = format!("{}/auth/v1/.well-known/jwks.json", supabase_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/auth/v1/.well-known/jwks.json",
+        supabase_url.trim_end_matches('/')
+    );
     reqwest::get(&url).await?.json::<JwkSet>().await
 }
 
 pub fn verify(token: &str, jwks: &JwkSet) -> Result<SupabaseClaims, errors::Error> {
     let header = decode_header(token)?;
 
-    let kid = header.kid.as_deref().ok_or(errors::ErrorKind::InvalidToken)?;
+    let kid = header
+        .kid
+        .as_deref()
+        .ok_or(errors::ErrorKind::InvalidToken)?;
     let jwk = jwks.find(kid).ok_or(errors::ErrorKind::InvalidToken)?;
     let decoding_key = DecodingKey::from_jwk(jwk)?;
 

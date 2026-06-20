@@ -76,7 +76,7 @@ pub async fn hide_one(
             insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
             select 'dungeon_fog_cell', del.id, $1,
                 coalesce((select max(sequence) from events e where e.aggregate_type = 'dungeon_fog_cell' and e.aggregate_id = del.id), 0) + 1,
-                'dungeon_fog_cell.deleted', '{}'::jsonb, $3
+                'dungeon_fog_cell.deleted', to_jsonb(del), $3
             from del
         )
         select 1
@@ -149,7 +149,7 @@ pub async fn hide_bulk(
             insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
             select 'dungeon_fog_cell', d.id, $1,
                 coalesce((select max(sequence) from events e where e.aggregate_type = 'dungeon_fog_cell' and e.aggregate_id = d.id), 0) + 1,
-                'dungeon_fog_cell.deleted', '{}'::jsonb, $3
+                'dungeon_fog_cell.deleted', to_jsonb(d), $3
             from del d
         )
         select count(*)::bigint from del
@@ -178,7 +178,7 @@ pub async fn clear_all(
             insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
             select 'dungeon_fog_cell', d.id, $2,
                 coalesce((select max(sequence) from events e where e.aggregate_type = 'dungeon_fog_cell' and e.aggregate_id = d.id), 0) + 1,
-                'dungeon_fog_cell.deleted', '{}'::jsonb, $3
+                'dungeon_fog_cell.deleted', to_jsonb(d), $3
             from del d
         )
         select count(*)::bigint from del
