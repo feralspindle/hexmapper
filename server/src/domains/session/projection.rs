@@ -24,12 +24,13 @@ fn snapshot_columns(s: &str) -> String {
         ({s}->>'torch_running')::boolean,
         ({s}->>'torch_elapsed_ms')::bigint,
         ({s}->>'torch_started_at')::timestamptz,
-        {s}->>'hex_mode'
+        {s}->>'hex_mode',
+        ({s}->>'gm_initiative')::integer
         "#
     )
 }
 
-const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode";
+const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative";
 
 /// Wraps a `sessions` mutation that exposes `s` (the updated/inserted row) in a
 /// `session.<event>` snapshot event. Returns the row JSON (or None if 0 rows).
@@ -105,6 +106,7 @@ pub async fn update(
             map_hex_size  = case when $3 ? 'map_hex_size' then ($3->>'map_hex_size')::int else map_hex_size end,
             party_hex_q   = case when $3 ? 'party_hex_q' then ($3->>'party_hex_q')::int else party_hex_q end,
             party_hex_r   = case when $3 ? 'party_hex_r' then ($3->>'party_hex_r')::int else party_hex_r end,
+            gm_initiative = case when $3 ? 'gm_initiative' then ($3->>'gm_initiative')::integer else gm_initiative end,
             updated_at    = now()
         where id = $1
         returning *

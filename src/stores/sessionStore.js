@@ -13,6 +13,7 @@ export const useSessionStore = defineStore('session', () => {
   const sessionOwnerId = ref(null)
   const activeMapId    = ref(null)
   const hexMode        = ref(null)
+  const gmInitiative   = ref(null)
   const torchRunning   = ref(false)
   const torchElapsedMs = ref(0)
   const torchStartedAt = ref(null)
@@ -42,6 +43,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionOwnerId.value = data.owner_id
     activeMapId.value    = data.active_map_id ?? null
     hexMode.value        = data.hex_mode ?? null
+    gmInitiative.value   = data.gm_initiative ?? null
     torchRunning.value   = data.torch_running ?? false
     torchElapsedMs.value = data.torch_elapsed_ms ?? 0
     torchStartedAt.value = data.torch_started_at ?? null
@@ -64,6 +66,7 @@ export const useSessionStore = defineStore('session', () => {
           if (row.name !== undefined)             sessionName.value    = row.name
           if (row.active_map_id !== undefined)    activeMapId.value    = row.active_map_id ?? null
           if (row.hex_mode !== undefined)         hexMode.value        = row.hex_mode
+          if (row.gm_initiative !== undefined)    gmInitiative.value   = row.gm_initiative ?? null
           if (row.torch_running !== undefined)    torchRunning.value   = row.torch_running
           if (row.torch_elapsed_ms !== undefined) torchElapsedMs.value = row.torch_elapsed_ms
           if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
@@ -174,6 +177,23 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function setGmInitiative(score) {
+    const previous = gmInitiative.value
+    gmInitiative.value = score ?? null
+    try {
+      await apiClient.patch(
+        `/sessions/${sessionId.value}`,
+        { gm_initiative: gmInitiative.value },
+        'set_gm_initiative',
+      )
+      return true
+    } catch (err) {
+      console.error('setGmInitiative:', err instanceof ApiError ? err.message : err)
+      gmInitiative.value = previous
+      return false
+    }
+  }
+
   function initPresence(id) {
     const authStore = useAuthStore()
     if (presenceChannel) realtime.removeChannel(presenceChannel)
@@ -274,6 +294,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionOwnerId.value = null
     activeMapId.value    = null
     hexMode.value        = null
+    gmInitiative.value   = null
     torchRunning.value   = false
     torchElapsedMs.value = 0
     torchStartedAt.value = null
@@ -285,6 +306,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionOwnerId,
     activeMapId,
     hexMode,
+    gmInitiative,
     torchRunning,
     torchElapsedMs,
     torchStartedAt,
@@ -303,6 +325,7 @@ export const useSessionStore = defineStore('session', () => {
     updateSessionName,
     setActiveMapId,
     setHexMode,
+    setGmInitiative,
     torchStart,
     torchPause,
     torchReset,

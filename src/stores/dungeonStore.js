@@ -147,10 +147,6 @@ export const useD = defineStore('dungeon', () => {
         corridors.value.delete(payload.corridorId)
         if (selectedElement.value?.id === payload.corridorId) selectedElement.value = null
       })
-      .on('broadcast', { event: 'gm_initiative_set' }, ({ payload }) => {
-        if (!dungeon.value) return
-        dungeon.value = { ...dungeon.value, gm_initiative: payload.score ?? null }
-      })
       .subscribe()
   }
 
@@ -220,18 +216,6 @@ export const useD = defineStore('dungeon', () => {
       await apiClient.patch(`/dungeons/${id}`, dbPatch, 'update_dungeon_config')
     } catch (err) { console.error('updateDungeon:', err instanceof ApiError ? err.message : err); return false }
     return true
-  }
-
-  async function setGmInitiative(score) {
-    if (!dungeon.value?.id) return false
-    const value = score ?? null
-    const update = updateDungeon({ gmInitiative: value })
-    changesChannel?.send({
-      type: 'broadcast',
-      event: 'gm_initiative_set',
-      payload: { score: value },
-    })
-    return update
   }
 
   function applyDungeonLocalPatch(patch) {
@@ -777,7 +761,6 @@ export const useD = defineStore('dungeon', () => {
     cleanup,
     uploadDungeonImage,
     updateDungeon,
-    setGmInitiative,
     applyDungeonLocalPatch,
     isCellRevealed,
     revealFogCell,

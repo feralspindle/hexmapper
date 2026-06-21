@@ -13,7 +13,7 @@ from sessions s
 where not exists (select 1 from events e where e.aggregate_type = 'session' and e.aggregate_id = s.id)
 "#;
 const SHADOW_DDL: &str = "create temp table shadow_sessions (like sessions including defaults) on commit drop";
-const DIFF_COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode";
+const DIFF_COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative";
 
 #[tokio::main]
 async fn main() {

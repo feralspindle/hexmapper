@@ -135,7 +135,6 @@ import { useCharacterStore } from "@/stores/characterStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
-import { useD } from "@/stores/dungeonStore.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 
@@ -143,7 +142,6 @@ const characterStore = useCharacterStore();
 const sessionStore = useSessionStore();
 const authStore = useAuthStore();
 const diceStore = useDiceStore();
-const dungeonStore = useD();
 
 const { visible: partyVisible, close: closeParty } = usePartyPanel();
 
@@ -225,13 +223,13 @@ const isGM = computed(() => authStore.user?.id === sessionStore.sessionOwnerId);
 async function rollGmInitiative() {
     const result = await diceStore.rollDice({ d20: 1 }, 0, "Initiative", null);
     if (result?.total != null) {
-        await dungeonStore.setGmInitiative(result.total);
+        await sessionStore.setGmInitiative(result.total);
     }
 }
 
 function clearInitiative() {
     characterStore.clearAllInitiative();
-    dungeonStore.setGmInitiative(null);
+    sessionStore.setGmInitiative(null);
 }
 
 const hasInitiative = computed(() =>
@@ -271,7 +269,7 @@ const partyCards = computed(() => {
             displayName:
                 gmPresence?.display_name ?? gmMember?.display_name ?? null,
             char: null,
-            initiative: dungeonStore.dungeon?.gm_initiative ?? null,
+            initiative: sessionStore.gmInitiative,
         });
         seen.add(gmId);
     }
