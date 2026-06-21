@@ -1,0 +1,52 @@
+name: Test backend
+
+# Reusable backend test suite (cargo + Postgres-backed integration tests). Called by
+# ci.yml on PRs and by deploy-server.yml as a pre-deploy gate. Build + tests are the
+# hard gate; fmt/clippy are advisory until the pre-existing drift is cleaned up.
+
+on:
+  workflow_call: {}
+
+jobs:
+  cargo:
+    name: cargo test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hexmap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/hexmap_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
+      - name: Run tests (workspace, incl. Postgres-backed integration tests)
+        run: cargo test --workspace
+
+      - name: Formatting (advisory)
+        continue-on-error: true
+        run: cargo fmt --all --check
+
+      - name: Clippy (advisory)
+        continue-on-error: true
+        run: cargo clippy --workspace --all-targets

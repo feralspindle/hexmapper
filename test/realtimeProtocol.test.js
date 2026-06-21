@@ -1,5 +1,4 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, test, expect } from 'vitest'
 
 import {
   matchesRealtimeFilter,
@@ -10,45 +9,47 @@ import {
   REALTIME_TABLES,
 } from '../src/lib/realtimeProtocol.js'
 
-test('maps durable event types to Supabase-compatible operations', () => {
-  assert.equal(realtimeOperation('chat_message.sent'), 'INSERT')
-  assert.equal(realtimeOperation('hex_cell.upserted'), 'UPDATE')
-  assert.equal(realtimeOperation('session_member.left'), 'DELETE')
-})
+describe('realtimeProtocol', () => {
+  test('maps durable event types to Supabase-compatible operations', () => {
+    expect(realtimeOperation('chat_message.sent')).toBe('INSERT')
+    expect(realtimeOperation('hex_cell.upserted')).toBe('UPDATE')
+    expect(realtimeOperation('session_member.left')).toBe('DELETE')
+  })
 
-test('maps aggregate names to existing projection tables', () => {
-  assert.equal(REALTIME_TABLES.hex_cell, 'hex_cells')
-  assert.equal(REALTIME_TABLES.dungeon_fog_cell, 'dungeon_fog_cells')
-  assert.equal(REALTIME_TABLES.party_calendar_day, 'party_calendar_days')
-})
+  test('maps aggregate names to existing projection tables', () => {
+    expect(REALTIME_TABLES.hex_cell).toBe('hex_cells')
+    expect(REALTIME_TABLES.dungeon_fog_cell).toBe('dungeon_fog_cells')
+    expect(REALTIME_TABLES.party_calendar_day).toBe('party_calendar_days')
+  })
 
-test('applies equality filters and permits sparse delete payloads', () => {
-  const mapId = 'c0ffee00-0000-4000-8000-000000000000'
-  assert.equal(matchesRealtimeFilter({ map_id: mapId }, `map_id=eq.${mapId}`), true)
-  assert.equal(matchesRealtimeFilter({ map_id: 'different' }, `map_id=eq.${mapId}`), false)
-  assert.equal(matchesRealtimeFilter({ id: 'deleted-row' }, `map_id=eq.${mapId}`), true)
-})
+  test('applies equality filters and permits sparse delete payloads', () => {
+    const mapId = 'c0ffee00-0000-4000-8000-000000000000'
+    expect(matchesRealtimeFilter({ map_id: mapId }, `map_id=eq.${mapId}`)).toBe(true)
+    expect(matchesRealtimeFilter({ map_id: 'different' }, `map_id=eq.${mapId}`)).toBe(false)
+    expect(matchesRealtimeFilter({ id: 'deleted-row' }, `map_id=eq.${mapId}`)).toBe(true)
+  })
 
-test('detects stale connections and long background suspensions', () => {
-  assert.equal(realtimeConnectionIsStale(100_000, 150_000, 65_000), false)
-  assert.equal(realtimeConnectionIsStale(100_000, 170_000, 65_000), true)
-  assert.equal(realtimeConnectionIsStale(0, 170_000, 65_000), true)
-  assert.equal(realtimeSnapshotRefreshNeeded(59_999, 60_000), false)
-  assert.equal(realtimeSnapshotRefreshNeeded(60_000, 60_000), true)
-})
+  test('detects stale connections and long background suspensions', () => {
+    expect(realtimeConnectionIsStale(100_000, 150_000, 65_000)).toBe(false)
+    expect(realtimeConnectionIsStale(100_000, 170_000, 65_000)).toBe(true)
+    expect(realtimeConnectionIsStale(0, 170_000, 65_000)).toBe(true)
+    expect(realtimeSnapshotRefreshNeeded(59_999, 60_000)).toBe(false)
+    expect(realtimeSnapshotRefreshNeeded(60_000, 60_000)).toBe(true)
+  })
 
-test('merges a reconnect snapshot with rows received during the fetch', () => {
-  const snapshot = [
-    { id: 'old', created_at: '2026-06-20T10:00:00Z', total: 5 },
-    { id: 'shared', created_at: '2026-06-20T10:01:00Z', total: 8, display_name: 'Rook' },
-  ]
-  const liveRows = [
-    { id: 'new', created_at: '2026-06-20T10:02:00Z', total: 20 },
-    { id: 'shared', created_at: '2026-06-20T10:01:00Z', total: 9 },
-  ]
+  test('merges a reconnect snapshot with rows received during the fetch', () => {
+    const snapshot = [
+      { id: 'old', created_at: '2026-06-20T10:00:00Z', total: 5 },
+      { id: 'shared', created_at: '2026-06-20T10:01:00Z', total: 8, display_name: 'Rook' },
+    ]
+    const liveRows = [
+      { id: 'new', created_at: '2026-06-20T10:02:00Z', total: 20 },
+      { id: 'shared', created_at: '2026-06-20T10:01:00Z', total: 9 },
+    ]
 
-  assert.deepEqual(mergeRealtimeSnapshot(snapshot, liveRows, 2), [
-    liveRows[0],
-    { ...snapshot[1], ...liveRows[1] },
-  ])
+    expect(mergeRealtimeSnapshot(snapshot, liveRows, 2)).toEqual([
+      liveRows[0],
+      { ...snapshot[1], ...liveRows[1] },
+    ])
+  })
 })

@@ -1,0 +1,19 @@
+name: CI
+
+# PR gate: runs both test suites on every pull request. Pushes to main are gated by
+# the test jobs inside deploy-server.yml / deploy-frontend.yml (same reusable suites),
+# so we don't double-run them here.
+
+on:
+  pull_request: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    uses: ./.github/workflows/test-frontend.yml
+
+  backend:
+    uses: ./.github/workflows/test-backend.yml
