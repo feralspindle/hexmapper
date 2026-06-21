@@ -7,6 +7,7 @@ use hexmap_server::config::Config;
 use hexmap_server::db;
 use hexmap_server::domains;
 use hexmap_server::observability;
+use hexmap_server::ratelimit;
 use hexmap_server::realtime;
 use hexmap_server::state::AppState;
 
@@ -29,6 +30,7 @@ async fn main() {
     let state = AppState::new(pool, jwks, config.cors_allowed_origin.clone());
     realtime::spawn_event_listener(config.database_url.clone(), state.clone());
     auth::jwt::spawn_jwks_refresh(config.supabase_url.clone(), state.clone());
+    ratelimit::spawn_retain(state.clone());
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::exact(

@@ -14,6 +14,8 @@ pub enum AppError {
     NotFound,
     #[error("bad request: {0}")]
     BadRequest(String),
+    #[error("too many requests")]
+    TooManyRequests,
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
     #[error("conflict, retries exhausted")]
@@ -27,6 +29,7 @@ impl IntoResponse for AppError {
             AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
             AppError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            AppError::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, self.to_string()),
             AppError::Conflict => (StatusCode::CONFLICT, self.to_string()),
             AppError::Database(e) => {
                 tracing::error!("database error: {e}");

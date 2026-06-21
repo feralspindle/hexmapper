@@ -31,6 +31,7 @@ thiserror = "2"
 dotenvy = "0.15"
 rand = "0.8"
 futures-util = "0.3"
+governor = "0.8"
 ttrpg-dice-engine = { path = "vendor/ttrpg-dice-engine" }
 
 [dev-dependencies]

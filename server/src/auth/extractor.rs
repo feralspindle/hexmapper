@@ -99,6 +99,13 @@ impl FromRequestParts<AppState> for AuthUser {
             AppError::Unauthorized
         })?;
 
+        // Per-user token bucket (keyed on the verified subject). Bail before any
+        // header parsing or DB work so a flood costs only a signature check.
+        if state.rate_limiter().check_key(&claims.sub).is_err() {
+            metrics::counter!("http_rate_limited_total").increment(1);
+            return Err(AppError::TooManyRequests);
+        }
+
         // traceparent format: 00-<32hex trace-id>-<16hex span-id>-<flags>
         let trace_id = header_capped(parts, "traceparent")
             .and_then(|tp| tp.split('-').nth(1).filter(|s| s.len() == 32).map(str::to_string));

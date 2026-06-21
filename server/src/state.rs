@@ -2,6 +2,7 @@ use jsonwebtoken::jwk::JwkSet;
 use sqlx::PgPool;
 use std::sync::{Arc, RwLock};
 
+use crate::ratelimit::{self, UserRateLimiter};
 use crate::realtime::RealtimeHub;
 
 #[derive(Clone)]
@@ -13,6 +14,7 @@ pub struct AppStateInner {
     /// restart (see `auth::jwt::spawn_jwks_refresh`).
     pub jwks: RwLock<Arc<JwkSet>>,
     pub realtime: RealtimeHub,
+    pub rate_limiter: Arc<UserRateLimiter>,
     pub cors_allowed_origin: String,
 }
 
@@ -22,12 +24,17 @@ impl AppState {
             pool,
             jwks: RwLock::new(Arc::new(jwks)),
             realtime: RealtimeHub::default(),
+            rate_limiter: ratelimit::build(),
             cors_allowed_origin,
         }))
     }
 
     pub fn pool(&self) -> &PgPool {
         &self.0.pool
+    }
+
+    pub fn rate_limiter(&self) -> &UserRateLimiter {
+        &self.0.rate_limiter
     }
 
     /// Current JWKS snapshot. Returns an `Arc` (not a borrow) so a concurrent
