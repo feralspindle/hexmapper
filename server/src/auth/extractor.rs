@@ -94,7 +94,7 @@ impl FromRequestParts<AppState> for AuthUser {
             .strip_prefix("Bearer ")
             .ok_or(AppError::Unauthorized)?;
 
-        let claims = jwt::verify(token, state.jwks()).map_err(|e| {
+        let claims = jwt::verify(token, &state.jwks()).map_err(|e| {
             tracing::warn!("jwt verification failed: {e}");
             AppError::Unauthorized
         })?;

@@ -182,7 +182,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         metrics::counter!("realtime_auth_failures_total", "reason" => "invalid_frame").increment(1);
         return;
     };
-    let Ok(claims) = jwt::verify(&token, state.jwks()) else {
+    let Ok(claims) = jwt::verify(&token, &state.jwks()) else {
         metrics::counter!("realtime_auth_failures_total", "reason" => "invalid_token").increment(1);
         return;
     };
@@ -326,7 +326,7 @@ async fn handle_client_message(connection_id: Uuid, message: ClientMessage, stat
             }
         }
         ClientMessage::Reauthenticate { token } => {
-            if let Ok(claims) = jwt::verify(&token, state.jwks()) {
+            if let Ok(claims) = jwt::verify(&token, &state.jwks()) {
                 state
                     .realtime()
                     .refresh_identity(connection_id, claims.sub, claims.display_name(), claims.exp)

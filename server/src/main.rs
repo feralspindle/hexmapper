@@ -28,6 +28,7 @@ async fn main() {
 
     let state = AppState::new(pool, jwks, config.cors_allowed_origin.clone());
     realtime::spawn_event_listener(config.database_url.clone(), state.clone());
+    auth::jwt::spawn_jwks_refresh(config.supabase_url.clone(), state.clone());
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::exact(

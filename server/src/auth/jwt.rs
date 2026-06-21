@@ -36,6 +36,25 @@ pub async fn fetch_jwks(supabase_url: &str) -> Result<JwkSet, reqwest::Error> {
     reqwest::get(&url).await?.json::<JwkSet>().await
 }
 
+/// Periodically re-fetches the Supabase JWKS so signing-key rotations are picked up
+/// without a restart. On a failed fetch the previous key set is retained, so a
+/// transient Supabase outage never breaks verification.
+pub fn spawn_jwks_refresh(supabase_url: String, state: crate::state::AppState) {
+    const REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(REFRESH_INTERVAL);
+        interval.tick().await; // consume the immediate first tick; keys are already fresh at startup
+        loop {
+            interval.tick().await;
+            match fetch_jwks(&supabase_url).await {
+                Ok(jwks) => state.set_jwks(jwks),
+                Err(error) => tracing::warn!(%error, "JWKS refresh failed; retaining previous key set"),
+            }
+        }
+    });
+}
+
 pub fn verify(token: &str, jwks: &JwkSet) -> Result<SupabaseClaims, errors::Error> {
     let header = decode_header(token)?;
 
