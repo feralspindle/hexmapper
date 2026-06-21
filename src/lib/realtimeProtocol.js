@@ -49,7 +49,7 @@ export function realtimeSnapshotRefreshNeeded(hiddenForMs, thresholdMs) {
 
 export function mergeRealtimeSnapshot(snapshot, liveRows, limit) {
   const rows = new Map(snapshot.map(row => [row.id, row]))
-  for (const row of liveRows) rows.set(row.id, row)
+  for (const row of liveRows) rows.set(row.id, { ...rows.get(row.id), ...row })
   return [...rows.values()]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, limit)

@@ -65,7 +65,7 @@ export const useDiceStore = defineStore('dice', () => {
         { event: 'INSERT', schema: 'public', table: 'dice_rolls', filter: `session_id=eq.${sessionId}` },
         ({ new: row }) => {
           const authStore = useAuthStore()
-          if (row.user_id === authStore.user?.id) return
+          if (row.user_id === authStore.user?.id || rolls.value.some(roll => roll.id === row.id)) return
           rolls.value = [row, ...rolls.value].slice(0, HISTORY_LIMIT)
           latestRoll.value = row
         },

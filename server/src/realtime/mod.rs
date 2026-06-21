@@ -820,13 +820,10 @@ impl RealtimeHub {
 
 fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
     if row.aggregate_type != "hex_cell" || is_gm {
-        return Some((
-            row.event_type.clone(),
-            with_identity(&row.payload, row.aggregate_id, row.session_id),
-        ));
+        return Some((row.event_type.clone(), with_event_fields(row)));
     }
 
-    let mut payload = with_identity(&row.payload, row.aggregate_id, row.session_id);
+    let mut payload = with_event_fields(row);
     let revealed = payload.get("revealed").and_then(Value::as_bool) == Some(true);
     if row.event_type == "hex_cell.deleted" || !revealed {
         let mut removal = serde_json::Map::new();
@@ -844,17 +841,27 @@ fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
     Some((row.event_type.clone(), payload))
 }
 
-fn with_identity(payload: &Value, aggregate_id: Uuid, session_id: Option<Uuid>) -> Value {
-    let mut payload = payload.clone();
+fn with_event_fields(row: &EventRow) -> Value {
+    let mut payload = row.payload.clone();
     if !payload.is_object() {
         payload = json!({});
     }
     if let Value::Object(object) = &mut payload {
-        object.entry("id").or_insert_with(|| json!(aggregate_id));
-        if let Some(session_id) = session_id {
+        object
+            .entry("id")
+            .or_insert_with(|| json!(row.aggregate_id));
+        if let Some(session_id) = row.session_id {
             object
                 .entry("session_id")
                 .or_insert_with(|| json!(session_id));
+        }
+        object
+            .entry("created_at")
+            .or_insert_with(|| json!(row.created_at));
+        for key in ["user_id", "display_name"] {
+            if let Some(value) = row.metadata.get(key) {
+                object.entry(key).or_insert_with(|| value.clone());
+            }
         }
     }
     payload
@@ -887,7 +894,18 @@ async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error>
         .bind(id)
         .fetch_optional(state.pool())
         .await?;
-        if let Some(row) = row {
+        if let Some(mut row) = row {
+            if row.aggregate_type == "dice_roll" {
+                if let Some(payload) = sqlx::query_scalar::<_, Value>(
+                    "select to_jsonb(dr) from dice_rolls dr where id = $1",
+                )
+                .bind(row.aggregate_id)
+                .fetch_optional(state.pool())
+                .await?
+                {
+                    row.payload = payload;
+                }
+            }
             let lag = (chrono::Utc::now() - row.created_at)
                 .num_milliseconds()
                 .max(0) as f64
@@ -934,6 +952,27 @@ mod tests {
         let (event, payload) = visible_event(&row, false).unwrap();
         assert_eq!(event, "hex_cell.deleted");
         assert!(payload.get("gm_markers").is_none());
+    }
+
+    #[test]
+    fn event_payload_includes_actor_and_timestamp_fields() {
+        let user_id = Uuid::new_v4();
+        let created_at = chrono::Utc::now();
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "dice_roll".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "dice_roll.rolled".into(),
+            payload: json!({"total": 12}),
+            metadata: json!({"user_id": user_id, "display_name": "Rook"}),
+            created_at,
+        };
+
+        let payload = with_event_fields(&row);
+        assert_eq!(payload.get("user_id"), Some(&json!(user_id)));
+        assert_eq!(payload.get("display_name"), Some(&json!("Rook")));
+        assert_eq!(payload.get("created_at"), Some(&json!(created_at)));
     }
 
     #[tokio::test]

@@ -40,12 +40,15 @@ test('detects stale connections and long background suspensions', () => {
 test('merges a reconnect snapshot with rows received during the fetch', () => {
   const snapshot = [
     { id: 'old', created_at: '2026-06-20T10:00:00Z', total: 5 },
-    { id: 'shared', created_at: '2026-06-20T10:01:00Z', total: 8 },
+    { id: 'shared', created_at: '2026-06-20T10:01:00Z', total: 8, display_name: 'Rook' },
   ]
   const liveRows = [
     { id: 'new', created_at: '2026-06-20T10:02:00Z', total: 20 },
     { id: 'shared', created_at: '2026-06-20T10:01:00Z', total: 9 },
   ]
 
-  assert.deepEqual(mergeRealtimeSnapshot(snapshot, liveRows, 2), [liveRows[0], liveRows[1]])
+  assert.deepEqual(mergeRealtimeSnapshot(snapshot, liveRows, 2), [
+    liveRows[0],
+    { ...snapshot[1], ...liveRows[1] },
+  ])
 })
