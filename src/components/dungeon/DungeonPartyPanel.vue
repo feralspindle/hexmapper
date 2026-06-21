@@ -223,15 +223,15 @@ onUnmounted(() => {
 const isGM = computed(() => authStore.user?.id === sessionStore.sessionOwnerId);
 
 async function rollGmInitiative() {
-    const result = await diceStore.rollDice({ d20: 1 }, 0, "Initiative");
+    const result = await diceStore.rollDice({ d20: 1 }, 0, "Initiative", null);
     if (result?.total != null) {
-        dungeonStore.updateDungeon({ gmInitiative: result.total });
+        await dungeonStore.setGmInitiative(result.total);
     }
 }
 
 function clearInitiative() {
     characterStore.clearAllInitiative();
-    dungeonStore.updateDungeon({ gmInitiative: null });
+    dungeonStore.setGmInitiative(null);
 }
 
 const hasInitiative = computed(() =>
