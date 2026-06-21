@@ -14,6 +14,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.js'],
     include: ['test/**/*.{test,spec}.js', 'src/**/*.{test,spec}.js'],
+    env: {
+      VITE_SUPABASE_URL: 'http://localhost:54321',
+      VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: 'test-anon-key',
+      VITE_API_BASE_URL: 'http://localhost:8080/api',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
