@@ -24,8 +24,11 @@ jobs:
   test:
     uses: ./.github/workflows/test-backend.yml
 
+  database:
+    uses: ./.github/workflows/test-database.yml
+
   build-push-deploy:
-    needs: test
+    needs: [test, database]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

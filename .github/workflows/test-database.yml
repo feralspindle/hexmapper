@@ -1,0 +1,27 @@
+name: Test database
+
+# Reusable database test suite. Spins up a local Supabase stack (which applies every
+# migration from scratch) and runs the pgTAP suite in supabase/tests/database against
+# it. Called by ci.yml on PRs and by deploy-server.yml as a pre-deploy gate, so the
+# server is never shipped against a schema whose RLS / tenant-isolation invariants
+# regressed. A clean from-scratch apply is itself part of what this gate verifies.
+
+on:
+  workflow_call: {}
+
+jobs:
+  pgtap:
+    name: supabase test db
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.90.0
+
+      - name: Start Supabase (applies all migrations from scratch)
+        run: supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector
+
+      - name: Run pgTAP database tests
+        run: supabase test db

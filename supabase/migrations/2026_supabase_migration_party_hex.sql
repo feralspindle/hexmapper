@@ -7,7 +7,18 @@ alter table sessions add column if not exists party_hex_r integer;
 
 create index if not exists sessions_party_hex_idx on sessions(party_hex_q, party_hex_r);
 
--- Enable Realtime for sessions table (if not already added)
--- In Supabase Dashboard → Database → Replication, add this table
--- to the supabase_realtime publication. Or run:
-alter publication supabase_realtime add table sessions;
+-- Enable Realtime without failing fresh replays where an earlier migration has
+-- already added sessions to the publication.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'sessions'
+  ) then
+    alter publication supabase_realtime add table public.sessions;
+  end if;
+end
+$$;
