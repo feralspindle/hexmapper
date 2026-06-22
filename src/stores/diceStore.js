@@ -68,6 +68,7 @@ export const useDiceStore = defineStore('dice', () => {
           if (row.user_id === authStore.user?.id || rolls.value.some(roll => roll.id === row.id)) return
           rolls.value = [row, ...rolls.value].slice(0, HISTORY_LIMIT)
           latestRoll.value = row
+          playDiceSound()
         },
       )
       .on(

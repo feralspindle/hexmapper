@@ -4,7 +4,8 @@ let sharedCtx = null;
 
 function getCtx() {
   if (!sharedCtx) {
-    sharedCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const Ctx = window.AudioContext || window["webkitAudioContext"];
+    sharedCtx = new Ctx();
   }
   // A context created (or auto-suspended by the browser) while the tab is in
   // the background starts suspended; resuming lets queued sounds play even when
