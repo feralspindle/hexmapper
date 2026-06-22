@@ -15,12 +15,12 @@
       <div
         v-for="msg in chatStore.messages"
         :key="msg.id"
-        class="text-sm leading-snug"
+        class="text-[15px] leading-normal"
         :class="msg.id?.toString().startsWith('pending-') ? 'opacity-50' : ''"
       >
         <div class="flex items-baseline justify-between gap-1.5">
           <span
-            class="font-display shrink-0"
+            class="font-display shrink-0 text-[13px]"
             :class="msg.user_id === authStore.user?.id ? 'text-parchment-400' : 'text-stone-400'"
           >{{ gmName(msg.user_id, msg.display_name) }}</span>
           <span v-if="msg.created_at" class="text-stone-400 text-[12px] shrink-0">{{ timeAgo(msg.created_at) }}</span>

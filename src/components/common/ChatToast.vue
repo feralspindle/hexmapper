@@ -2,7 +2,7 @@
   <div class="ds-chat-toasts" :class="bottomClass">
     <TransitionGroup name="chat-toast">
       <div v-for="toast in toasts" :key="toast.id" class="ds-chat-toast">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex:0 0 auto;margin-top:1px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex:0 0 auto;margin-top:2px">
           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
         </svg>
         <span class="ds-ct-who" :style="{ color: playerColorFor(toast.msg.user_id) }">
@@ -58,15 +58,15 @@ watch(() => chatStore.latestMessage, (msg) => {
   gap: 8px;
   background: var(--paper-2, #e3d4b3);
   border: 1px solid var(--rule-strong, rgba(26,20,16,.42));
-  padding: 7px 10px;
+  padding: 9px 12px;
   box-shadow: 1px 0 0 rgba(255,255,255,.4) inset, 0 4px 12px rgba(0,0,0,.2);
-  max-width: 280px;
+  max-width: 360px;
   pointer-events: auto;
 }
 
 .ds-ct-who {
   font-family: var(--font-ui, sans-serif);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: .02em;
   flex: 0 0 auto;
@@ -76,14 +76,14 @@ watch(() => chatStore.latestMessage, (msg) => {
 .ds-ct-sep {
   color: var(--ink-mute, #8a7a68);
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .ds-ct-body {
   font-family: var(--font-body, serif);
-  font-size: 13px;
+  font-size: 15px;
   color: var(--ink, #1a1410);
-  line-height: 1.35;
+  line-height: 1.4;
   word-break: break-word;
   flex: 1;
   min-width: 0;

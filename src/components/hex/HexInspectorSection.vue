@@ -34,7 +34,17 @@
             </svg>
         </div>
 
-        <div v-if="hexStore.selectedHex" class="ds-section-body">
+        <div
+            v-if="hexStore.selectedHex && !selectedHexVisibleToPlayer"
+            class="ds-section-body"
+        >
+            <div class="hm-inspector-empty">
+                <span class="hm-inspector-glyph">🌫</span>
+                This hex hasn't been revealed yet.
+            </div>
+        </div>
+
+        <div v-else-if="hexStore.selectedHex" class="ds-section-body">
             <div>
                 <span class="ds-field-label">Name</span>
                 <input
@@ -86,7 +96,6 @@
                 </button>
             </div>
 
-            <template v-if="selectedHexVisibleToPlayer">
             <div>
                 <div
                     style="
@@ -226,7 +235,6 @@
                     </button>
                 </div>
             </div>
-            </template>
 
             <div v-if="sessionStore.isGM">
                 <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px">
@@ -658,10 +666,11 @@ const { timeAgo } = useTimeAgo();
 
 const selectedHexVisibleToPlayer = computed(() => {
   if (sessionStore.isGM) return true
-  const fogMode = mapStore.activeMap?.fog_mode ?? false
-  if (!fogMode) return true
+  const fogMode = sessionStore.hexMode === 'fow'
+  const revealAll = sessionStore.hexMode === 'blank' || mapStore.mapFogRevealAll
+  if (!fogMode) return revealAll
   const cell = hexStore.selectedCell
-  if (cell == null) return mapStore.mapFogRevealAll
+  if (cell == null) return revealAll
   return cell.revealed !== false
 })
 
