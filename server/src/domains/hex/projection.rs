@@ -39,8 +39,10 @@ fn snapshot_columns(s: &str) -> String {
 const COLS: &str = "id, session_id, q, r, label, notes, terrain_type, color, has_dungeon, source_client, created_at, updated_at, revealed, map_id, marker_color, marker_label, gm_markers";
 
 /// Returns hex cells for a session, optionally scoped to one map. GM callers get
-/// complete rows; player callers get only revealed rows with server-only fields
-/// removed before the data leaves Postgres.
+/// complete rows; player callers get revealed rows with server-only fields
+/// removed. When a map is in reveal-all mode, explicitly hidden cells are
+/// returned as minimal sentinels so the client can override the map default
+/// without exposing hidden content.
 pub async fn list(
     pool: &PgPool,
     session_id: Uuid,
@@ -53,16 +55,28 @@ pub async fn list(
             jsonb_agg(
                 case
                     when $3 then to_jsonb(h)
-                    else to_jsonb(h) - 'gm_markers' - 'source_client'
+                    when h.revealed = true then to_jsonb(h) - 'gm_markers' - 'source_client'
+                    else jsonb_build_object(
+                        'session_id', h.session_id,
+                        'map_id', h.map_id,
+                        'q', h.q,
+                        'r', h.r,
+                        'revealed', false
+                    )
                 end
                 order by h.map_id, h.q, h.r
             ),
             '[]'::jsonb
         )
         from hex_cells h
+        join maps m on m.id = h.map_id
         where h.session_id = $1
           and ($2::uuid is null or h.map_id = $2)
-          and ($3 or h.revealed = true)
+          and (
+            $3
+            or h.revealed = true
+            or (m.fog_reveal_all = true and h.revealed = false)
+          )
         "#,
     )
     .bind(session_id)

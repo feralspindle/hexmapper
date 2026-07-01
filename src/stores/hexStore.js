@@ -58,6 +58,16 @@ function cellKey(q, r) {
   return `${q}:${r}`;
 }
 
+function hiddenCellSentinel(row) {
+  return {
+    session_id: row.session_id,
+    map_id: row.map_id,
+    q: row.q,
+    r: row.r,
+    revealed: false,
+  };
+}
+
 const PLAYER_HEX_REFRESH_MS = 5000;
 
 export const useHexStore = defineStore("hex", () => {
@@ -335,7 +345,7 @@ export const useHexStore = defineStore("hex", () => {
       if (row.source_client === CLIENT_ID) return;
       const isGM = useSessionStore().isGM;
       if (!isGM && row.revealed === false) {
-        hexCells.value.delete(cellKey(row.q, row.r));
+        hexCells.value.set(cellKey(row.q, row.r), hiddenCellSentinel(row));
         return;
       }
       if (isGM) {

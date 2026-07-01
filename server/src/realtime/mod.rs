@@ -2,17 +2,17 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use axum::Router;
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
-use axum::http::{header::ORIGIN, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header::ORIGIN};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use axum::Router;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::postgres::PgListener;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use uuid::Uuid;
 
 use crate::auth::jwt;
@@ -825,7 +825,7 @@ fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
 
     let mut payload = with_event_fields(row);
     let revealed = payload.get("revealed").and_then(Value::as_bool) == Some(true);
-    if row.event_type == "hex_cell.deleted" || !revealed {
+    if row.event_type == "hex_cell.deleted" {
         let mut removal = serde_json::Map::new();
         for key in ["id", "session_id", "map_id", "q", "r"] {
             if let Some(value) = payload.get(key) {
@@ -833,6 +833,16 @@ fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
             }
         }
         return Some(("hex_cell.deleted".into(), Value::Object(removal)));
+    }
+    if !revealed {
+        let mut sentinel = serde_json::Map::new();
+        for key in ["session_id", "map_id", "q", "r"] {
+            if let Some(value) = payload.get(key) {
+                sentinel.insert(key.to_string(), value.clone());
+            }
+        }
+        sentinel.insert("revealed".into(), json!(false));
+        return Some((row.event_type.clone(), Value::Object(sentinel)));
     }
     if let Value::Object(object) = &mut payload {
         object.remove("gm_markers");
@@ -938,7 +948,7 @@ mod tests {
     }
 
     #[test]
-    fn hidden_hex_becomes_removal() {
+    fn hidden_hex_becomes_hidden_sentinel() {
         let row = EventRow {
             id: 1,
             aggregate_type: "hex_cell".into(),
@@ -950,8 +960,10 @@ mod tests {
             created_at: chrono::Utc::now(),
         };
         let (event, payload) = visible_event(&row, false).unwrap();
-        assert_eq!(event, "hex_cell.deleted");
+        assert_eq!(event, "hex_cell.upserted");
+        assert_eq!(payload.get("revealed"), Some(&json!(false)));
         assert!(payload.get("gm_markers").is_none());
+        assert!(payload.get("id").is_none());
     }
 
     #[test]

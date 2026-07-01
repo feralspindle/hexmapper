@@ -47,4 +47,25 @@ describe('HexCell', () => {
     })
     expect(wrapper.text()).toContain('Bree')
   })
+
+  test('explicit hidden cell overrides map reveal-all for players', () => {
+    const wrapper = mountCell({
+      isGM: false,
+      fogMode: true,
+      mapFogRevealAll: true,
+      cell: { revealed: false, terrain_type: 'water', label: 'Secret Lake' },
+    })
+    expect(wrapper.find('polygon.hex-cell-poly').attributes('fill')).toBe('#111827')
+    expect(wrapper.text()).not.toContain('Secret Lake')
+  })
+
+  test('missing cell is visible when map reveal-all is on', () => {
+    const wrapper = mountCell({
+      isGM: false,
+      fogMode: true,
+      mapFogRevealAll: true,
+      cell: null,
+    })
+    expect(wrapper.find('polygon.hex-cell-poly').attributes('fill')).not.toBe('#111827')
+  })
 })
