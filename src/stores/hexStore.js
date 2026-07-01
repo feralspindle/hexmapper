@@ -68,6 +68,7 @@ export const useHexStore = defineStore("hex", () => {
   const hexDungeons = ref([]);
   const dungeonsLoading = ref(false);
   const loading = ref(false);
+  const loadError = ref(null);
   const currentSessionId = ref(null);
   const currentMapId = ref(null);
   let channel = null;
@@ -178,7 +179,9 @@ export const useHexStore = defineStore("hex", () => {
     try {
       const rows = await _fetchHexRows(sessionId, mapId, isGM);
       _replaceHexCells(rows);
+      loadError.value = null;
     } catch (error) {
+      loadError.value = error;
       console.error(
         "hex init error:",
         error instanceof ApiError ? error.message : error,
@@ -631,6 +634,7 @@ export const useHexStore = defineStore("hex", () => {
     hexDungeons,
     dungeonsLoading,
     loading,
+    loadError,
     init,
     selectHex,
     deselectHex,

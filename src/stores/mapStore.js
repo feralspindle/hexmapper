@@ -12,6 +12,7 @@ const URL_EXPIRY_SECONDS = 86400
 export const useMapStore = defineStore('map', () => {
   const maps   = ref([])
   const loading = ref(false)
+  const loadError = ref(null)
 
   const newMapModalOpen = ref(false)
 
@@ -117,6 +118,7 @@ export const useMapStore = defineStore('map', () => {
     const { data: mapRows, error } = await supabase
       .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
 
+    loadError.value = error ?? null
     if (!error && mapRows) maps.value = mapRows
 
     loading.value = false
@@ -164,6 +166,8 @@ export const useMapStore = defineStore('map', () => {
         },
       )
       .subscribe()
+
+    return !error
   }
 
   function cleanup() {
@@ -318,6 +322,7 @@ export const useMapStore = defineStore('map', () => {
   return {
     maps,
     loading,
+    loadError,
     newMapModalOpen,
     activeMap,
     effectiveMapId,

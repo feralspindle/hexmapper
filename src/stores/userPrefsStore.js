@@ -48,7 +48,10 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
       .eq('user_id', authStore.user.id)
       .maybeSingle()
 
-    if (error) console.error('userPrefsStore.load:', error.message)
+    if (error) {
+      console.error('userPrefsStore.load:', error.message)
+      return
+    }
 
     if (data) {
       mapStyle.value    = data.dungeon_map_style    ?? 'classic'

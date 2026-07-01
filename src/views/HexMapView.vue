@@ -313,9 +313,9 @@ onMounted(async () => {
     if (sessionStore.sessionId !== sessionId) {
         await sessionStore.joinSession(sessionId);
     }
-    await mapStore.init(sessionId);
+    const mapsLoaded = await mapStore.init(sessionId);
 
-    if (mapStore.maps.length === 0) {
+    if (mapsLoaded && mapStore.maps.length === 0) {
         const map = await mapStore.createMap({
             name: "World Map",
             mapType: "hex",
