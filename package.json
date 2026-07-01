@@ -12,11 +12,17 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.2.11",
+    "@fontsource/im-fell-english": "^5.2.6",
+    "@fontsource/im-fell-english-sc": "^5.2.6",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/special-elite": "^5.2.8",
     "@fortawesome/fontawesome-free": "^7.2.0",
     "@grafana/faro-web-sdk": "^2.7.1",
     "@grafana/faro-web-tracing": "^2.7.1",
     "@supabase/supabase-js": "^2.47.10",
     "pinia": "^3.0.1",
+    "rpg-awesome": "^0.2.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

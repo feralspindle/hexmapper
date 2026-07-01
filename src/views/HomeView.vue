@@ -19,7 +19,7 @@
               :class="authTab === t
                 ? 'text-parchment-200 bg-stone-750 border-b-2 border-parchment-400'
                 : 'text-stone-500 hover:text-stone-300'"
-              @click="authTab = t; authError = null; emailConfirmSent = false"
+              @click="authTab = t; authError = null; emailConfirmSent = false; discordBlockedHint = false"
             >
               {{ t === 'discord' ? 'Discord' : 'Email' }}
             </button>
@@ -39,6 +39,11 @@
                 </svg>
                 {{ loggingIn ? 'Redirecting to Discord…' : 'Continue with Discord' }}
               </button>
+              <p v-if="discordBlockedHint" class="text-amber-300 text-sm mt-3">
+                Couldn't reach Discord — an ad blocker or privacy extension may be blocking it. Try
+                allowlisting this site, or
+                <button class="underline hover:text-amber-200" @click="switchToEmail">sign in with email</button>.
+              </p>
             </template>
 
             <template v-else>
@@ -239,7 +244,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
@@ -258,8 +263,11 @@ const authTab = ref('discord')
 const loggingIn = ref(false)
 const emailLoading = ref(false)
 const authError = ref(null)
+const discordBlockedHint = ref(false)
 const emailField = ref('')
 const passwordField = ref('')
+
+let discordRedirectTimer = null
 
 onMounted(async () => {
   await authStore.init()
@@ -271,13 +279,29 @@ onMounted(async () => {
 async function handleDiscordLogin() {
   loggingIn.value = true
   authError.value = null
+  discordBlockedHint.value = false
+  clearTimeout(discordRedirectTimer)
+  discordRedirectTimer = setTimeout(() => {
+    loggingIn.value = false
+    discordBlockedHint.value = true
+  }, 6000)
   try {
     await authStore.signInWithDiscord()
   } catch (e) {
-    authError.value = e.message
+    clearTimeout(discordRedirectTimer)
     loggingIn.value = false
+    discordBlockedHint.value = true
+    authError.value = e.message
   }
 }
+
+function switchToEmail() {
+  authTab.value = 'email'
+  discordBlockedHint.value = false
+  authError.value = null
+}
+
+onUnmounted(() => clearTimeout(discordRedirectTimer))
 
 async function handleEmailSubmit() {
   authError.value = null
