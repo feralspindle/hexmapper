@@ -149,6 +149,11 @@ class RustRealtime {
     return new RustChannel(this, name, options)
   }
 
+  _emitStatus() {
+    const connected = this.ready || this.channels.size === 0
+    window.dispatchEvent(new CustomEvent('hexmap:realtime-status', { detail: { connected } }))
+  }
+
   removeChannel(channel) {
     if (channel.handlers.some(handler => handler.type === 'presence')) {
       channel.untrack()
@@ -156,6 +161,7 @@ class RustRealtime {
     channel.subscribed = false
     this.channels.delete(channel)
     if (channel.sessionId) this.releaseSession(channel.sessionId)
+    this._emitStatus()
     return Promise.resolve('ok')
   }
 
@@ -225,6 +231,7 @@ class RustRealtime {
         window.dispatchEvent(new CustomEvent('hexmap:realtime-reconnected'))
       }
       this.everReady = true
+      this._emitStatus()
       return
     }
     if (message.type === 'subscribed') {
@@ -312,6 +319,7 @@ class RustRealtime {
       channel.presences = []
       channel.statusCallback?.('CLOSED')
     }
+    this._emitStatus()
     if (!this.channels.size) return
     const delay = Math.min(30_000, 500 * 2 ** this.reconnectAttempt++) * (0.75 + Math.random() * 0.5)
     setTimeout(() => this.connect(), delay)

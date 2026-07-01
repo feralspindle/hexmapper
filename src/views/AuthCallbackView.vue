@@ -34,11 +34,15 @@ onMounted(async () => {
 
   const userId = data.session?.user?.id
   if (userId) {
-    const [{ count: owned }, { count: joined }] = await Promise.all([
+    const [ownedRes, joinedRes] = await Promise.all([
       supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('owner_id', userId),
       supabase.from('session_members').select('*', { count: 'exact', head: true }).eq('user_id', userId),
     ])
-    if (!owned && !joined) {
+    if (ownedRes.error || joinedRes.error) {
+      error.value = 'Could not verify your account. Check your connection (an ad blocker may be blocking requests) and try again.'
+      return
+    }
+    if (!ownedRes.count && !joinedRes.count) {
       await supabase.auth.signOut()
       error.value = 'Sign-ups are currently closed.'
       return

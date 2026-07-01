@@ -23,6 +23,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   let settingsChannel = null
   let daysChannel     = null
   let _sessionId      = null
+  let _settingsLoaded = false
   const _fetchedYears = new Set()
 
   async function init(sessionId) {
@@ -39,28 +40,32 @@ export const useCalendarStore = defineStore('calendar', () => {
     if (settingsChannel) { realtime.removeChannel(settingsChannel); settingsChannel = null }
     if (daysChannel)     { realtime.removeChannel(daysChannel);     daysChannel     = null }
     _sessionId = null
+    _settingsLoaded = false
     settings.value = { ...DEFAULT_SETTINGS }
     days.value = []
     _fetchedYears.clear()
   }
 
   async function _loadSettings(sessionId) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('party_calendar_settings')
       .select('*')
       .eq('session_id', sessionId)
       .maybeSingle()
+    if (error) { console.error('calendarStore._loadSettings:', error.message); return }
     if (data) settings.value = { ...DEFAULT_SETTINGS, ...data }
+    _settingsLoaded = true
   }
 
   async function _loadDays(sessionId, year) {
     if (_fetchedYears.has(year)) return
-    _fetchedYears.add(year)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('party_calendar_days')
       .select('*')
       .eq('session_id', sessionId)
       .eq('year', year)
+    if (error) { console.error('calendarStore._loadDays:', error.message); return }
+    _fetchedYears.add(year)
     if (data) {
       for (const d of data) {
         if (!days.value.find(x => x.id === d.id)) days.value.push(d)
@@ -125,6 +130,10 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function updateSettings(patch) {
+    if (!_settingsLoaded) {
+      console.warn('calendarStore.updateSettings skipped: settings not loaded (read may be blocked)')
+      return
+    }
     Object.assign(settings.value, patch)
     try {
       const data = await apiClient.put('/calendar-settings', {
