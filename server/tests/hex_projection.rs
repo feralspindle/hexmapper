@@ -6,18 +6,25 @@
 //!
 //! Gated on `DATABASE_URL`: with no DB configured (e.g. a plain `cargo test`
 //! locally) the test is skipped rather than failed. CI provides an ephemeral
-//! Postgres service. It (re)creates a minimal `events` + `hex_cells` schema, so
-//! point it ONLY at a throwaway database.
+//! Postgres service. It (re)creates a minimal `events` + `maps` + `hex_cells`
+//! schema, so point it ONLY at a throwaway database.
 
 use hexmap_server::domains::hex::projection;
-use serde_json::{json, Value};
-use sqlx::postgres::PgPoolOptions;
+use serde_json::{Value, json};
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
 const SCHEMA: &str = r#"
 drop table if exists events;
 drop table if exists hex_cells;
+drop table if exists maps;
+
+create table maps (
+    id             uuid primary key,
+    session_id     uuid not null,
+    fog_reveal_all boolean not null default false
+);
 
 create table hex_cells (
     id            uuid primary key default gen_random_uuid(),
@@ -88,6 +95,13 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     let session_id = Uuid::new_v4();
     let map_id = Uuid::new_v4();
 
+    sqlx::query("insert into maps (id, session_id, fog_reveal_all) values ($1, $2, false)")
+        .bind(map_id)
+        .bind(session_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
     let revealed = upsert(
         &pool,
         session_id,
@@ -130,6 +144,27 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert_eq!(player_cells[0]["q"], 0);
     assert!(player_cells[0].get("gm_markers").is_none());
     assert!(player_cells[0].get("source_client").is_none());
+
+    // Reveal-all makes missing cells visible by default, so hidden rows are sent
+    // as minimal sentinels that override the map default without leaking content.
+    sqlx::query("update maps set fog_reveal_all = true where id = $1")
+        .bind(map_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let reveal_all_player_view = projection::list(&pool, session_id, Some(map_id), false)
+        .await
+        .unwrap();
+    let reveal_all_player_cells = reveal_all_player_view.as_array().unwrap();
+    assert_eq!(reveal_all_player_cells.len(), 2);
+    let hidden_sentinel = reveal_all_player_cells
+        .iter()
+        .find(|c| c["q"] == 1)
+        .expect("hidden cell sentinel");
+    assert_eq!(hidden_sentinel["revealed"], false);
+    assert!(hidden_sentinel.get("terrain_type").is_none());
+    assert!(hidden_sentinel.get("gm_markers").is_none());
+    assert!(hidden_sentinel.get("source_client").is_none());
 
     // is_revealed is the player edit gate.
     assert!(projection::is_revealed(&pool, map_id, 0, 0).await.unwrap());
