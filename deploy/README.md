@@ -1,8 +1,8 @@
-# Deployment — single droplet + Cloudflare
+# Deployment — production and staging droplets + Cloudflare
 
-The Vue SPA and the Rust API run on **one DigitalOcean droplet** behind **Cloudflare**.
-Same-origin: Caddy serves the SPA and reverse-proxies `/api/*` to the Rust server.
-Supabase (Postgres/Auth/Realtime/Storage) stays remote.
+The Vue SPA and the Rust API run on DigitalOcean droplets behind **Cloudflare**.
+Production and staging use the same host layout, but each environment has its own
+droplet, Supabase project, GitHub Environment secrets, and domain.
 
 ```
 Browser → Cloudflare (edge TLS, CDN, /api/* cache-bypass)
@@ -22,7 +22,7 @@ Browser → Cloudflare (edge TLS, CDN, /api/* cache-bypass)
 └── .env      # API + DOMAIN secrets  (from deploy/.env.example, NOT in git)
 ```
 
-## One-time setup
+## One-time setup per environment
 
 1. **Droplet** — create in **the same region as your Supabase project** (commit latency
    is dominated by droplet↔Supabase RTT). 2 GB / amd64 / Ubuntu 24.04 LTS.
@@ -36,8 +36,9 @@ Browser → Cloudflare (edge TLS, CDN, /api/* cache-bypass)
    ```
 
 3. **Domain + Cloudflare**
-   - Point the domain's nameservers at Cloudflare; add an **A record** for the apex (and/or
-     a `staging` sub) → droplet IP, **proxied (orange cloud)**.
+   - Point the domain's nameservers at Cloudflare; add an **A record** for the production
+     domain and another for `staging.<domain>` → the correct droplet IP, **proxied
+     (orange cloud)**.
    - SSL/TLS mode → **Full (strict)**.
    - SSL/TLS → Origin Server → **Create Certificate** → save the cert to
      `/opt/hexmap/certs/origin.pem` and the key to `/opt/hexmap/certs/origin.key`.
@@ -45,8 +46,10 @@ Browser → Cloudflare (edge TLS, CDN, /api/* cache-bypass)
      (otherwise Cloudflare may cache `GET /api/...`).
 
 4. **GHCR pull access** — the API image is published to GitHub Container Registry by CI.
-   Set `API_IMAGE` in `/opt/hexmap/.env` (e.g. `ghcr.io/<owner>/hexmap-server:latest`,
-   owner lowercase). The droplet must be able to pull it:
+   Set `API_IMAGE` in `/opt/hexmap/.env` (e.g. `ghcr.io/<owner>/hexmap-server:main`
+   for production or `ghcr.io/<owner>/hexmap-server:staging` for staging, owner
+   lowercase). CI deploys immutable commit-SHA tags via `API_IMAGE_OVERRIDE`, but the
+   `.env` value is still the manual fallback. The droplet must be able to pull it:
    - If the repo/package is **private**, log in once on the droplet:
      ```bash
      echo <GHCR_PAT_with_read:packages> | docker login ghcr.io -u <github-user> --password-stdin
@@ -54,8 +57,8 @@ Browser → Cloudflare (edge TLS, CDN, /api/* cache-bypass)
    - Or make the package **public** (Packages → settings → change visibility) — the image
      holds no secrets (env comes from `.env` at runtime).
 
-5. **GitHub repo secrets**, then push to `main` (the first push builds the image and runs
-   the first deploy; or trigger the workflows manually):
+5. **GitHub Environments + secrets** — create Environments named `production` and
+   `staging`, then add the same secret names to each with environment-specific values:
    | secret | value |
    |---|---|
    | `DEPLOY_HOST` | droplet IP / hostname |
@@ -64,10 +67,20 @@ Browser → Cloudflare (edge TLS, CDN, /api/* cache-bypass)
    | `VITE_SUPABASE_URL` | `https://<ref>.supabase.co` |
    | `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Supabase publishable/anon key |
    | `VITE_REALTIME_TRANSPORT` | `supabase` during rollout, then `rust` after migrations through `20260620000043` are applied |
+   | `VITE_FARO_URL` | optional Grafana Faro collector URL |
+   | `E2E_BASE_URL` | staging only, e.g. `https://staging.<domain>` |
+   | `E2E_GM_EMAIL` / `E2E_GM_PASSWORD` | staging only |
+   | `E2E_PLAYER1_EMAIL` / `E2E_PLAYER1_PASSWORD` | staging only |
+   | `E2E_PLAYER2_EMAIL` / `E2E_PLAYER2_PASSWORD` | staging only |
 
    (Pushing the image uses the built-in `GITHUB_TOKEN` — no secret needed.)
 
-## Deploys — automatic on push to `main` (Vercel-style)
+## Deploys
+
+Branch-to-environment mapping:
+
+- `main` deploys to the `production` GitHub Environment and production droplet.
+- `staging` deploys to the `staging` GitHub Environment and staging droplet.
 
 Path-filtered, so each push only rebuilds what changed:
 
@@ -76,51 +89,26 @@ Path-filtered, so each push only rebuilds what changed:
   Caddy serves it immediately, no restart.
 - **Server** (`.github/workflows/deploy-server.yml`) — fires on `server/**` or `deploy/**`:
   builds the Docker image on GitHub's runners → pushes to GHCR → SSHes to the droplet,
-  which runs `deploy.sh` (pull the new image + `docker compose up -d`). It also tries a
-  best-effort `git pull` first to refresh compose/Caddyfile; if the droplet repo can't
-  auth a pull, that's skipped and you `git pull` manually when you change those files.
+  checks out the matching branch, then runs `deploy.sh` with `API_IMAGE_OVERRIDE` pinned
+  to the commit SHA. The droplet pulls that exact image and restarts the stack.
+- **E2E** — after a staging frontend or server deploy, Playwright runs against the staging
+  URL when the staging E2E secrets are configured. It also runs on a nightly schedule.
 
 Manual server deploy / rollback to a specific image still works:
-`git -C /opt/hexmap/repo pull && bash /opt/hexmap/repo/deploy/deploy.sh` (or set
-`API_IMAGE=…:<sha>` in `.env` to pin an older build, then run it).
+`git -C /opt/hexmap/repo pull && API_IMAGE_OVERRIDE=ghcr.io/<owner>/hexmap-server:<sha> bash /opt/hexmap/repo/deploy/deploy.sh`
+(or set `API_IMAGE=...:<sha>` in `.env` to pin an older build, then run it).
 
 > Migrations are **not** auto-applied — the genesis backfills and the cutover RLS lock
 > are run deliberately via `apply_sql`, never by the deploy pipeline.
 
-## Cutover sequencing (this deploy is Phase 8)
+## Supabase project cutover
 
-Strategy: **same Supabase project** for both stacks (no DB copy — the new server has
-been validated against live prod data all along, and the schema changes are additive
-and already applied). The old Vercel site and the new droplet run **in parallel against
-one DB** until you're confident; the only thing that severs the old site is the RLS
-write-lock, applied last and instantly reversible.
-
-1. **Droplet up on a `staging.` subdomain**; build the frontend against it. Both the old
-   Vercel site and the new site now talk to the same Supabase — no divergence, users stay
-   logged in, Storage/images work.
-2. **Phase 7 pass** on staging: every domain, two tabs, realtime sync. Do destructive
-   testing in a **throwaway session** so you don't muddy real campaigns (same DB!).
-3. **Snapshot right before the lock** (your safety net):
-   ```bash
-   supabase db dump -f pre_cutover_$(date +%Y%m%d).sql      # CLI, project already linked
-   ```
-   (Or trigger/download a backup in the dashboard; PITR if you're on Pro — note the timestamp.)
-4. **Flip + lock:** point the apex domain at the droplet, then apply the write-lock:
-   ```bash
-   cd server && cargo run --example apply_sql -- ../supabase/migrations/20260620000040_lock_write_rls.sql
-   ```
-   This blocks direct client writes (so the old Vercel site goes read-only) while the
-   Rust server (bypassrls) keeps writing. `member_write` on rooms/corridors is preserved —
-   the lock is additive and doesn't touch existing policies.
-5. **Watch.** If anything's wrong, instant rollback:
-   ```bash
-   cd server && cargo run --example apply_sql -- ../deploy/cutover-rollback-unlock-rls.sql
-   ```
-   (worst case, restore the snapshot from step 3).
-6. **Drop Vercel last**, once you've lived on the new stack for a bit.
-
-Note: `bug_reports` stays direct-write (not locked), so bug reporting keeps working from
-the client against the same DB throughout.
+The current Supabase projects were historically swapped: the staging-labeled project
+holds live production data, and the production-labeled project holds dev data. Follow
+[supabase-cutover.md](./supabase-cutover.md) for the backup, restore, validation,
+rollback, and new staging setup steps. Do not reset the current live source project
+until production has run successfully from the real production project for at least
+14 days.
 
 ## Notes / gotchas
 

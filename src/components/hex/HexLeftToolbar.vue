@@ -4,6 +4,7 @@
             <span class="ds-tool-label">View</span>
             <button
                 class="ds-tool"
+                data-testid="hex-tool-select"
                 :aria-pressed="activeTool === 'select'"
                 @click="emit('tool', 'select')"
             >
@@ -21,6 +22,7 @@
             </button>
             <button
                 class="ds-tool"
+                data-testid="hex-tool-pan"
                 :aria-pressed="activeTool === 'pan'"
                 @click="emit('tool', 'pan')"
             >
@@ -51,6 +53,7 @@
                 <span class="ds-tool-label">Reveal</span>
                 <button
                     class="ds-tool"
+                    data-testid="hex-tool-reveal"
                     :aria-pressed="activeTool === 'reveal'"
                     @click="emit('tool', 'reveal')"
                 >
@@ -74,6 +77,7 @@
                 </button>
                 <button
                     class="ds-tool danger"
+                    data-testid="hex-tool-hide"
                     :aria-pressed="activeTool === 'hide'"
                     @click="emit('tool', 'hide')"
                 >
@@ -99,7 +103,7 @@
             </div>
             <div class="ds-tool-group">
                 <span class="ds-tool-label">All</span>
-                <button class="ds-tool" @click="emit('reveal-all')">
+                <button class="ds-tool" data-testid="hex-reveal-all" @click="emit('reveal-all')">
                     <svg
                         width="18"
                         height="18"
@@ -117,7 +121,7 @@
                     </svg>
                     <span class="ds-tip">Reveal all hexes</span>
                 </button>
-                <button class="ds-tool danger" @click="emit('hide-all')">
+                <button class="ds-tool danger" data-testid="hex-hide-all" @click="emit('hide-all')">
                     <svg
                         width="18"
                         height="18"
@@ -139,6 +143,7 @@
                 <span class="ds-tool-label">Map</span>
                 <button
                     class="ds-tool"
+                    data-testid="hex-map-settings"
                     :aria-pressed="settingsOpen"
                     @click="emit('map-settings')"
                 >
@@ -167,6 +172,7 @@
                 <span class="ds-tool-label">Map</span>
                 <button
                     class="ds-tool"
+                    data-testid="hex-map-settings"
                     :aria-pressed="settingsOpen"
                     @click="emit('map-settings')"
                 >
@@ -192,6 +198,7 @@
                 <span class="ds-tool-label">Terrain</span>
                 <button
                     class="ds-tool"
+                    data-testid="hex-tool-paint"
                     :aria-pressed="activeTool === 'paint'"
                     @click="emit('tool', 'paint')"
                 >
@@ -216,6 +223,7 @@
                 <span class="ds-tool-label">Mark</span>
                 <button
                     class="ds-tool"
+                    data-testid="hex-tool-marker"
                     :aria-pressed="activeTool === 'marker'"
                     @click="emit('tool', 'marker')"
                 >
@@ -239,6 +247,7 @@
                 </button>
                 <button
                     class="ds-tool danger"
+                    data-testid="hex-tool-erase"
                     :aria-pressed="activeTool === 'erase'"
                     @click="emit('tool', 'erase')"
                 >
@@ -264,6 +273,7 @@
         <div class="ds-tool-group">
             <button
                 class="ds-tool"
+                data-testid="hex-sound-toggle"
                 :aria-pressed="!soundEnabled ? 'true' : 'false'"
                 @click="toggleSound()"
             >
@@ -286,6 +296,7 @@
             <span class="ds-tool-label">Party</span>
             <button
                 class="ds-tool"
+                data-testid="hex-party-toggle"
                 :aria-pressed="partyVisible ? 'true' : 'false'"
                 @click="toggleParty()"
             >
@@ -307,6 +318,7 @@
             </button>
             <button
                 class="ds-tool"
+                data-testid="hex-vault-toggle"
                 :aria-pressed="vaultVisible ? 'true' : 'false'"
                 @click="toggleVault()"
             >
@@ -331,6 +343,7 @@
     <div v-else class="ds-toolbar-float">
         <button
             class="ds-tool"
+            data-testid="hex-tool-select"
             :aria-pressed="activeTool === 'select'"
             @click="emit('tool', 'select')"
         >
@@ -347,6 +360,7 @@
         </button>
         <button
             class="ds-tool"
+            data-testid="hex-tool-pan"
             :aria-pressed="activeTool === 'pan'"
             @click="emit('tool', 'pan')"
         >
@@ -372,6 +386,7 @@
         <div class="ds-float-sep" />
         <button
             class="ds-tool"
+            data-testid="hex-party-toggle"
             :aria-pressed="partyVisible ? 'true' : 'false'"
             @click="toggleParty()"
         >
@@ -384,6 +399,7 @@
         </button>
         <button
             class="ds-tool"
+            data-testid="hex-vault-toggle"
             :aria-pressed="vaultVisible ? 'true' : 'false'"
             @click="toggleVault()"
         >
@@ -396,6 +412,7 @@
         <div class="ds-float-sep" />
         <button
             class="ds-tool"
+            data-testid="hex-sound-toggle"
             :aria-pressed="!soundEnabled ? 'true' : 'false'"
             @click="toggleSound()"
         >
@@ -416,6 +433,7 @@
             <div class="ds-float-sep" />
             <button
                 class="ds-tool"
+                data-testid="hex-tool-paint"
                 :aria-pressed="activeTool === 'paint'"
                 @click="emit('tool', 'paint')"
             >
@@ -437,6 +455,7 @@
             <div class="ds-float-sep" />
             <button
                 class="ds-tool"
+                data-testid="hex-tool-marker"
                 :aria-pressed="activeTool === 'marker'"
                 @click="emit('tool', 'marker')"
             >
@@ -459,6 +478,7 @@
             </button>
             <button
                 class="ds-tool danger"
+                data-testid="hex-tool-erase"
                 :aria-pressed="activeTool === 'erase'"
                 @click="emit('tool', 'erase')"
             >

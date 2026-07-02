@@ -37,6 +37,7 @@
                 <template v-if="!bgUrl">
                     <button
                         class="ds-btn"
+                        data-testid="mode-fow-upload"
                         style="
                             width: 100%;
                             justify-content: center;
@@ -71,6 +72,7 @@
                     />
                     <button
                         class="ds-btn ghost"
+                        data-testid="mode-fow-existing"
                         style="
                             width: 100%;
                             justify-content: center;
@@ -88,6 +90,7 @@
                     </div>
                     <button
                         class="ds-btn"
+                        data-testid="mode-fow-begin"
                         style="
                             width: 100%;
                             justify-content: center;
@@ -142,6 +145,7 @@
                 <div style="flex: 1" />
                 <button
                     class="ds-btn"
+                    data-testid="mode-blank"
                     style="
                         width: 100%;
                         justify-content: center;

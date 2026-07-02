@@ -15,6 +15,7 @@
             <button
               v-for="t in ['discord', 'email']"
               :key="t"
+              :data-testid="`auth-tab-${t}`"
               class="flex-1 py-3 text-sm font-display transition-colors"
               :class="authTab === t
                 ? 'text-parchment-200 bg-stone-750 border-b-2 border-parchment-400'
@@ -52,6 +53,7 @@
                   <label class="block text-stone-400 text-sm mb-1">Email</label>
                   <input
                     v-model="emailField"
+                    data-testid="auth-email"
                     type="email"
                     required
                     autocomplete="email"
@@ -63,6 +65,7 @@
                   <label class="block text-stone-400 text-sm mb-1">Password</label>
                   <input
                     v-model="passwordField"
+                    data-testid="auth-password"
                     type="password"
                     required
                     autocomplete="current-password"
@@ -72,6 +75,7 @@
                 </div>
                 <button
                   type="submit"
+                  data-testid="auth-submit"
                   :disabled="emailLoading"
                   class="w-full bg-parchment-500 hover:bg-parchment-400 disabled:opacity-50 text-stone-900 font-display rounded px-4 py-2.5 transition-colors mt-1"
                 >
@@ -117,12 +121,14 @@
           <div class="flex gap-2">
             <input
               v-model="newName"
+              data-testid="campaign-name"
               type="text"
               placeholder="The Verdant Reaches…"
               class="flex-1 bg-stone-700 border border-stone-500 rounded px-3 py-2 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-parchment-400"
               @keyup.enter="create"
             />
             <button
+              data-testid="campaign-create"
               @click="create"
               :disabled="sessionStore.loading"
               class="bg-parchment-500 hover:bg-parchment-400 disabled:opacity-50 text-stone-900 font-display rounded px-4 py-2 transition-colors shrink-0"
@@ -138,12 +144,14 @@
           <div class="flex gap-2">
             <input
               v-model="joinInput"
+              data-testid="campaign-join-input"
               type="text"
               placeholder="Paste the session URL or UUID…"
               class="flex-1 bg-stone-700 border border-stone-500 rounded px-3 py-2 text-stone-100 placeholder-stone-500 focus:outline-none focus:border-parchment-400"
               @keyup.enter="join"
             />
             <button
+              data-testid="campaign-join"
               @click="join"
               :disabled="sessionStore.loading || !joinInput.trim()"
               class="bg-stone-600 hover:bg-stone-500 disabled:opacity-50 text-stone-100 font-display rounded px-4 py-2 transition-colors shrink-0"

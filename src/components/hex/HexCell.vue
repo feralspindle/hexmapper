@@ -2,6 +2,13 @@
   <g
     :transform="`translate(${center.x}, ${center.y})`"
     class="hex-cell"
+    data-testid="hex-cell"
+    :data-q="q"
+    :data-r="r"
+    :data-revealed="isRevealed ? 'true' : 'false'"
+    :data-visible-to-player="visibleToPlayer ? 'true' : 'false'"
+    :data-terrain="cell?.terrain_type ?? ''"
+    :data-marker-count="markerCount"
     :class="{ 'cursor-pointer': true }"
     @click.stop="emit('click')"
     @contextmenu.prevent.stop="emit('contextmenu')"
@@ -13,6 +20,8 @@
       :stroke="hexStroke"
       :stroke-width="0.8 / (size / 48)"
       class="hex-cell-poly transition-colors duration-150"
+      data-testid="hex-cell-poly"
+      :data-fill="hexFill"
     />
 
     <g

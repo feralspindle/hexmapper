@@ -2,6 +2,7 @@
     <div
         ref="containerEl"
         class="w-full h-full overflow-hidden select-none"
+        data-testid="hex-grid"
         :class="
             middlePanning
                 ? 'cursor-grabbing'

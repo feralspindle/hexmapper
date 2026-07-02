@@ -145,6 +145,11 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert!(player_cells[0].get("gm_markers").is_none());
     assert!(player_cells[0].get("source_client").is_none());
 
+    // is_revealed is the player edit gate before reveal-all is enabled.
+    assert!(projection::is_revealed(&pool, map_id, 0, 0).await.unwrap());
+    assert!(!projection::is_revealed(&pool, map_id, 1, 0).await.unwrap());
+    assert!(!projection::is_revealed(&pool, map_id, 9, 9).await.unwrap());
+
     // Reveal-all makes missing cells visible by default, so hidden rows are sent
     // as minimal sentinels that override the map default without leaking content.
     sqlx::query("update maps set fog_reveal_all = true where id = $1")
@@ -166,10 +171,11 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert!(hidden_sentinel.get("gm_markers").is_none());
     assert!(hidden_sentinel.get("source_client").is_none());
 
-    // is_revealed is the player edit gate.
+    // The edit gate follows the same rule: explicit hidden cells stay hidden,
+    // but missing cells inherit reveal-all visibility.
     assert!(projection::is_revealed(&pool, map_id, 0, 0).await.unwrap());
     assert!(!projection::is_revealed(&pool, map_id, 1, 0).await.unwrap());
-    assert!(!projection::is_revealed(&pool, map_id, 9, 9).await.unwrap());
+    assert!(projection::is_revealed(&pool, map_id, 9, 9).await.unwrap());
 
     // Each upsert recorded an event.
     let event_count: i64 =

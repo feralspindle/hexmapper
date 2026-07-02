@@ -3,7 +3,7 @@
 
     <div class="map-settings-header">
       <span class="map-settings-title">Map Settings</span>
-      <button class="map-settings-close" title="Close" @click="emit('close')">
+      <button class="map-settings-close" data-testid="map-settings-close" title="Close" @click="emit('close')">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M1 1l10 10M11 1L1 11"/>
         </svg>

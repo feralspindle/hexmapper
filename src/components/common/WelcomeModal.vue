@@ -11,7 +11,7 @@
             <h2 class="ds-wm-title">Welcome to my overland &amp; dungeon mapping tool</h2>
             <p class="ds-wm-subtitle">Here's a quick look at how far overboard I have gone!</p>
           </div>
-          <button class="ds-wm-close" @click="dismiss"><i class="fa-solid fa-xmark" /></button>
+          <button class="ds-wm-close" data-testid="welcome-close" @click="dismiss"><i class="fa-solid fa-xmark" /></button>
         </div>
 
         <div class="ds-wm-body">
@@ -52,7 +52,7 @@
         </div>
 
         <div class="ds-wm-footer">
-          <button class="ds-wm-btn" @click="dismiss">OK, you're a lunatic!</button>
+          <button class="ds-wm-btn" data-testid="welcome-ok" @click="dismiss">OK, you're a lunatic!</button>
         </div>
 
       </div>

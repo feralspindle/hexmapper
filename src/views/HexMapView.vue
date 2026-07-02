@@ -1,6 +1,7 @@
 <template>
     <div
         class="dungeon-scribe"
+        data-testid="hex-map-view"
         :data-density="prefs.density"
         :data-palette="prefs.palette"
     >
@@ -32,6 +33,7 @@
 
             <div
                 class="hm-canvas-area"
+                data-testid="hex-canvas"
                 :class="{ 'mode-blank': hexMode === 'blank' }"
                 :data-tool="activeTool"
             >
@@ -242,7 +244,8 @@ async function onPickFow(file) {
     hexMode.value = "fow";
     localStorage.setItem(modeKey.value, "fow");
     activeTool.value = "select";
-    sessionStore.setHexMode("fow");
+    await sessionStore.setHexMode("fow");
+    await mapStore.setFogRevealAll(false);
     if (file) {
         try {
             const path = await mapStore.uploadMapImage(file);
@@ -256,12 +259,13 @@ async function onPickFow(file) {
     }
 }
 
-function onPickBlank() {
+async function onPickBlank() {
     showModePicker.value = false;
     hexMode.value = "blank";
     localStorage.setItem(modeKey.value, "blank");
     activeTool.value = "select";
-    sessionStore.setHexMode("blank");
+    await sessionStore.setHexMode("blank");
+    await mapStore.setFogRevealAll(true);
 }
 
 function setTool(tool) {

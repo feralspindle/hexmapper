@@ -95,6 +95,7 @@ pub async fn is_revealed(pool: &PgPool, map_id: Uuid, q: i32, r: i32) -> Result<
         r#"
         select coalesce(
             (select revealed from hex_cells where map_id = $1 and q = $2 and r = $3),
+            (select fog_reveal_all from maps where id = $1),
             false
         )
         "#,

@@ -13,6 +13,11 @@ ENV_FILE="${ENV_FILE:-/opt/hexmap/.env}"
 
 cd "$REPO_DIR/deploy"
 
+if [ -n "${API_IMAGE_OVERRIDE:-}" ]; then
+  export API_IMAGE="$API_IMAGE_OVERRIDE"
+  echo "==> using API_IMAGE_OVERRIDE=$API_IMAGE"
+fi
+
 echo "==> pulling latest api image"
 docker compose --env-file "$ENV_FILE" pull api
 
