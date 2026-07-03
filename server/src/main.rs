@@ -1,5 +1,5 @@
-use axum::routing::get;
 use axum::Router;
+use axum::routing::get;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use hexmap_server::auth;
@@ -27,17 +27,22 @@ async fn main() {
         .await
         .expect("failed to fetch Supabase JWKS");
 
-    let state = AppState::new(pool, jwks, config.cors_allowed_origin.clone());
+    let state = AppState::new(pool, jwks, config.cors_allowed_origins.clone());
     realtime::spawn_event_listener(config.database_url.clone(), state.clone());
     auth::jwt::spawn_jwks_refresh(config.supabase_url.clone(), state.clone());
     ratelimit::spawn_retain(state.clone());
 
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::exact(
+        .allow_origin(AllowOrigin::list(
             config
-                .cors_allowed_origin
-                .parse()
-                .expect("invalid CORS_ALLOWED_ORIGIN"),
+                .cors_allowed_origins
+                .iter()
+                .map(|origin| {
+                    origin
+                        .parse()
+                        .unwrap_or_else(|_| panic!("invalid CORS_ALLOWED_ORIGIN: {origin}"))
+                })
+                .collect::<Vec<_>>(),
         ))
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
@@ -50,6 +55,7 @@ async fn main() {
         .merge(domains::photo::router())
         .merge(domains::activity::router())
         .merge(domains::notes::router())
+        .merge(domains::oracle::router())
         .merge(domains::notebook::router())
         .merge(domains::calendar::router())
         .merge(domains::vault::router())

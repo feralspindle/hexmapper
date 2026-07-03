@@ -10,9 +10,9 @@
 //! schema, so point it ONLY at a throwaway database.
 
 use hexmap_server::domains::hex::projection;
-use serde_json::{Value, json};
-use sqlx::PgPool;
+use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 const SCHEMA: &str = r#"

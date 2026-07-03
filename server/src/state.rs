@@ -15,17 +15,17 @@ pub struct AppStateInner {
     pub jwks: RwLock<Arc<JwkSet>>,
     pub realtime: RealtimeHub,
     pub rate_limiter: Arc<UserRateLimiter>,
-    pub cors_allowed_origin: String,
+    pub cors_allowed_origins: Vec<String>,
 }
 
 impl AppState {
-    pub fn new(pool: PgPool, jwks: JwkSet, cors_allowed_origin: String) -> Self {
+    pub fn new(pool: PgPool, jwks: JwkSet, cors_allowed_origins: Vec<String>) -> Self {
         Self(Arc::new(AppStateInner {
             pool,
             jwks: RwLock::new(Arc::new(jwks)),
             realtime: RealtimeHub::default(),
             rate_limiter: ratelimit::build(),
-            cors_allowed_origin,
+            cors_allowed_origins,
         }))
     }
 
@@ -52,7 +52,10 @@ impl AppState {
         &self.0.realtime
     }
 
-    pub fn cors_allowed_origin(&self) -> &str {
-        &self.0.cors_allowed_origin
+    pub fn allows_origin(&self, origin: &str) -> bool {
+        self.0
+            .cors_allowed_origins
+            .iter()
+            .any(|allowed| allowed == origin)
     }
 }

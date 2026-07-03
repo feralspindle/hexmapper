@@ -14,6 +14,7 @@ export const useSessionStore = defineStore('session', () => {
   const activeMapId    = ref(null)
   const hexMode        = ref(null)
   const gmInitiative   = ref(null)
+  const playMode       = ref('gm')
   const torchRunning   = ref(false)
   const torchElapsedMs = ref(0)
   const torchStartedAt = ref(null)
@@ -44,6 +45,7 @@ export const useSessionStore = defineStore('session', () => {
     activeMapId.value    = data.active_map_id ?? null
     hexMode.value        = data.hex_mode ?? null
     gmInitiative.value   = data.gm_initiative ?? null
+    playMode.value       = data.play_mode ?? 'gm'
     torchRunning.value   = data.torch_running ?? false
     torchElapsedMs.value = data.torch_elapsed_ms ?? 0
     torchStartedAt.value = data.torch_started_at ?? null
@@ -67,6 +69,7 @@ export const useSessionStore = defineStore('session', () => {
           if (row.active_map_id !== undefined)    activeMapId.value    = row.active_map_id ?? null
           if (row.hex_mode !== undefined)         hexMode.value        = row.hex_mode
           if (row.gm_initiative !== undefined)    gmInitiative.value   = row.gm_initiative ?? null
+          if (row.play_mode !== undefined)        playMode.value       = row.play_mode ?? 'gm'
           if (row.torch_running !== undefined)    torchRunning.value   = row.torch_running
           if (row.torch_elapsed_ms !== undefined) torchElapsedMs.value = row.torch_elapsed_ms
           if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
@@ -83,13 +86,13 @@ export const useSessionStore = defineStore('session', () => {
     const [ownedRes, joinedRes] = await Promise.all([
       supabase
         .from('sessions')
-        .select('id, name, created_at, updated_at')
+        .select('id, name, created_at, updated_at, play_mode')
         .eq('owner_id', authStore.user.id)
         .order('updated_at', { ascending: false }),
 
       supabase
         .from('session_members')
-        .select('last_seen_at, session:session_id(id, name, created_at, updated_at, owner_id)')
+        .select('last_seen_at, session:session_id(id, name, created_at, updated_at, owner_id, play_mode)')
         .eq('user_id', authStore.user.id)
         .order('last_seen_at', { ascending: false }),
     ])
@@ -106,11 +109,14 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function createSession() {
+  async function createSession(playModeOverride = playMode.value) {
     loading.value = true
     error.value = null
     try {
-      const data = await apiClient.post('/sessions', { name: sessionName.value }, 'create_session')
+      const data = await apiClient.post('/sessions', {
+        name: sessionName.value,
+        play_mode: playModeOverride,
+      }, 'create_session')
       _applySessionRow(data)
       userSessions.value = [data, ...userSessions.value]
       _subscribeToSession(data.id)
@@ -190,6 +196,20 @@ export const useSessionStore = defineStore('session', () => {
     } catch (err) {
       console.error('setGmInitiative:', err instanceof ApiError ? err.message : err)
       gmInitiative.value = previous
+      return false
+    }
+  }
+
+  async function setPlayMode(mode) {
+    if (!['gm', 'gm_less'].includes(mode)) return false
+    const previous = playMode.value
+    playMode.value = mode
+    try {
+      await apiClient.patch(`/sessions/${sessionId.value}`, { play_mode: mode }, 'set_play_mode')
+      return true
+    } catch (err) {
+      console.error('setPlayMode:', err instanceof ApiError ? err.message : err)
+      playMode.value = previous
       return false
     }
   }
@@ -295,6 +315,7 @@ export const useSessionStore = defineStore('session', () => {
     activeMapId.value    = null
     hexMode.value        = null
     gmInitiative.value   = null
+    playMode.value       = 'gm'
     torchRunning.value   = false
     torchElapsedMs.value = 0
     torchStartedAt.value = null
@@ -307,6 +328,7 @@ export const useSessionStore = defineStore('session', () => {
     activeMapId,
     hexMode,
     gmInitiative,
+    playMode,
     torchRunning,
     torchElapsedMs,
     torchStartedAt,
@@ -326,6 +348,7 @@ export const useSessionStore = defineStore('session', () => {
     setActiveMapId,
     setHexMode,
     setGmInitiative,
+    setPlayMode,
     torchStart,
     torchPause,
     torchReset,

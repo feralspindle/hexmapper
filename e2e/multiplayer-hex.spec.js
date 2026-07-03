@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { createThreeRoleCampaign, hexCell } from './support/app.js'
+import { createThreeRoleCampaign, hexCell, prepareHexInteractions } from './support/app.js'
 import { e2eAccounts, missingE2EAccountEnv, uniqueCampaignName } from './support/env.js'
 
 const missingEnv = missingE2EAccountEnv()
@@ -17,6 +17,9 @@ test.describe.serial('hex map multiplayer sync', () => {
     })
 
     try {
+      await expect(room.gm.page.getByRole('button', { name: 'Oracle' })).toHaveCount(0)
+      await expect(room.player1.page.getByRole('button', { name: 'Oracle' })).toHaveCount(0)
+      await prepareHexInteractions(room.gm.page)
       await expect(hexCell(room.player1.page, 0, 0)).toHaveAttribute('data-visible-to-player', 'false')
       await expect(hexCell(room.player2.page, 0, 0)).toHaveAttribute('data-visible-to-player', 'false')
 
@@ -43,6 +46,7 @@ test.describe.serial('hex map multiplayer sync', () => {
     })
 
     try {
+      await prepareHexInteractions(room.gm.page)
       await room.gm.page.getByTestId('hex-reveal-all').click()
       await expect(hexCell(room.player1.page, 1, 0)).toHaveAttribute('data-visible-to-player', 'true')
       await expect(hexCell(room.player2.page, 1, 0)).toHaveAttribute('data-visible-to-player', 'true')
@@ -64,6 +68,8 @@ test.describe.serial('hex map multiplayer sync', () => {
     })
 
     try {
+      await prepareHexInteractions(room.player1.page)
+      await prepareHexInteractions(room.player2.page)
       await room.player1.page.getByTestId('hex-tool-paint').click()
       await hexCell(room.player1.page, 0, 0).click()
 

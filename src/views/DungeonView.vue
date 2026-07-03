@@ -113,6 +113,7 @@ import { useSessionStore } from '@/stores/sessionStore.js'
 import { useMapStore } from '@/stores/mapStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
+import { useOracleStore } from '@/stores/oracleStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
@@ -149,11 +150,20 @@ const sessionStore   = useSessionStore()
 const mapStore       = useMapStore()
 const diceStore      = useDiceStore()
 const chatStore      = useChatStore()
+const oracleStore    = useOracleStore()
 const characterStore = useCharacterStore()
 const authStore      = useAuthStore()
 const prefs          = useUserPrefsStore()
 const activityStore  = useActivityStore()
 const photoStore     = usePhotoStore()
+
+function syncOracleStore() {
+  if (sessionStore.playMode === 'gm_less') {
+    oracleStore.init(sessionId)
+  } else {
+    oracleStore.cleanup()
+  }
+}
 
 const canvasComp  = ref(null)
 const topbarEl    = ref(null)
@@ -213,11 +223,14 @@ onMounted(async () => {
   await dungeonStore.init(sessionId, dungeonId)
   diceStore.init(sessionId)
   chatStore.init(sessionId)
+  syncOracleStore()
   characterStore.loadAll(sessionId)
   sessionStore.initPresence(sessionId)
   photoStore.init(sessionId)
   activityStore.init(sessionId, dungeonId)
 })
+
+watch(() => sessionStore.playMode, syncOracleStore)
 
 onUnmounted(() => {
   window.removeEventListener('resize', measureTopbar)
@@ -226,6 +239,7 @@ onUnmounted(() => {
   mapStore.cleanup()
   characterStore.cleanup()
   chatStore.cleanup()
+  oracleStore.cleanup()
   sessionStore.cleanupPresence()
 })
 

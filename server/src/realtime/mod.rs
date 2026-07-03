@@ -158,7 +158,7 @@ async fn upgrade(
     let origin_matches = headers
         .get(ORIGIN)
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|origin| origin == state.cors_allowed_origin());
+        .is_some_and(|origin| state.allows_origin(origin));
     if !origin_matches {
         metrics::counter!("realtime_upgrade_rejections_total", "reason" => "origin").increment(1);
         return StatusCode::FORBIDDEN.into_response();

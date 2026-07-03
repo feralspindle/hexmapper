@@ -160,6 +160,7 @@ import { useHexStore } from "@/stores/hexStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
 import { useCharacterStore } from "@/stores/characterStore.js";
 import { useChatStore } from "@/stores/chatStore.js";
+import { useOracleStore } from "@/stores/oracleStore.js";
 import { usePhotoStore } from "@/stores/photoStore.js";
 import { useUserPrefsStore } from "@/stores/userPrefsStore.js";
 import HexTopbar from "@/components/hex/HexTopbar.vue";
@@ -205,11 +206,20 @@ const mapStore = useMapStore();
 const hexStore = useHexStore();
 const diceStore = useDiceStore();
 const chatStore = useChatStore();
+const oracleStore = useOracleStore();
 const characterStore = useCharacterStore();
 const photoStore = usePhotoStore();
 const prefs = useUserPrefsStore();
 
 const modeKey = computed(() => `hex_mode_${sessionId}`);
+
+function syncOracleStore() {
+    if (sessionStore.playMode === "gm_less") {
+        oracleStore.init(sessionId);
+    } else {
+        oracleStore.cleanup();
+    }
+}
 
 function loadMode() {
     if (sessionStore.isGM) {
@@ -332,6 +342,7 @@ onMounted(async () => {
 
     diceStore.init(sessionId);
     chatStore.init(sessionId);
+    syncOracleStore();
     characterStore.loadAll(sessionId);
     sessionStore.initPresence(sessionId);
     photoStore.init(sessionId);
@@ -346,10 +357,13 @@ onMounted(async () => {
     window.addEventListener("keydown", onKeyDown);
 });
 
+watch(() => sessionStore.playMode, syncOracleStore);
+
 onUnmounted(() => {
     hexStore.cleanup();
     characterStore.cleanup();
     chatStore.cleanup();
+    oracleStore.cleanup();
     mapStore.cleanup();
     sessionStore.cleanup();
     window.removeEventListener("keydown", onKeyDown);

@@ -68,6 +68,8 @@ cargo run                   # http://localhost:8080
 ```
 
 The frontend `VITE_API_BASE_URL` defaults to `http://localhost:8080/api` in development.
+For local development, set `CORS_ALLOWED_ORIGIN=http://localhost:5173,http://127.0.0.1:5173`
+so both browser origins work.
 Set `VITE_REALTIME_TRANSPORT=rust` after applying the realtime notification migration;
 use `supabase` to retain the previous transport during rollout.
 

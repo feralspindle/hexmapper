@@ -1,7 +1,7 @@
 pub mod activity;
 pub mod calendar;
-pub mod chat;
 pub mod character;
+pub mod chat;
 pub mod dice;
 pub mod dungeon;
 pub mod hex;
@@ -9,6 +9,7 @@ pub mod macros;
 pub mod map;
 pub mod notebook;
 pub mod notes;
+pub mod oracle;
 pub mod photo;
 pub mod prefs;
 pub mod session;

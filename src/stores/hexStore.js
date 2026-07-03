@@ -396,10 +396,14 @@ export const useHexStore = defineStore("hex", () => {
     };
     hexCells.value.set(key, merged);
 
-    // Visibility is GM-controlled: only send `revealed` when this is an explicit
-    // reveal/hide. Terrain/marker edits must not change a hex's visibility.
+    // Visibility is GM-controlled in FOW. In blank mode, player-created cells
+    // must be stored as revealed so they are not mistaken for hidden overrides
+    // on reveal-all maps.
     const body = { ...merged };
-    if (!("revealed" in patch)) delete body.revealed;
+    if (!("revealed" in patch)) {
+      if (useSessionStore().hexMode === "blank") body.revealed = true;
+      else delete body.revealed;
+    }
 
     const intent = "revealed" in patch
       ? (patch.revealed ? "reveal_hex" : "hide_hex")

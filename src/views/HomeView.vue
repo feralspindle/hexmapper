@@ -118,6 +118,26 @@
 
         <div class="bg-stone-800 border border-stone-600 rounded-lg p-5 mb-4">
           <h2 class="text-parchment-200 font-display text-lg mb-4">New Campaign</h2>
+          <div class="flex rounded-md overflow-hidden border border-stone-700 mb-3">
+            <button
+              type="button"
+              data-testid="campaign-mode-gm"
+              class="flex-1 px-3 py-2 text-sm font-display transition-colors"
+              :class="newPlayMode === 'gm' ? 'bg-stone-700 text-parchment-200' : 'bg-stone-800 text-stone-400 hover:text-stone-200'"
+              @click="newPlayMode = 'gm'"
+            >
+              GM-led
+            </button>
+            <button
+              type="button"
+              data-testid="campaign-mode-gm-less"
+              class="flex-1 px-3 py-2 text-sm font-display transition-colors border-l border-stone-700"
+              :class="newPlayMode === 'gm_less' ? 'bg-stone-700 text-parchment-200' : 'bg-stone-800 text-stone-400 hover:text-stone-200'"
+              @click="newPlayMode = 'gm_less'"
+            >
+              Solo / Co-op
+            </button>
+          </div>
           <div class="flex gap-2">
             <input
               v-model="newName"
@@ -264,6 +284,7 @@ const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
 
 const newName = ref('Untitled Campaign')
+const newPlayMode = ref('gm')
 const joinInput = ref('')
 const joinError = ref(null)
 
@@ -326,7 +347,7 @@ async function handleEmailSubmit() {
 
 async function create() {
   sessionStore.sessionName = newName.value || 'Untitled Campaign'
-  await sessionStore.createSession()
+  await sessionStore.createSession(newPlayMode.value)
 }
 
 async function join() {

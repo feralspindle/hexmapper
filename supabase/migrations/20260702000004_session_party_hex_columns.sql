@@ -1,6 +1,5 @@
--- Migration: Add party hex location to sessions table
--- Run this in the Supabase SQL Editor for your project.
--- This adds columns to store the party's current location so all players can sync.
+-- Add party hex location to the sessions table so all players stay in sync.
+-- (Renamed from a malformed, hand-run migration into the tracked history.)
 
 alter table sessions add column if not exists party_hex_q integer;
 alter table sessions add column if not exists party_hex_r integer;

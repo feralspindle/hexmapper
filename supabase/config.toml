@@ -116,6 +116,21 @@ public = true
 file_size_limit = "10MiB"
 allowed_mime_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
 
+[storage.buckets.bug-screenshots]
+public = false
+file_size_limit = "50MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+
+[storage.buckets.dungeon-images]
+public = false
+file_size_limit = "50MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+
+[storage.buckets.session-maps]
+public = false
+file_size_limit = "50MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
 enabled = true

@@ -48,6 +48,8 @@ CI to run the real flow when secrets are configured.
 - GM -> players: reveal one hex, hide one hex.
 - GM -> players: reveal all, then hide an individual hex.
 - Player -> GM and player -> player: blank-map terrain paint and marker sync.
+- GM -> players: oracle yes/no rolls sync to both players.
+- Player -> GM and player -> player: custom oracle table rolls sync to everyone.
 
 ## Next High-Value Specs
 

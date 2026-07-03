@@ -25,12 +25,13 @@ fn snapshot_columns(s: &str) -> String {
         ({s}->>'torch_elapsed_ms')::bigint,
         ({s}->>'torch_started_at')::timestamptz,
         {s}->>'hex_mode',
-        ({s}->>'gm_initiative')::integer
+        ({s}->>'gm_initiative')::integer,
+        coalesce({s}->>'play_mode', 'gm')
         "#
     )
 }
 
-const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative";
+const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative, play_mode";
 
 /// Wraps a `sessions` mutation that exposes `s` (the updated/inserted row) in a
 /// `session.<event>` snapshot event. Returns the row JSON (or None if 0 rows).
@@ -67,12 +68,13 @@ pub async fn create(
     id: Uuid,
     owner_id: Uuid,
     name: &str,
+    play_mode: &str,
     metadata: &Value,
 ) -> Result<Value, AppError> {
     let row: Value = sqlx::query_scalar(
         r#"
         with s as (
-            insert into sessions (id, name, owner_id) values ($1, $3, $4) returning *
+            insert into sessions (id, name, owner_id, play_mode) values ($1, $3, $4, $5) returning *
         ),
         evt as (
             insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
@@ -85,6 +87,7 @@ pub async fn create(
     .bind(metadata)
     .bind(name)
     .bind(owner_id)
+    .bind(play_mode)
     .fetch_one(&mut **tx)
     .await?;
     Ok(row)
@@ -107,6 +110,7 @@ pub async fn update(
             party_hex_q   = case when $3 ? 'party_hex_q' then ($3->>'party_hex_q')::int else party_hex_q end,
             party_hex_r   = case when $3 ? 'party_hex_r' then ($3->>'party_hex_r')::int else party_hex_r end,
             gm_initiative = case when $3 ? 'gm_initiative' then ($3->>'gm_initiative')::integer else gm_initiative end,
+            play_mode     = case when $3 ? 'play_mode' then $3->>'play_mode' else play_mode end,
             updated_at    = now()
         where id = $1
         returning *
@@ -134,12 +138,20 @@ pub async fn update(
     Ok(row)
 }
 
-pub async fn torch_start(tx: &mut Transaction<'_, Postgres>, id: Uuid, metadata: &Value) -> Result<(), AppError> {
+pub async fn torch_start(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<(), AppError> {
     run_event(tx, "update sessions set torch_running = true, torch_started_at = now() where id = $1 returning *", "session.updated", id, metadata).await?;
     Ok(())
 }
 
-pub async fn torch_pause(tx: &mut Transaction<'_, Postgres>, id: Uuid, metadata: &Value) -> Result<(), AppError> {
+pub async fn torch_pause(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<(), AppError> {
     run_event(
         tx,
         r#"update sessions set
@@ -153,7 +165,11 @@ pub async fn torch_pause(tx: &mut Transaction<'_, Postgres>, id: Uuid, metadata:
     Ok(())
 }
 
-pub async fn torch_reset(tx: &mut Transaction<'_, Postgres>, id: Uuid, metadata: &Value) -> Result<(), AppError> {
+pub async fn torch_reset(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<(), AppError> {
     run_event(
         tx,
         "update sessions set torch_elapsed_ms = 0, torch_started_at = case when torch_running then now() else null end where id = $1 returning *",
@@ -162,7 +178,11 @@ pub async fn torch_reset(tx: &mut Transaction<'_, Postgres>, id: Uuid, metadata:
     Ok(())
 }
 
-pub async fn delete(tx: &mut Transaction<'_, Postgres>, id: Uuid, metadata: &Value) -> Result<(), AppError> {
+pub async fn delete(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<(), AppError> {
     sqlx::query(
         r#"
         with del as ( delete from sessions where id = $1 returning id ),

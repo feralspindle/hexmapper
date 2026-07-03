@@ -89,22 +89,22 @@ pub async fn upsert_hex(
     let q = i32_body_field(&body, "q")?;
     let r = i32_body_field(&body, "r")?;
 
-    // Members can edit visible cells. Visibility and GM markers remain GM-only.
+    // Members can edit visible cells. Hiding cells and GM markers remain GM-only;
+    // `revealed: true` is allowed for member edits only when the cell/map is
+    // already visible to them, which covers blank/reveal-all maps without
+    // granting reveal permission for hidden FOW cells.
     let is_gm = authz::is_session_gm(state.pool(), auth.user_id, session_id).await?;
-    let changes_gm_data = body.get("revealed").is_some() || body.get("gm_markers").is_some();
-    let authorized = if changes_gm_data {
-        is_gm
-    } else if is_gm {
-        true
-    } else {
-        authz::is_session_member(state.pool(), auth.user_id, session_id).await?
-    };
-    if !authorized {
-        return Err(AppError::Forbidden);
-    }
     ensure_map_in_session(&state, map_id, session_id).await?;
-    if !is_gm && !projection::is_revealed(state.pool(), map_id, q, r).await? {
-        return Err(AppError::Forbidden);
+    if !is_gm {
+        if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+            return Err(AppError::Forbidden);
+        }
+        if body.get("gm_markers").is_some()
+            || body.get("revealed").and_then(Value::as_bool) == Some(false)
+            || !projection::is_revealed(state.pool(), map_id, q, r).await?
+        {
+            return Err(AppError::Forbidden);
+        }
     }
 
     let metadata = auth.metadata();

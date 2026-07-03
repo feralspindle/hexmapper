@@ -16,6 +16,7 @@ use crate::state::AppState;
 #[derive(Debug, Deserialize)]
 pub struct CreateSessionRequest {
     pub name: Option<String>,
+    pub play_mode: Option<String>,
 }
 
 pub async fn create_session(
@@ -24,9 +25,21 @@ pub async fn create_session(
     Json(req): Json<CreateSessionRequest>,
 ) -> Result<Json<Value>, AppError> {
     let name = req.name.as_deref().unwrap_or("Untitled Campaign");
+    let play_mode = req.play_mode.as_deref().unwrap_or("gm");
+    if !matches!(play_mode, "gm" | "gm_less") {
+        return Err(AppError::BadRequest("invalid play mode".to_string()));
+    }
     let metadata = auth.metadata();
     let row = retry_tx!(state.pool(), |tx| {
-        projection::create(&mut tx, Uuid::new_v4(), auth.user_id, name, &metadata).await
+        projection::create(
+            &mut tx,
+            Uuid::new_v4(),
+            auth.user_id,
+            name,
+            play_mode,
+            &metadata,
+        )
+        .await
     })?;
     Ok(Json(row))
 }
@@ -40,6 +53,11 @@ pub async fn update_session(
     // sessions_update RLS: owner only.
     if !authz::is_session_gm(state.pool(), auth.user_id, id).await? {
         return Err(AppError::Forbidden);
+    }
+    if let Some(play_mode) = patch.get("play_mode").and_then(|v| v.as_str()) {
+        if !matches!(play_mode, "gm" | "gm_less") {
+            return Err(AppError::BadRequest("invalid play mode".to_string()));
+        }
     }
     let metadata = auth.metadata();
     let row = retry_tx!(state.pool(), |tx| {
@@ -84,7 +102,11 @@ pub async fn torch(
             "start" => projection::torch_start(&mut tx, id, &metadata).await?,
             "pause" => projection::torch_pause(&mut tx, id, &metadata).await?,
             "reset" => projection::torch_reset(&mut tx, id, &metadata).await?,
-            other => return Err(AppError::BadRequest(format!("unknown torch action: {other}"))),
+            other => {
+                return Err(AppError::BadRequest(format!(
+                    "unknown torch action: {other}"
+                )))
+            }
         }
         Ok(())
     })?;
@@ -103,10 +125,11 @@ pub async fn join_session(
 ) -> Result<Json<Value>, AppError> {
     let metadata = auth.metadata();
     let session = retry_tx!(state.pool(), |tx| {
-        let session: Option<Value> = sqlx::query_scalar("select to_jsonb(s) from sessions s where id = $1")
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await?;
+        let session: Option<Value> =
+            sqlx::query_scalar("select to_jsonb(s) from sessions s where id = $1")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
         let session = session.ok_or(AppError::NotFound)?;
         member_projection::join(&mut tx, id, auth.user_id, &metadata).await?;
         Ok(session)
@@ -129,7 +152,14 @@ pub async fn set_active_member(
 ) -> Result<StatusCode, AppError> {
     let metadata = auth.metadata();
     retry_tx!(state.pool(), |tx| {
-        member_projection::set_active(&mut tx, req.session_id, auth.user_id, req.active_character_id, &metadata).await
+        member_projection::set_active(
+            &mut tx,
+            req.session_id,
+            auth.user_id,
+            req.active_character_id,
+            &metadata,
+        )
+        .await
     })?;
     Ok(StatusCode::NO_CONTENT)
 }
