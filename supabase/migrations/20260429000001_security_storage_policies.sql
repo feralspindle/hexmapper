@@ -8,6 +8,7 @@
 -- ---------------------------------------------------------------------------
 
 drop policy if exists "authenticated upload to bug-screenshots" on storage.objects;
+drop policy if exists "bug_screenshots_insert" on storage.objects;
 
 create policy "bug_screenshots_insert"
   on storage.objects as permissive for insert to authenticated
@@ -28,6 +29,7 @@ drop policy if exists "Authenticated users can upload dungeon images" on storage
 drop policy if exists "Authenticated users can delete dungeon images" on storage.objects;
 -- "Public access to dungeon images" SELECT policy stays: images need to be
 -- embeddable via <img src> without auth headers.
+drop policy if exists "dungeon_images_gm_insert" on storage.objects;
 
 create policy "dungeon_images_gm_insert"
   on storage.objects as permissive for insert to authenticated
@@ -39,6 +41,7 @@ create policy "dungeon_images_gm_insert"
         and s.owner_id = auth.uid()
     )
   );
+drop policy if exists "dungeon_images_gm_delete" on storage.objects;
 
 create policy "dungeon_images_gm_delete"
   on storage.objects as permissive for delete to authenticated
@@ -60,6 +63,7 @@ create policy "dungeon_images_gm_delete"
 drop policy if exists "authenticated users can upload reference photos" on storage.objects;
 drop policy if exists "owner can delete reference photos from storage"  on storage.objects;
 -- "anyone can read reference photos" stays: public bucket, img src needs no auth.
+drop policy if exists "ref_photos_member_insert" on storage.objects;
 
 create policy "ref_photos_member_insert"
   on storage.objects as permissive for insert to authenticated
@@ -73,6 +77,7 @@ create policy "ref_photos_member_insert"
         and (s.owner_id = auth.uid() or sm.user_id is not null)
     )
   );
+drop policy if exists "ref_photos_owner_delete" on storage.objects;
 
 create policy "ref_photos_owner_delete"
   on storage.objects as permissive for delete to authenticated
@@ -85,6 +90,7 @@ create policy "ref_photos_owner_delete"
 -- session-maps: restrict SELECT to session members (was open to all authenticated)
 -- ---------------------------------------------------------------------------
 
+drop policy if exists "session_maps_select" on storage.objects;
 drop policy if exists "session_maps_select" on storage.objects;
 
 create policy "session_maps_select"

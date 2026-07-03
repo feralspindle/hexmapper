@@ -8,14 +8,17 @@ CREATE TABLE IF NOT EXISTS public.dice_macros (
 );
 
 ALTER TABLE public.dice_macros ENABLE ROW LEVEL SECURITY;
+drop policy if exists "dice_macros: select own" on public.dice_macros;
 
 CREATE POLICY "dice_macros: select own"
   ON public.dice_macros FOR SELECT
   USING (auth.uid() = user_id);
+drop policy if exists "dice_macros: insert own" on public.dice_macros;
 
 CREATE POLICY "dice_macros: insert own"
   ON public.dice_macros FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+drop policy if exists "dice_macros: delete own" on public.dice_macros;
 
 CREATE POLICY "dice_macros: delete own"
   ON public.dice_macros FOR DELETE

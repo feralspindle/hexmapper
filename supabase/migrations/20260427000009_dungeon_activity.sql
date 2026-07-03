@@ -11,10 +11,12 @@ create table if not exists dungeon_activity (
 alter table dungeon_activity enable row level security;
 
 create index if not exists dungeon_activity_dungeon_id_idx on dungeon_activity(dungeon_id, created_at desc);
+drop policy if exists "dungeon_activity_member_select" on dungeon_activity;
 
 create policy "dungeon_activity_member_select" on dungeon_activity
   as permissive for select to authenticated
   using (is_dungeon_member(dungeon_id));
+drop policy if exists "dungeon_activity_member_insert" on dungeon_activity;
 
 create policy "dungeon_activity_member_insert" on dungeon_activity
   as permissive for insert to authenticated

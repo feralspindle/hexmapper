@@ -10,6 +10,7 @@ on:
     paths:
       - 'server/**'
       - 'deploy/**'
+      - 'supabase/migrations/**'
       - '.github/workflows/deploy-server.yml'
       - '.github/workflows/test-e2e.yml'
 
@@ -28,8 +29,34 @@ jobs:
   database:
     uses: ./.github/workflows/test-database.yml
 
-  build-push-deploy:
+  # Apply pending migrations to the live environment DB BEFORE the new image
+  # restarts (expand-contract: schema leads code). Gated behind the from-scratch
+  # pgTAP gate so a migration that can't build cleanly never reaches a live DB.
+  # This is what replaces running migrations by hand. See deploy/reconcile-drift.md.
+  migrate:
     needs: [test, database]
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.90.0
+
+      - name: Apply migrations to ${{ github.ref_name }} Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase link --project-ref "$PROJECT_REF"
+          # --include-all applies every local migration not yet on the remote;
+          # non-interactive because SUPABASE_DB_PASSWORD is set.
+          supabase db push --include-all
+
+  build-push-deploy:
+    needs: [test, database, migrate]
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:

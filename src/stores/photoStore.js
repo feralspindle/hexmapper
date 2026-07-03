@@ -35,8 +35,9 @@ export const usePhotoStore = defineStore('photo', () => {
           filter: `session_id=eq.${sessionId}`,
         },
         ({ new: row }) => {
-          currentBroadcast.value = row
-          _addToBroadcastHistory(row)
+          const resolved = _resolveBroadcast(row)
+          currentBroadcast.value = resolved
+          _addToBroadcastHistory(resolved)
         },
       )
       .subscribe()
@@ -54,7 +55,7 @@ export const usePhotoStore = defineStore('photo', () => {
       if (seen.has(row.photo_url)) return false
       seen.add(row.photo_url)
       return true
-    })
+    }).map(_resolveBroadcast)
   }
 
   function _addToBroadcastHistory(row) {
@@ -76,9 +77,21 @@ export const usePhotoStore = defineStore('photo', () => {
     photos.value = (data ?? []).map(_withUrl)
   }
 
+  function _publicUrl(path) {
+    return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  }
+
   function _withUrl(row) {
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(row.storage_path)
-    return { ...row, url: data.publicUrl }
+    return { ...row, url: _publicUrl(row.storage_path) }
+  }
+
+  // photo_broadcasts.photo_url historically stored an absolute URL, which bakes the
+  // Supabase project ref into the DB and breaks when the data moves projects. New
+  // broadcasts persist the relative storage_path; resolve it to a public URL here.
+  // Legacy absolute values pass through unchanged.
+  function _resolveBroadcast(row) {
+    const stored = row.photo_url ?? ''
+    return { ...row, photo_url: stored.startsWith('http') ? stored : _publicUrl(stored) }
   }
 
   async function uploadPhoto(file, name) {
@@ -134,7 +147,7 @@ export const usePhotoStore = defineStore('photo', () => {
       await apiClient.post('/photo-broadcasts', {
         session_id: currentSessionId,
         photo_id:   photo.id,
-        photo_url:  photo.url,
+        photo_url:  photo.storage_path,
         photo_name: photo.name,
       })
     } catch (error) {

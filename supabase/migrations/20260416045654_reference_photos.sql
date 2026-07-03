@@ -11,18 +11,21 @@ create table if not exists reference_photos (
 alter table reference_photos enable row level security;
 
 do $$ begin
+drop policy if exists "anyone can view reference photos" on reference_photos;
   create policy "anyone can view reference photos"
     on reference_photos for select using (true);
 exception when duplicate_object then null;
 end $$;
 
 do $$ begin
+drop policy if exists "owner can insert reference photos" on reference_photos;
   create policy "owner can insert reference photos"
     on reference_photos for insert with check (auth.uid() = user_id);
 exception when duplicate_object then null;
 end $$;
 
 do $$ begin
+drop policy if exists "owner can delete reference photos" on reference_photos;
   create policy "owner can delete reference photos"
     on reference_photos for delete using (auth.uid() = user_id);
 exception when duplicate_object then null;
@@ -42,22 +45,36 @@ create table if not exists photo_broadcasts (
 alter table photo_broadcasts enable row level security;
 
 do $$ begin
+drop policy if exists "anyone can view photo broadcasts" on photo_broadcasts;
   create policy "anyone can view photo broadcasts"
     on photo_broadcasts for select using (true);
 exception when duplicate_object then null;
 end $$;
 
 do $$ begin
+drop policy if exists "authenticated users can broadcast photos" on photo_broadcasts;
   create policy "authenticated users can broadcast photos"
     on photo_broadcasts for insert with check (auth.uid() = user_id);
 exception when duplicate_object then null;
 end $$;
 
 -- Enable realtime for broadcast events
-alter publication supabase_realtime add table photo_broadcasts;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'photo_broadcasts'
+  ) then
+    alter publication supabase_realtime add table photo_broadcasts;
+  end if;
+end $$;
 
 -- Storage policies for the reference-photos bucket
 do $$ begin
+drop policy if exists "authenticated users can upload reference photos" on storage.objects;
   create policy "authenticated users can upload reference photos"
     on storage.objects for insert
     with check (
@@ -68,6 +85,7 @@ exception when duplicate_object then null;
 end $$;
 
 do $$ begin
+drop policy if exists "anyone can read reference photos" on storage.objects;
   create policy "anyone can read reference photos"
     on storage.objects for select
     using (bucket_id = 'reference-photos');
@@ -75,6 +93,7 @@ exception when duplicate_object then null;
 end $$;
 
 do $$ begin
+drop policy if exists "owner can delete reference photos from storage" on storage.objects;
   create policy "owner can delete reference photos from storage"
     on storage.objects for delete
     using (

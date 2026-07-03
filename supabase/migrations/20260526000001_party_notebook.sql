@@ -17,17 +17,30 @@ create table if not exists party_quests (
 create index if not exists party_quests_session_idx on party_quests(session_id);
 
 alter table party_quests enable row level security;
+drop policy if exists "party_quests_member_select" on party_quests;
 
 create policy "party_quests_member_select" on party_quests
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "party_quests_member_write" on party_quests;
 
 create policy "party_quests_member_write" on party_quests
   as permissive for all to authenticated
   using (is_session_member(session_id))
   with check (is_session_member(session_id));
 
-alter publication supabase_realtime add table party_quests;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'party_quests'
+  ) then
+    alter publication supabase_realtime add table party_quests;
+  end if;
+end $$;
 
 create table if not exists party_session_notes (
   id             uuid        primary key default gen_random_uuid(),
@@ -45,14 +58,27 @@ create table if not exists party_session_notes (
 create index if not exists party_session_notes_session_idx on party_session_notes(session_id);
 
 alter table party_session_notes enable row level security;
+drop policy if exists "party_session_notes_member_select" on party_session_notes;
 
 create policy "party_session_notes_member_select" on party_session_notes
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "party_session_notes_member_write" on party_session_notes;
 
 create policy "party_session_notes_member_write" on party_session_notes
   as permissive for all to authenticated
   using (is_session_member(session_id))
   with check (is_session_member(session_id));
 
-alter publication supabase_realtime add table party_session_notes;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'party_session_notes'
+  ) then
+    alter publication supabase_realtime add table party_session_notes;
+  end if;
+end $$;

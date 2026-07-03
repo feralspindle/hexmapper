@@ -4,6 +4,7 @@
 -- Path convention: {session_id}/filename
 
 drop policy if exists "session_maps_select" on storage.objects;
+drop policy if exists "session_maps_select" on storage.objects;
 
 create policy "session_maps_select"
   on storage.objects as permissive for select to authenticated

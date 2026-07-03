@@ -21,6 +21,7 @@ alter table events enable row level security;
 
 -- Read-only for authenticated users, scoped to sessions they belong to (activity feed).
 -- Only the service role (used by the Rust event-sourcing server) can write.
+drop policy if exists "events_select" on events;
 create policy "events_select" on events
   as permissive for select to authenticated
   using (session_id is null or is_session_member(session_id));

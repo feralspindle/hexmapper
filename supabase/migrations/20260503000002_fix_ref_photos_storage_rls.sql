@@ -5,6 +5,7 @@
 -- Path convention: {session_id}/{uuid}.{ext}
 
 drop policy if exists "ref_photos_member_insert" on storage.objects;
+drop policy if exists "ref_photos_member_insert" on storage.objects;
 
 create policy "ref_photos_member_insert"
   on storage.objects as permissive for insert to authenticated

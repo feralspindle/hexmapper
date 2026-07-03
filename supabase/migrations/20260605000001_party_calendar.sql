@@ -14,10 +14,12 @@ create table if not exists party_calendar_settings (
 );
 
 alter table party_calendar_settings enable row level security;
+drop policy if exists "calendar_settings_member_select" on party_calendar_settings;
 
 create policy "calendar_settings_member_select" on party_calendar_settings
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "calendar_settings_gm_write" on party_calendar_settings;
 
 create policy "calendar_settings_gm_write" on party_calendar_settings
   as permissive for all to authenticated
@@ -37,10 +39,12 @@ create table if not exists party_calendar_days (
 );
 
 alter table party_calendar_days enable row level security;
+drop policy if exists "calendar_days_member_select" on party_calendar_days;
 
 create policy "calendar_days_member_select" on party_calendar_days
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "calendar_days_member_write" on party_calendar_days;
 
 create policy "calendar_days_member_write" on party_calendar_days
   as permissive for all to authenticated

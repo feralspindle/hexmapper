@@ -104,26 +104,32 @@ drop trigger if exists trg_fill_display_name_annot     on dice_roll_annotations;
 drop trigger if exists trg_fill_display_name_hex_notes on hex_notes;
 drop trigger if exists trg_fill_display_name_dun_notes on dungeon_element_notes;
 drop trigger if exists trg_fill_display_name_bug       on bug_reports;
+drop trigger if exists trg_fill_display_name_chat on chat_messages;
 
 create trigger trg_fill_display_name_chat
   before insert on chat_messages
   for each row execute function fill_display_name();
+drop trigger if exists trg_fill_display_name_dice on dice_rolls;
 
 create trigger trg_fill_display_name_dice
   before insert on dice_rolls
   for each row execute function fill_display_name();
+drop trigger if exists trg_fill_display_name_annot on dice_roll_annotations;
 
 create trigger trg_fill_display_name_annot
   before insert on dice_roll_annotations
   for each row execute function fill_display_name();
+drop trigger if exists trg_fill_display_name_hex_notes on hex_notes;
 
 create trigger trg_fill_display_name_hex_notes
   before insert on hex_notes
   for each row execute function fill_display_name();
+drop trigger if exists trg_fill_display_name_dun_notes on dungeon_element_notes;
 
 create trigger trg_fill_display_name_dun_notes
   before insert on dungeon_element_notes
   for each row execute function fill_display_name();
+drop trigger if exists trg_fill_display_name_bug on bug_reports;
 
 create trigger trg_fill_display_name_bug
   before insert on bug_reports
@@ -276,6 +282,7 @@ create trigger trg_check_active_char
 
 drop policy if exists "sessions_select"      on sessions;
 -- sessions_insert, sessions_update, sessions_delete are already correct — keep them
+drop policy if exists "sessions_select" on sessions;
 
 create policy "sessions_select" on sessions
   as permissive for select to authenticated
@@ -323,12 +330,14 @@ create policy "session_members_delete" on session_members
 drop policy if exists "hex_cells_auth" on hex_cells;
 
 -- GMs see all cells in their sessions
+drop policy if exists "hex_cells_gm_all" on hex_cells;
 create policy "hex_cells_gm_all" on hex_cells
   as permissive for all to authenticated
   using  (is_session_gm(session_id))
   with check (is_session_gm(session_id));
 
 -- Players see only revealed cells in sessions they belong to
+drop policy if exists "hex_cells_player_select" on hex_cells;
 create policy "hex_cells_player_select" on hex_cells
   as permissive for select to authenticated
   using (
@@ -340,6 +349,7 @@ create policy "hex_cells_player_select" on hex_cells
   );
 
 -- Players can upsert markers on revealed cells (marker_color, marker_label)
+drop policy if exists "hex_cells_player_marker" on hex_cells;
 create policy "hex_cells_player_marker" on hex_cells
   as permissive for insert to authenticated
   with check (
@@ -362,6 +372,7 @@ create policy "hex_cells_player_marker" on hex_cells
 -- ---------------------------------------------------------------------------
 
 drop policy if exists "session owner manages map drafts" on map_drafts;
+drop policy if exists "map_drafts_gm" on map_drafts;
 
 create policy "map_drafts_gm" on map_drafts
   as permissive for all to authenticated
@@ -373,10 +384,12 @@ create policy "map_drafts_gm" on map_drafts
 -- ---------------------------------------------------------------------------
 
 drop policy if exists "dungeons_auth" on dungeons;
+drop policy if exists "dungeons_member_select" on dungeons;
 
 create policy "dungeons_member_select" on dungeons
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "dungeons_gm_write" on dungeons;
 
 create policy "dungeons_gm_write" on dungeons
   as permissive for all to authenticated
@@ -388,6 +401,7 @@ create policy "dungeons_gm_write" on dungeons
 -- ---------------------------------------------------------------------------
 
 drop policy if exists "dungeon_rooms_auth" on dungeon_rooms;
+drop policy if exists "dungeon_rooms_member_select" on dungeon_rooms;
 
 create policy "dungeon_rooms_member_select" on dungeon_rooms
   as permissive for select to authenticated
@@ -396,6 +410,7 @@ create policy "dungeon_rooms_member_select" on dungeon_rooms
       select 1 from dungeons d where d.id = dungeon_rooms.dungeon_id and is_session_member(d.session_id)
     )
   );
+drop policy if exists "dungeon_rooms_gm_write" on dungeon_rooms;
 
 create policy "dungeon_rooms_gm_write" on dungeon_rooms
   as permissive for all to authenticated
@@ -415,6 +430,7 @@ create policy "dungeon_rooms_gm_write" on dungeon_rooms
 -- ---------------------------------------------------------------------------
 
 drop policy if exists "dungeon_corridors_auth" on dungeon_corridors;
+drop policy if exists "dungeon_corridors_member_select" on dungeon_corridors;
 
 create policy "dungeon_corridors_member_select" on dungeon_corridors
   as permissive for select to authenticated
@@ -423,6 +439,7 @@ create policy "dungeon_corridors_member_select" on dungeon_corridors
       select 1 from dungeons d where d.id = dungeon_corridors.dungeon_id and is_session_member(d.session_id)
     )
   );
+drop policy if exists "dungeon_corridors_gm_write" on dungeon_corridors;
 
 create policy "dungeon_corridors_gm_write" on dungeon_corridors
   as permissive for all to authenticated
@@ -445,6 +462,7 @@ create policy "dungeon_corridors_gm_write" on dungeon_corridors
 -- ---------------------------------------------------------------------------
 
 drop policy if exists "dice_rolls_select" on dice_rolls;
+drop policy if exists "dice_rolls_member_select" on dice_rolls;
 
 create policy "dice_rolls_member_select" on dice_rolls
   as permissive for select to authenticated
@@ -466,10 +484,12 @@ create policy "dice_rolls_insert" on dice_rolls
 
 drop policy if exists "session members insert own annotations" on dice_roll_annotations;
 drop policy if exists "session members read annotations"       on dice_roll_annotations;
+drop policy if exists "dice_annot_member_select" on dice_roll_annotations;
 
 create policy "dice_annot_member_select" on dice_roll_annotations
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "dice_annot_member_insert" on dice_roll_annotations;
 
 create policy "dice_annot_member_insert" on dice_roll_annotations
   as permissive for insert to authenticated
@@ -484,10 +504,12 @@ create policy "dice_annot_member_insert" on dice_roll_annotations
 
 drop policy if exists "session members read chat" on chat_messages;
 drop policy if exists "session members send chat" on chat_messages;
+drop policy if exists "chat_member_select" on chat_messages;
 
 create policy "chat_member_select" on chat_messages
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "chat_member_insert" on chat_messages;
 
 create policy "chat_member_insert" on chat_messages
   as permissive for insert to authenticated
@@ -535,10 +557,12 @@ drop policy if exists "hex_notes_select" on hex_notes;
 drop policy if exists "hex_notes_insert" on hex_notes;
 drop policy if exists "hex_notes_delete" on hex_notes;
 drop policy if exists "hex_notes_update" on hex_notes;
+drop policy if exists "hex_notes_member_select" on hex_notes;
 
 create policy "hex_notes_member_select" on hex_notes
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "hex_notes_member_insert" on hex_notes;
 
 create policy "hex_notes_member_insert" on hex_notes
   as permissive for insert to authenticated
@@ -546,6 +570,7 @@ create policy "hex_notes_member_insert" on hex_notes
     user_id = auth.uid()
     and is_session_member(session_id)
   );
+drop policy if exists "hex_notes_owner_update" on hex_notes;
 
 create policy "hex_notes_owner_update" on hex_notes
   as permissive for update to authenticated
@@ -553,6 +578,7 @@ create policy "hex_notes_owner_update" on hex_notes
     user_id = auth.uid()
     or is_session_gm(session_id)
   );
+drop policy if exists "hex_notes_owner_delete" on hex_notes;
 
 create policy "hex_notes_owner_delete" on hex_notes
   as permissive for delete to authenticated
@@ -569,10 +595,12 @@ drop policy if exists "dungeon_notes_select" on dungeon_element_notes;
 drop policy if exists "dungeon_notes_insert" on dungeon_element_notes;
 drop policy if exists "dungeon_notes_delete" on dungeon_element_notes;
 drop policy if exists "dungeon_notes_update" on dungeon_element_notes;
+drop policy if exists "dun_notes_member_select" on dungeon_element_notes;
 
 create policy "dun_notes_member_select" on dungeon_element_notes
   as permissive for select to authenticated
   using (is_session_member(session_id));
+drop policy if exists "dun_notes_member_insert" on dungeon_element_notes;
 
 create policy "dun_notes_member_insert" on dungeon_element_notes
   as permissive for insert to authenticated
@@ -580,6 +608,7 @@ create policy "dun_notes_member_insert" on dungeon_element_notes
     user_id = auth.uid()
     and is_session_member(session_id)
   );
+drop policy if exists "dun_notes_owner_update" on dungeon_element_notes;
 
 create policy "dun_notes_owner_update" on dungeon_element_notes
   as permissive for update to authenticated
@@ -587,6 +616,7 @@ create policy "dun_notes_owner_update" on dungeon_element_notes
     user_id = auth.uid()
     or is_session_gm(session_id)
   );
+drop policy if exists "dun_notes_owner_delete" on dungeon_element_notes;
 
 create policy "dun_notes_owner_delete" on dungeon_element_notes
   as permissive for delete to authenticated
@@ -602,10 +632,12 @@ create policy "dun_notes_owner_delete" on dungeon_element_notes
 drop policy if exists "anyone can view reference photos"  on reference_photos;
 drop policy if exists "owner can insert reference photos" on reference_photos;
 drop policy if exists "owner can delete reference photos" on reference_photos;
+drop policy if exists "ref_photos_member_select" on reference_photos;
 
 create policy "ref_photos_member_select" on reference_photos
   as permissive for select to authenticated
   using (is_session_member(session_id::uuid));
+drop policy if exists "ref_photos_member_insert" on reference_photos;
 
 create policy "ref_photos_member_insert" on reference_photos
   as permissive for insert to authenticated
@@ -613,6 +645,7 @@ create policy "ref_photos_member_insert" on reference_photos
     auth.uid() = user_id
     and is_session_member(session_id::uuid)
   );
+drop policy if exists "ref_photos_owner_delete" on reference_photos;
 
 create policy "ref_photos_owner_delete" on reference_photos
   as permissive for delete to authenticated
@@ -628,10 +661,12 @@ create policy "ref_photos_owner_delete" on reference_photos
 
 drop policy if exists "anyone can view photo broadcasts"       on photo_broadcasts;
 drop policy if exists "authenticated users can broadcast photos" on photo_broadcasts;
+drop policy if exists "photo_broadcasts_member_select" on photo_broadcasts;
 
 create policy "photo_broadcasts_member_select" on photo_broadcasts
   as permissive for select to authenticated
   using (is_session_member(session_id::uuid));
+drop policy if exists "photo_broadcasts_gm_insert" on photo_broadcasts;
 
 create policy "photo_broadcasts_gm_insert" on photo_broadcasts
   as permissive for insert to authenticated
@@ -646,10 +681,12 @@ create policy "photo_broadcasts_gm_insert" on photo_broadcasts
 
 drop policy if exists "authenticated users can insert bug reports" on bug_reports;
 drop policy if exists "users can read own bug reports"             on bug_reports;
+drop policy if exists "bug_reports_insert" on bug_reports;
 
 create policy "bug_reports_insert" on bug_reports
   as permissive for insert to authenticated
   with check (auth.uid() = user_id);
+drop policy if exists "bug_reports_select" on bug_reports;
 
 create policy "bug_reports_select" on bug_reports
   as permissive for select to authenticated

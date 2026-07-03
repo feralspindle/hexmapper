@@ -1,3 +1,4 @@
+drop policy if exists "characters_update_member" on characters;
 create policy "characters_update_member" on characters
   as permissive for update to authenticated
   using (

@@ -13,13 +13,16 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
 ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
 
 -- Users can only read and write their own row
+drop policy if exists "user_preferences: select own" on public.user_preferences;
 CREATE POLICY "user_preferences: select own"
   ON public.user_preferences FOR SELECT
   USING (auth.uid() = user_id);
+drop policy if exists "user_preferences: insert own" on public.user_preferences;
 
 CREATE POLICY "user_preferences: insert own"
   ON public.user_preferences FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+drop policy if exists "user_preferences: update own" on public.user_preferences;
 
 CREATE POLICY "user_preferences: update own"
   ON public.user_preferences FOR UPDATE

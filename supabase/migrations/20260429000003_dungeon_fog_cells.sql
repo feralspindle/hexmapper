@@ -18,6 +18,7 @@ create index if not exists dungeon_fog_cells_dungeon_idx
 alter table dungeon_fog_cells enable row level security;
 
 -- Members can read fog state (needed to render the fog overlay client-side)
+drop policy if exists "dungeon_fog_cells_member_select" on dungeon_fog_cells;
 create policy "dungeon_fog_cells_member_select" on dungeon_fog_cells
   as permissive for select to authenticated
   using (
@@ -29,6 +30,7 @@ create policy "dungeon_fog_cells_member_select" on dungeon_fog_cells
   );
 
 -- Only the GM can reveal or hide fog cells
+drop policy if exists "dungeon_fog_cells_gm_write" on dungeon_fog_cells;
 create policy "dungeon_fog_cells_gm_write" on dungeon_fog_cells
   as permissive for all to authenticated
   using (
@@ -46,7 +48,18 @@ create policy "dungeon_fog_cells_gm_write" on dungeon_fog_cells
     )
   );
 
-alter publication supabase_realtime add table dungeon_fog_cells;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'dungeon_fog_cells'
+  ) then
+    alter publication supabase_realtime add table dungeon_fog_cells;
+  end if;
+end $$;
 
 -- Remove old room-level revealed columns (superseded by grid-based fog)
 alter table dungeon_rooms      drop column if exists revealed;

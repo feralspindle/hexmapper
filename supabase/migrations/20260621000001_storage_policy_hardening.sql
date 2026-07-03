@@ -4,6 +4,7 @@
 
 drop policy if exists "dungeon_images_gm_insert" on storage.objects;
 drop policy if exists "dungeon_images_gm_delete" on storage.objects;
+drop policy if exists "dungeon_images_gm_insert" on storage.objects;
 
 create policy "dungeon_images_gm_insert"
   on storage.objects as permissive for insert to authenticated
@@ -11,6 +12,7 @@ create policy "dungeon_images_gm_insert"
     bucket_id = 'dungeon-images'
     and public.is_session_gm(((storage.foldername(name))[1])::uuid)
   );
+drop policy if exists "dungeon_images_gm_delete" on storage.objects;
 
 create policy "dungeon_images_gm_delete"
   on storage.objects as permissive for delete to authenticated
@@ -21,6 +23,7 @@ create policy "dungeon_images_gm_delete"
 
 drop policy if exists "session_maps_insert" on storage.objects;
 drop policy if exists "session_maps_delete" on storage.objects;
+drop policy if exists "session_maps_insert" on storage.objects;
 
 create policy "session_maps_insert"
   on storage.objects as permissive for insert to authenticated
@@ -28,6 +31,7 @@ create policy "session_maps_insert"
     bucket_id = 'session-maps'
     and public.is_session_gm(((storage.foldername(name))[1])::uuid)
   );
+drop policy if exists "session_maps_delete" on storage.objects;
 
 create policy "session_maps_delete"
   on storage.objects as permissive for delete to authenticated

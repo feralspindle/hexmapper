@@ -45,6 +45,7 @@ drop policy if exists "dungeon_rooms_gm_write"      on dungeon_rooms;
 create policy "dungeon_rooms_member_select" on dungeon_rooms
   as permissive for select to authenticated
   using (is_dungeon_member(dungeon_id));
+drop policy if exists "dungeon_rooms_gm_write" on dungeon_rooms;
 
 create policy "dungeon_rooms_gm_write" on dungeon_rooms
   as permissive for all to authenticated
@@ -58,6 +59,7 @@ drop policy if exists "dungeon_corridors_gm_write"      on dungeon_corridors;
 create policy "dungeon_corridors_member_select" on dungeon_corridors
   as permissive for select to authenticated
   using (is_dungeon_member(dungeon_id));
+drop policy if exists "dungeon_corridors_gm_write" on dungeon_corridors;
 
 create policy "dungeon_corridors_gm_write" on dungeon_corridors
   as permissive for all to authenticated
@@ -71,6 +73,7 @@ drop policy if exists "dungeon_fog_cells_gm_write"      on dungeon_fog_cells;
 create policy "dungeon_fog_cells_member_select" on dungeon_fog_cells
   as permissive for select to authenticated
   using (is_dungeon_member(dungeon_id));
+drop policy if exists "dungeon_fog_cells_gm_write" on dungeon_fog_cells;
 
 create policy "dungeon_fog_cells_gm_write" on dungeon_fog_cells
   as permissive for all to authenticated
