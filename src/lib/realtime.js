@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import {
+  accessTokenNeedsRefresh,
+  connectionWasStable,
   matchesRealtimeFilter,
   realtimeConnectionIsStale,
   realtimeOperation,
@@ -12,6 +14,8 @@ const CLIENT_ID = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36
 const HEARTBEAT_STALE_MS = 65_000
 const PROBE_TIMEOUT_MS = 10_000
 const BACKGROUND_REFRESH_MS = 60_000
+const TOKEN_REFRESH_MARGIN_S = 30
+const STABLE_CONNECTION_MS = 30_000
 
 function websocketUrl() {
   const url = new URL(import.meta.env.VITE_API_BASE_URL || '/api', window.location.href)
@@ -121,6 +125,7 @@ class RustRealtime {
     this.connecting = null
     this.reconnectAttempt = 0
     this.connectionId = null
+    this.readyAt = null
     this.everReady = false
     this.lastMessageAt = 0
     this.pendingProbe = null
@@ -194,24 +199,44 @@ class RustRealtime {
 
   async connect() {
     if (this.socket || this.connecting || !this.channels.size) return
-    this.connecting = supabase.auth.getSession()
-    const { data } = await this.connecting
+    this.connecting = this._freshAccessToken()
+    const token = await this.connecting
     this.connecting = null
-    const token = data.session?.access_token
     if (!token || this.socket) return
     const socket = new WebSocket(websocketUrl())
     this.socket = socket
     socket.addEventListener('open', () => socket.send(JSON.stringify({ type: 'authenticate', token, client_id: CLIENT_ID })))
     socket.addEventListener('message', event => {
+      let message
       try {
-        this.handle(JSON.parse(event.data))
+        message = JSON.parse(event.data)
+      } catch {
+        console.warn('[realtime] unparseable server message')
+        return
+      }
+      try {
+        this.handle(message)
       } catch (error) {
-        console.warn('[realtime] invalid server message', error)
-        socket.close()
+        console.warn('[realtime] message handler failed', error)
       }
     })
     socket.addEventListener('close', () => this.closed())
     socket.addEventListener('error', () => socket.close())
+  }
+
+  async _freshAccessToken() {
+    try {
+      const { data } = await supabase.auth.getSession()
+      let session = data.session
+      if (session && accessTokenNeedsRefresh(session.expires_at, Date.now(), TOKEN_REFRESH_MARGIN_S)) {
+        const { data: refreshed, error } = await supabase.auth.refreshSession()
+        if (!error && refreshed.session) session = refreshed.session
+      }
+      return session?.access_token ?? null
+    } catch (error) {
+      console.warn('[realtime] could not obtain access token', error)
+      return null
+    }
   }
 
   handle(message) {
@@ -224,7 +249,7 @@ class RustRealtime {
     if (message.type === 'ready') {
       this.ready = true
       this.connectionId = message.connection_id
-      this.reconnectAttempt = 0
+      this.readyAt = Date.now()
       for (const sessionId of this.sessionRefs.keys()) this.send({ type: 'subscribe', session_id: sessionId })
       if (this.everReady) {
         queueMicrotask(() => this.refreshSnapshots())
@@ -253,6 +278,7 @@ class RustRealtime {
     }
     if (message.type === 'error') {
       console.warn('[realtime]', message.code, message.message)
+      if (message.code === 'token_expired') void supabase.auth.refreshSession()
       return
     }
     for (const channel of this.channels) channel.dispatch(message)
@@ -308,6 +334,8 @@ class RustRealtime {
   }
 
   closed() {
+    if (connectionWasStable(this.readyAt, Date.now(), STABLE_CONNECTION_MS)) this.reconnectAttempt = 0
+    this.readyAt = null
     this.socket = null
     this.ready = false
     this.connectionId = null

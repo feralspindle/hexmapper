@@ -182,9 +182,31 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         metrics::counter!("realtime_auth_failures_total", "reason" => "invalid_frame").increment(1);
         return;
     };
-    let Ok(claims) = jwt::verify(&token, &state.jwks()) else {
-        metrics::counter!("realtime_auth_failures_total", "reason" => "invalid_token").increment(1);
-        return;
+    let claims = match jwt::verify(&token, &state.jwks()) {
+        Ok(claims) => claims,
+        Err(error) => {
+            let expired = matches!(
+                error.kind(),
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature
+            );
+            let reason = if expired {
+                "token_expired"
+            } else {
+                "invalid_token"
+            };
+            metrics::counter!("realtime_auth_failures_total", "reason" => reason).increment(1);
+            let error = ServerMessage::Error {
+                request_id: None,
+                code: reason.to_string(),
+                message: if expired {
+                    "Access token expired; refresh the session and reconnect".to_string()
+                } else {
+                    "Token verification failed".to_string()
+                },
+            };
+            let _ = send_json(&mut sink, &error).await;
+            return;
+        }
     };
 
     let connection_id = Uuid::new_v4();
@@ -238,7 +260,16 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 }
             }
             _ = heartbeat.tick() => {
-                if state.realtime().expired(connection_id).await { break; }
+                if state.realtime().expired(connection_id).await {
+                    metrics::counter!("realtime_disconnects_total", "reason" => "token_expired").increment(1);
+                    let error = ServerMessage::Error {
+                        request_id: None,
+                        code: "token_expired".to_string(),
+                        message: "Access token expired; refresh the session and reconnect".to_string(),
+                    };
+                    let _ = send_json_bounded(&mut sink, &error).await;
+                    break;
+                }
                 if !revalidate_subscriptions(connection_id, &state).await { break; }
                 if last_pong.elapsed() > CLIENT_STALE_TIMEOUT {
                     metrics::counter!("realtime_disconnects_total", "reason" => "pong_timeout").increment(1);
@@ -534,14 +565,16 @@ impl RealtimeHub {
         }
     }
 
+    // Must stay in lockstep with `jwt::verify`'s leeway (see EXP_LEEWAY_SECONDS):
+    // this check must never kill a token that verification would still accept.
     async fn expired(&self, id: Uuid) -> bool {
         let now = chrono::Utc::now().timestamp().max(0) as usize;
-        self.0
-            .lock()
-            .await
-            .clients
-            .get(&id)
-            .map_or(true, |client| client.expires_at <= now)
+        self.0.lock().await.clients.get(&id).is_none_or(|client| {
+            client
+                .expires_at
+                .saturating_add(jwt::EXP_LEEWAY_SECONDS as usize)
+                <= now
+        })
     }
 
     async fn subscribe(&self, id: Uuid, session_id: Uuid, is_gm: bool) -> bool {

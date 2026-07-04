@@ -177,6 +177,26 @@ export const useHexStore = defineStore("hex", () => {
     });
   }
 
+  async function refresh() {
+    const sessionId = currentSessionId.value;
+    const mapId = currentMapId.value;
+    if (!sessionId || !mapId) return;
+    try {
+      const rows = await _fetchHexRows(sessionId, mapId, useSessionStore().isGM);
+      if (currentSessionId.value !== sessionId || currentMapId.value !== mapId)
+        return;
+      _replaceHexCells(rows);
+      loadError.value = null;
+    } catch (error) {
+      console.error(
+        "hex refresh error:",
+        error instanceof ApiError ? error.message : error,
+      );
+      return;
+    }
+    await _loadPartyHexFromDb();
+  }
+
   async function init(sessionId, mapId) {
     loading.value = true;
     currentSessionId.value = sessionId;
@@ -203,7 +223,7 @@ export const useHexStore = defineStore("hex", () => {
 
     if (channel) realtime.removeChannel(channel);
     channel = realtime
-      .channel(`map:${mapId}:hex`, { sessionId, onReconnect: () => init(sessionId, mapId) })
+      .channel(`map:${mapId}:hex`, { sessionId, onReconnect: () => refresh() })
       .on("broadcast", { event: "refresh" }, () => {
         _schedulePlayerRefresh();
       });
@@ -650,6 +670,7 @@ export const useHexStore = defineStore("hex", () => {
     loading,
     loadError,
     init,
+    refresh,
     selectHex,
     deselectHex,
     upsertHex,

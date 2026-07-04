@@ -111,6 +111,15 @@ export const useMapStore = defineStore('map', () => {
   const mapScaleUnit     = computed(() => activeMap.value?.map_scale_unit     ?? 'miles')
   const mapImageScale    = computed(() => activeMap.value?.map_image_scale    ?? 1)
 
+  async function refresh() {
+    const sessionId = _currentSessionId
+    if (!sessionId) return
+    const { data: mapRows, error } = await supabase
+      .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
+    if (error || !mapRows || _currentSessionId !== sessionId) return
+    maps.value = mapRows.map(row => ({ ...row, ...(_localOverrides[row.id] ?? {}) }))
+  }
+
   async function init(sessionId) {
     _currentSessionId = sessionId
     loading.value = true
@@ -144,7 +153,7 @@ export const useMapStore = defineStore('map', () => {
 
     if (mapChannel) realtime.removeChannel(mapChannel)
     mapChannel = realtime
-      .channel(`session:${sessionId}:maps`, { sessionId, onReconnect: () => init(sessionId) })
+      .channel(`session:${sessionId}:maps`, { sessionId, onReconnect: () => refresh() })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'maps', filter: `session_id=eq.${sessionId}` },
@@ -345,6 +354,7 @@ export const useMapStore = defineStore('map', () => {
     mapScaleUnit,
     mapImageScale,
     init,
+    refresh,
     cleanup,
     createMap,
     createChildMap,

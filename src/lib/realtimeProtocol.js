@@ -50,6 +50,15 @@ export function realtimeSnapshotRefreshNeeded(hiddenForMs, thresholdMs) {
   return hiddenForMs >= thresholdMs
 }
 
+export function accessTokenNeedsRefresh(expiresAtSeconds, nowMs, marginSeconds) {
+  if (!expiresAtSeconds) return false
+  return expiresAtSeconds - nowMs / 1000 <= marginSeconds
+}
+
+export function connectionWasStable(readyAtMs, nowMs, stableAfterMs) {
+  return readyAtMs != null && nowMs - readyAtMs >= stableAfterMs
+}
+
 export function mergeRealtimeSnapshot(snapshot, liveRows, limit) {
   const rows = new Map(snapshot.map(row => [row.id, row]))
   for (const row of liveRows) rows.set(row.id, { ...rows.get(row.id), ...row })

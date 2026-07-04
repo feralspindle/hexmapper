@@ -7,8 +7,9 @@
       <div class="rt-body">
         <div class="rt-title">Live updates disconnected</div>
         <div class="rt-sub">
-          Trying to reconnect. If this keeps happening, an ad blocker may be
-          blocking the connection. Try allowlisting this site.
+          Reconnecting automatically — the map will refresh when the
+          connection returns. If this persists, check your internet
+          connection or refresh the page.
         </div>
       </div>
       <button class="rt-refresh" @click="reload">Refresh</button>

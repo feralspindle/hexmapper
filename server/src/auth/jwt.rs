@@ -1,7 +1,18 @@
+use std::str::FromStr;
+
 use jsonwebtoken::jwk::JwkSet;
-use jsonwebtoken::{decode, decode_header, errors, DecodingKey, Validation};
+use jsonwebtoken::{decode, decode_header, errors, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 use uuid::Uuid;
+
+/// Leeway applied to `exp` both when verifying a token and when the realtime
+/// heartbeat decides a live connection's token has expired
+/// (`RealtimeHub::expired`). The two checks MUST use the same value: if
+/// verification is more lenient (jsonwebtoken defaults to 60s), a just-expired
+/// token authenticates successfully and the heartbeat kills the connection
+/// milliseconds later, producing a sub-second ready->kill reconnect storm
+/// until the client refreshes its token.
+pub const EXP_LEEWAY_SECONDS: u64 = 0;
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -65,10 +76,75 @@ pub fn verify(token: &str, jwks: &JwkSet) -> Result<SupabaseClaims, errors::Erro
     let jwk = jwks.find(kid).ok_or(errors::ErrorKind::InvalidToken)?;
     let decoding_key = DecodingKey::from_jwk(jwk)?;
 
-    let mut validation = Validation::new(header.alg);
+    // Pin the algorithm to what the JWKS key declares; never trust the token
+    // header's `alg`, which is attacker-controlled.
+    let key_algorithm = jwk
+        .common
+        .key_algorithm
+        .ok_or(errors::ErrorKind::InvalidAlgorithm)?;
+    let algorithm = Algorithm::from_str(&key_algorithm.to_string())?;
+
+    let mut validation = Validation::new(algorithm);
     validation.set_audience(&["authenticated"]);
+    validation.leeway = EXP_LEEWAY_SECONDS;
 
     let decoded = decode::<SupabaseClaims>(token, &decoding_key, &validation)?;
 
     Ok(decoded.claims)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jsonwebtoken::{encode, EncodingKey, Header};
+    use serde_json::json;
+
+    const KID: &str = "test-key";
+    const SECRET: &[u8] = b"realtime-test-secret-realtime-test-secret";
+
+    fn test_jwks() -> JwkSet {
+        use base64::Engine;
+        let k = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(SECRET);
+        serde_json::from_value(json!({
+            "keys": [{ "kty": "oct", "kid": KID, "alg": "HS256", "k": k }]
+        }))
+        .unwrap()
+    }
+
+    fn sign(algorithm: Algorithm, exp: i64) -> String {
+        let header = Header {
+            alg: algorithm,
+            kid: Some(KID.to_string()),
+            ..Header::default()
+        };
+        let claims = json!({
+            "sub": Uuid::new_v4(),
+            "exp": exp,
+            "aud": "authenticated",
+            "role": "authenticated",
+        });
+        encode(&header, &claims, &EncodingKey::from_secret(SECRET)).unwrap()
+    }
+
+    #[test]
+    fn accepts_valid_token() {
+        let token = sign(Algorithm::HS256, chrono::Utc::now().timestamp() + 3600);
+        let claims = verify(&token, &test_jwks()).unwrap();
+        assert_eq!(claims.role, "authenticated");
+    }
+
+    #[test]
+    fn rejects_token_expired_within_default_leeway_window() {
+        // 30s past exp is inside jsonwebtoken's default 60s leeway; accepting it
+        // is what caused the ready->kill reconnect storm.
+        let token = sign(Algorithm::HS256, chrono::Utc::now().timestamp() - 30);
+        let error = verify(&token, &test_jwks()).unwrap_err();
+        assert!(matches!(error.kind(), errors::ErrorKind::ExpiredSignature));
+    }
+
+    #[test]
+    fn rejects_algorithm_not_declared_by_jwks_key() {
+        let token = sign(Algorithm::HS384, chrono::Utc::now().timestamp() + 3600);
+        assert!(verify(&token, &test_jwks()).is_err());
+    }
 }
