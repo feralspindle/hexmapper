@@ -40,6 +40,10 @@ fi
 # --- 3. directory layout ---------------------------------------------------
 mkdir -p "$BASE/www" "$BASE/certs"
 chown -R "$DEPLOY_USER":"$DEPLOY_USER" "$BASE/www"   # CI rsyncs the SPA here
+# CI (deploy-server.yml) SSHes in as $DEPLOY_USER and runs `git fetch/checkout/pull`
+# in the repo. If it was cloned by root, git aborts with "dubious ownership" and the
+# deploy user can't write .git anyway — so hand the clone to the deploy user.
+chown -R "$DEPLOY_USER":"$DEPLOY_USER" "$REPO_DIR"
 
 # --- 4. .env scaffold ------------------------------------------------------
 if [ -f "$BASE/.env" ]; then

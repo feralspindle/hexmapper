@@ -102,6 +102,37 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
             "set -eu; cd /opt/hexmap/repo; git fetch origin '$BRANCH'; git checkout '$BRANCH'; git pull --ff-only origin '$BRANCH'; API_IMAGE_OVERRIDE='$API_IMAGE_OVERRIDE' bash deploy/deploy.sh"
 
+  # Post-deploy liveness check against the live URL: SPA is served (Caddy + cert + CDN)
+  # and the API answers (/api/healthz -> "ok", proving the container is up and proxied).
+  # SMOKE_URL is a per-environment variable; the job no-ops if it isn't set.
+  smoke:
+    needs: build-push-deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - name: Post-deploy smoke test
+        env:
+          SMOKE_URL: ${{ vars.SMOKE_URL }}
+        run: |
+          if [ -z "$SMOKE_URL" ]; then
+            echo "::warning::SMOKE_URL not set for this environment; skipping smoke test"
+            exit 0
+          fi
+          echo "Smoke-testing $SMOKE_URL (retrying to allow for the container restart)"
+          root=000; health=""
+          for i in $(seq 1 12); do
+            root=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$SMOKE_URL/" || echo 000)
+            health=$(curl -s --max-time 10 "$SMOKE_URL/api/healthz" || echo "")
+            echo "  attempt $i: GET / -> $root ; GET /api/healthz -> '${health:-<none>}'"
+            if [ "$root" = "200" ] && [ "$health" = "ok" ]; then
+              echo "✔ smoke passed: SPA served and API healthy"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::smoke test failed for $SMOKE_URL (last: root=$root health='${health:-<none>}')"
+          exit 1
+
   e2e-staging:
     needs: build-push-deploy
     if: github.ref_name == 'staging'

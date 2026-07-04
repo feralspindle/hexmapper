@@ -48,6 +48,10 @@ async fn main() {
         .allow_headers(tower_http::cors::Any);
 
     let api = Router::new()
+        // Public, unauthenticated liveness probe. Reachable at /api/healthz through Caddy
+        // (Caddy only proxies /api/*, so the root /healthz below is internal-only). Touches
+        // no DB — proves the HTTP server is up and reachable. Used by the deploy smoke test.
+        .route("/healthz", get(|| async { "ok" }))
         .merge(domains::dice::router())
         .merge(domains::chat::router())
         .merge(domains::macros::router())
