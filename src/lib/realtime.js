@@ -6,6 +6,7 @@ import {
   realtimeConnectionIsStale,
   realtimeOperation,
   realtimeSnapshotRefreshNeeded,
+  snapshotRefreshDelay,
   REALTIME_TABLES,
 } from './realtimeProtocol.js'
 
@@ -16,6 +17,7 @@ const PROBE_TIMEOUT_MS = 10_000
 const BACKGROUND_REFRESH_MS = 60_000
 const TOKEN_REFRESH_MARGIN_S = 30
 const STABLE_CONNECTION_MS = 30_000
+const SNAPSHOT_REFRESH_MIN_INTERVAL_MS = 10_000
 
 function websocketUrl() {
   const url = new URL(import.meta.env.VITE_API_BASE_URL || '/api', window.location.href)
@@ -131,6 +133,9 @@ class RustRealtime {
     this.pendingProbe = null
     this.hiddenAt = document.visibilityState === 'hidden' ? Date.now() : null
     this.refreshing = null
+    this.refreshQueued = false
+    this.refreshTimer = null
+    this.lastRefreshStartedAt = null
     this.watchdog = setInterval(() => {
       if (document.visibilityState === 'visible') this.resume()
     }, 15_000)
@@ -326,10 +331,29 @@ class RustRealtime {
   }
 
   refreshSnapshots() {
-    if (this.refreshing) return this.refreshing
+    if (this.refreshing) {
+      this.refreshQueued = true
+      return this.refreshing
+    }
+    if (this.refreshTimer) return
+    const delay = snapshotRefreshDelay(this.lastRefreshStartedAt, Date.now(), SNAPSHOT_REFRESH_MIN_INTERVAL_MS)
+    if (delay > 0) {
+      this.refreshTimer = setTimeout(() => {
+        this.refreshTimer = null
+        this.refreshSnapshots()
+      }, delay)
+      return
+    }
+    this.lastRefreshStartedAt = Date.now()
     const refreshes = new Set([...this.channels].map(channel => channel.reconnect).filter(Boolean))
     this.refreshing = Promise.allSettled([...refreshes].map(refresh => refresh()))
-      .finally(() => { this.refreshing = null })
+      .finally(() => {
+        this.refreshing = null
+        if (this.refreshQueued) {
+          this.refreshQueued = false
+          this.refreshSnapshots()
+        }
+      })
     return this.refreshing
   }
 

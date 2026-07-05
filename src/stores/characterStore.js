@@ -109,6 +109,30 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
+  async function refresh() {
+    const sessionId = currentSessionId.value
+    if (!sessionId) return
+
+    const [charsResult, membersResult] = await Promise.all([
+      supabase.from('characters').select('*').eq('session_id', sessionId).order('created_at', { ascending: true }),
+      supabase.from('session_members').select('user_id, active_character_id, display_name').eq('session_id', sessionId),
+    ])
+
+    if (currentSessionId.value !== sessionId) return
+
+    if (!charsResult.error && charsResult.data) {
+      const local = new Map(characters.value.map(c => [c.id, c]))
+      characters.value = charsResult.data.map(row =>
+        (row.id === activeId.value || _saveTimers.has(row.id)) && local.has(row.id) ? local.get(row.id) : row
+      )
+    }
+
+    if (membersResult.data) {
+      memberSelections.value = membersResult.data
+      await _fetchMissingChars(membersResult.data.map(m => m.active_character_id))
+    }
+  }
+
   function setActive(id) {
     const authStore = useAuthStore()
     activeId.value = id
@@ -435,7 +459,7 @@ export const useCharacterStore = defineStore('character', () => {
   function _subscribeRealtime(sessionId) {
     if (_realtimeChannel) realtime.removeChannel(_realtimeChannel)
     _realtimeChannel = realtime
-      .channel(`characters:${sessionId}`, { sessionId, onReconnect: () => loadAll(sessionId) })
+      .channel(`characters:${sessionId}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -595,7 +619,7 @@ export const useCharacterStore = defineStore('character', () => {
     loading, saving,
     luckEvents,
     gmInitiative,
-    loadAll, setActive, importCharacter, deleteCharacter,
+    loadAll, refresh, setActive, importCharacter, deleteCharacter,
     updateField, updateFieldForChar, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative, setGmInitiative,

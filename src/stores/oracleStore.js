@@ -56,6 +56,18 @@ export const useOracleStore = defineStore('oracle', () => {
     }
   }
 
+  async function refresh() {
+    const sessionId = _sessionId
+    if (!sessionId) return
+    try {
+      await Promise.all([loadTables(sessionId), loadRolls(sessionId)])
+      if (_sessionId !== sessionId) return
+      await loadRows()
+    } catch (err) {
+      console.error('oracleStore.refresh:', err instanceof ApiError ? err.message : err)
+    }
+  }
+
   async function loadTables(sessionId = _sessionId) {
     if (!sessionId) return
     const { data, error: loadError } = await supabase
@@ -65,6 +77,7 @@ export const useOracleStore = defineStore('oracle', () => {
       .order('updated_at', { ascending: false })
 
     if (loadError) throw loadError
+    if (_sessionId !== sessionId) return
     tables.value = data ?? []
   }
 
@@ -95,12 +108,13 @@ export const useOracleStore = defineStore('oracle', () => {
       .limit(HISTORY_LIMIT)
 
     if (loadError) throw loadError
+    if (_sessionId !== sessionId) return
     rolls.value = data ?? []
   }
 
   function subscribe(sessionId) {
     tablesChannel = realtime
-      .channel(`oracle:tables:${sessionId}`, { sessionId, onReconnect: () => init(sessionId) })
+      .channel(`oracle:tables:${sessionId}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -140,7 +154,7 @@ export const useOracleStore = defineStore('oracle', () => {
       .subscribe()
 
     rollsChannel = realtime
-      .channel(`oracle:rolls:${sessionId}`, { sessionId, onReconnect: () => loadRolls(sessionId) })
+      .channel(`oracle:rolls:${sessionId}`, { sessionId })
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -273,6 +287,7 @@ export const useOracleStore = defineStore('oracle', () => {
     rolling,
     error,
     init,
+    refresh,
     cleanup,
     loadRows,
     createTable,
