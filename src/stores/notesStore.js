@@ -13,6 +13,17 @@ export const useNotesStore = defineStore('notes', () => {
   let currentContextKey = null
   let _pendingInit = null
 
+  async function refresh() {
+    const ctx = channel?._ctx
+    const key = currentContextKey
+    if (!ctx || !key) return
+    const query = ctx.type === 'hex'
+      ? supabase.from('hex_notes').select('*').eq('hex_cell_id', ctx.hexCellId)
+      : supabase.from('dungeon_element_notes').select('*').eq('element_id', ctx.elementId)
+    const { data } = await query.order('created_at', { ascending: true })
+    if (data && currentContextKey === key) notes.value = data
+  }
+
   async function initForHex(hexCellId, sessionId) {
     const key = hexCellId ? `hex:${hexCellId}` : null
     if (key && key === currentContextKey) {
@@ -36,7 +47,7 @@ export const useNotesStore = defineStore('notes', () => {
         if (data) notes.value = data
 
         channel = realtime
-          .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return initForHex(hexCellId, sessionId) } })
+          .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
           .on('postgres_changes', {
             event: '*',
             schema: 'public',
@@ -74,7 +85,7 @@ export const useNotesStore = defineStore('notes', () => {
         if (data) notes.value = data
 
         channel = realtime
-          .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return initForDungeon(elementId, elementType, sessionId) } })
+          .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
           .on('postgres_changes', {
             event: '*',
             schema: 'public',
@@ -192,5 +203,5 @@ export const useNotesStore = defineStore('notes', () => {
     _pendingInit = null
   }
 
-  return { notes, loading, initForHex, initForDungeonElement, addNote, updateNote, deleteNote, cleanup }
+  return { notes, loading, initForHex, initForDungeonElement, refresh, addNote, updateNote, deleteNote, cleanup }
 })

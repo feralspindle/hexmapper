@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
+import { mergeRealtimeSnapshot } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playChatSound } from '@/lib/diceSound.js'
@@ -13,21 +14,36 @@ export const useChatStore = defineStore('chat', () => {
   let channel     = null
   let _sessionId  = null
 
-  async function init(sessionId) {
-    _sessionId = sessionId
-
+  async function _fetchLatest(sessionId) {
     const { data } = await supabase
       .from('chat_messages')
       .select('*')
       .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(100)
+    return data
+  }
 
-    if (data) messages.value = data
+  async function refresh() {
+    const sessionId = _sessionId
+    if (!sessionId) return
+    const data = await _fetchLatest(sessionId)
+    if (!data || _sessionId !== sessionId) return
+    messages.value = mergeRealtimeSnapshot(data, messages.value, 100)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }
+
+  async function init(sessionId) {
+    _sessionId = sessionId
+
+    const data = await _fetchLatest(sessionId)
+    if (data && _sessionId === sessionId) {
+      messages.value = [...data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    }
 
     if (channel) realtime.removeChannel(channel)
     channel = realtime
-      .channel(`session:${sessionId}:chat`, { sessionId, onReconnect: () => init(sessionId) })
+      .channel(`session:${sessionId}:chat`, { sessionId, onReconnect: () => refresh() })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `session_id=eq.${sessionId}` },
@@ -79,5 +95,5 @@ export const useChatStore = defineStore('chat', () => {
     _sessionId          = null
   }
 
-  return { messages, latestMessage, init, sendMessage, cleanup }
+  return { messages, latestMessage, init, refresh, sendMessage, cleanup }
 })

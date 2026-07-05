@@ -44,6 +44,12 @@ export const useVaultStore = defineStore('vault', () => {
     _subscribeToasts(sessionId)
   }
 
+  async function refresh() {
+    const sessionId = _sessionId
+    if (!sessionId) return
+    await Promise.all([_loadLoot(sessionId), _loadItems(sessionId), _loadContainers(sessionId), _loadLedger(sessionId)])
+  }
+
   function cleanup() {
     if (lootChannel)       { realtime.removeChannel(lootChannel);       lootChannel       = null }
     if (itemsChannel)      { realtime.removeChannel(itemsChannel);      itemsChannel      = null }
@@ -63,7 +69,7 @@ export const useVaultStore = defineStore('vault', () => {
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data) loot.value = data
+    if (data && _sessionId === sessionId) loot.value = data
   }
 
   async function _loadItems(sessionId) {
@@ -72,7 +78,7 @@ export const useVaultStore = defineStore('vault', () => {
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data) items.value = data
+    if (data && _sessionId === sessionId) items.value = data
   }
 
   async function _loadContainers(sessionId) {
@@ -81,7 +87,7 @@ export const useVaultStore = defineStore('vault', () => {
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data) containers.value = data
+    if (data && _sessionId === sessionId) containers.value = data
   }
 
   function _subscribeToasts(sessionId) {
@@ -99,7 +105,7 @@ export const useVaultStore = defineStore('vault', () => {
 
   function _subscribeLoot(sessionId) {
     lootChannel = realtime
-      .channel(`vault:loot:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
+      .channel(`vault:loot:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_loot', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
@@ -153,7 +159,7 @@ export const useVaultStore = defineStore('vault', () => {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
       .limit(100)
-    if (data) ledger.value = data
+    if (data && _sessionId === sessionId) ledger.value = data
   }
 
   function _subscribeLedger(sessionId) {
@@ -418,7 +424,7 @@ export const useVaultStore = defineStore('vault', () => {
 
   return {
     loot, items, containers, bankItems,
-    init, cleanup,
+    init, refresh, cleanup,
     ledger,
     addLoot, claimLoot, depositLoot, stashLoot, splitLoot, assignLoot, discardLoot,
     withdrawFromBank, withdrawCoins,
