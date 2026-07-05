@@ -39,7 +39,7 @@ struct Client {
     display_name: String,
     expires_at: usize,
     tx: mpsc::Sender<ServerMessage>,
-    close: mpsc::Sender<()>,
+    close: mpsc::Sender<&'static str>,
     sessions: HashMap<Uuid, bool>,
     presence: HashMap<String, TrackedPresence>,
 }
@@ -155,23 +155,39 @@ async fn upgrade(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    let ip = client_ip(&headers);
     let origin_matches = headers
         .get(ORIGIN)
         .and_then(|value| value.to_str().ok())
         .is_some_and(|origin| state.allows_origin(origin));
     if !origin_matches {
         metrics::counter!("realtime_upgrade_rejections_total", "reason" => "origin").increment(1);
+        tracing::warn!(%ip, "realtime upgrade rejected: bad origin");
         return StatusCode::FORBIDDEN.into_response();
     }
     ws.max_message_size(MAX_FRAME_BYTES)
-        .on_upgrade(move |socket| handle_socket(socket, state))
+        .on_upgrade(move |socket| handle_socket(socket, state, ip))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState) {
+// Cloudflare fronts Caddy, so the socket's peer address is always an edge or proxy
+// IP; CF-Connecting-IP carries the real client and only Cloudflare can reach the
+// origin to set it. X-Forwarded-For is the non-Cloudflare (staging/direct) fallback.
+fn client_ip(headers: &HeaderMap) -> String {
+    headers
+        .get("cf-connecting-ip")
+        .or_else(|| headers.get("x-forwarded-for"))
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
     let (mut sink, mut stream) = socket.split();
     let auth = tokio::time::timeout(AUTH_TIMEOUT, stream.next()).await;
     let Some(Ok(Message::Text(text))) = auth.ok().flatten() else {
         metrics::counter!("realtime_auth_failures_total", "reason" => "missing_frame").increment(1);
+        tracing::warn!(%ip, "realtime auth failed: missing frame");
         return;
     };
     let Ok(ClientMessage::Authenticate {
@@ -180,6 +196,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     }) = serde_json::from_str(&text)
     else {
         metrics::counter!("realtime_auth_failures_total", "reason" => "invalid_frame").increment(1);
+        tracing::warn!(%ip, "realtime auth failed: invalid frame");
         return;
     };
     let claims = match jwt::verify(&token, &state.jwks()) {
@@ -195,6 +212,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 "invalid_token"
             };
             metrics::counter!("realtime_auth_failures_total", "reason" => reason).increment(1);
+            tracing::warn!(%ip, reason, "realtime auth failed: token rejected");
             let error = ServerMessage::Error {
                 request_id: None,
                 code: reason.to_string(),
@@ -224,6 +242,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         )
         .await;
     metrics::gauge!("realtime_connections").increment(1.0);
+    let user_id = claims.sub;
+    let connected_at = Instant::now();
+    tracing::info!(%connection_id, %user_id, %ip, "realtime client connected");
 
     let ready = ServerMessage::Ready {
         connection_id,
@@ -232,22 +253,31 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     if send_json(&mut sink, &ready).await.is_err() {
         state.realtime().remove(connection_id).await;
         metrics::gauge!("realtime_connections").decrement(1.0);
+        metrics::counter!("realtime_disconnects_total", "reason" => "ready_send").increment(1);
+        tracing::info!(%connection_id, %user_id, %ip, "realtime client disconnected before ready");
         return;
     }
 
     let mut heartbeat = tokio::time::interval(Duration::from_secs(25));
     let mut last_pong = Instant::now();
-    loop {
+    let reason = loop {
         tokio::select! {
             outbound = rx.recv() => {
-                let Some(outbound) = outbound else { break };
-                if send_json_bounded(&mut sink, &outbound).await.is_err() { break; }
+                let Some(outbound) = outbound else { break "hub_removed" };
+                if send_json_bounded(&mut sink, &outbound).await.is_err() { break "send_failed"; }
             }
-            _ = close_rx.recv() => break,
+            kick = close_rx.recv() => {
+                let reason = kick.unwrap_or("hub_removed");
+                send_farewell(&mut sink, reason).await;
+                break reason;
+            }
             inbound = stream.next() => {
                 match inbound {
                     Some(Ok(Message::Text(text))) => {
-                        if text.len() > MAX_FRAME_BYTES { break; }
+                        if text.len() > MAX_FRAME_BYTES {
+                            send_farewell(&mut sink, "frame_too_large").await;
+                            break "frame_too_large";
+                        }
                         if let Ok(message) = serde_json::from_str::<ClientMessage>(&text) {
                             handle_client_message(connection_id, message, &state).await;
                         } else {
@@ -255,28 +285,37 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         }
                     }
                     Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    Some(Ok(Message::Close(frame))) => {
+                        if let Some(frame) = frame {
+                            tracing::info!(
+                                %connection_id,
+                                code = frame.code,
+                                reason = %frame.reason,
+                                "realtime client sent close frame",
+                            );
+                        }
+                        break "client_close";
+                    }
+                    None => break "stream_end",
+                    Some(Err(_)) => break "socket_error",
                     _ => {}
                 }
             }
             _ = heartbeat.tick() => {
                 if state.realtime().expired(connection_id).await {
-                    metrics::counter!("realtime_disconnects_total", "reason" => "token_expired").increment(1);
-                    let error = ServerMessage::Error {
-                        request_id: None,
-                        code: "token_expired".to_string(),
-                        message: "Access token expired; refresh the session and reconnect".to_string(),
-                    };
-                    let _ = send_json_bounded(&mut sink, &error).await;
-                    break;
+                    send_farewell(&mut sink, "token_expired").await;
+                    break "token_expired";
                 }
-                if !revalidate_subscriptions(connection_id, &state).await { break; }
+                if let Err(reason) = revalidate_subscriptions(connection_id, &state).await {
+                    send_farewell(&mut sink, reason).await;
+                    break reason;
+                }
                 if last_pong.elapsed() > CLIENT_STALE_TIMEOUT {
-                    metrics::counter!("realtime_disconnects_total", "reason" => "pong_timeout").increment(1);
-                    break;
+                    send_farewell(&mut sink, "pong_timeout").await;
+                    break "pong_timeout";
                 }
                 let heartbeat = ServerMessage::Heartbeat { server_time_ms: chrono::Utc::now().timestamp_millis() };
-                if send_json_bounded(&mut sink, &heartbeat).await.is_err() { break; }
+                if send_json_bounded(&mut sink, &heartbeat).await.is_err() { break "heartbeat_send"; }
                 if !matches!(
                     tokio::time::timeout(
                         SEND_TIMEOUT,
@@ -285,36 +324,71 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     .await,
                     Ok(Ok(()))
                 ) {
-                    metrics::counter!("realtime_disconnects_total", "reason" => "heartbeat_send").increment(1);
-                    break;
+                    break "heartbeat_send";
                 }
             }
         }
-    }
+    };
 
     state.realtime().remove(connection_id).await;
     metrics::gauge!("realtime_connections").decrement(1.0);
+    metrics::counter!("realtime_disconnects_total", "reason" => reason).increment(1);
+    tracing::info!(
+        %connection_id,
+        %user_id,
+        %ip,
+        reason,
+        duration_secs = connected_at.elapsed().as_secs(),
+        "realtime client disconnected",
+    );
 }
 
-async fn revalidate_subscriptions(connection_id: Uuid, state: &AppState) -> bool {
+async fn revalidate_subscriptions(
+    connection_id: Uuid,
+    state: &AppState,
+) -> Result<(), &'static str> {
     let Some((user_id, session_ids)) = state.realtime().subscription_identity(connection_id).await
     else {
-        return false;
+        return Err("hub_removed");
     };
     let roles = match authz::authorized_session_roles(state.pool(), user_id, &session_ids).await {
         Ok(roles) => roles.into_iter().collect(),
         Err(error) => {
             tracing::warn!(%error, %connection_id, "realtime membership revalidation failed");
-            metrics::counter!("realtime_disconnects_total", "reason" => "authz_revalidation")
-                .increment(1);
-            return false;
+            return Err("authz_revalidation");
         }
     };
     state
         .realtime()
         .reconcile_subscriptions(connection_id, &roles)
         .await;
-    true
+    Ok(())
+}
+
+// Best-effort last frame so the client can log why the server hung up; the codes
+// mirror the reason labels on realtime_disconnects_total.
+async fn send_farewell(
+    sink: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    reason: &str,
+) {
+    let message = match reason {
+        "token_expired" => "Access token expired; refresh the session and reconnect",
+        "slow_consumer" => "Client is not keeping up with realtime messages; reconnect",
+        "server_restart" => "Realtime service is restarting; reconnect",
+        "frame_too_large" => "Message exceeds the frame size limit",
+        "pong_timeout" => "No pong received; connection presumed dead",
+        "authz_revalidation" => "Session membership could not be revalidated; reconnect",
+        _ => "Connection closed by server",
+    };
+    let _ = send_json_bounded(
+        sink,
+        &ServerMessage::Error {
+            request_id: None,
+            code: reason.to_string(),
+            message: message.to_string(),
+        },
+    )
+    .await;
 }
 
 async fn send_json(
@@ -499,7 +573,7 @@ impl RealtimeHub {
         display_name: String,
         expires_at: usize,
         tx: mpsc::Sender<ServerMessage>,
-        close: mpsc::Sender<()>,
+        close: mpsc::Sender<&'static str>,
     ) {
         self.0.lock().await.clients.insert(
             id,
@@ -699,7 +773,7 @@ impl RealtimeHub {
         for id in &slow {
             if let Some(client) = hub.clients.remove(id) {
                 presence_channels.extend(client.presence.keys().cloned());
-                let _ = client.close.try_send(());
+                let _ = client.close.try_send("slow_consumer");
             }
         }
         if !slow.is_empty() {
@@ -783,7 +857,7 @@ impl RealtimeHub {
             }
             for id in &slow {
                 if let Some(client) = hub.clients.remove(id) {
-                    let _ = client.close.try_send(());
+                    let _ = client.close.try_send("slow_consumer");
                 }
             }
             if !slow.is_empty() {
@@ -830,7 +904,7 @@ impl RealtimeHub {
         for id in &slow {
             if let Some(client) = hub.clients.remove(id) {
                 presence_channels.extend(client.presence.keys().cloned());
-                let _ = client.close.try_send(());
+                let _ = client.close.try_send("slow_consumer");
             }
         }
         metrics::counter!("realtime_events_dispatched_total", "aggregate" => row.aggregate_type.clone()).increment(1);
@@ -846,7 +920,7 @@ impl RealtimeHub {
     async fn disconnect_all(&self) {
         let clients = std::mem::take(&mut self.0.lock().await.clients);
         for client in clients.into_values() {
-            let _ = client.close.try_send(());
+            let _ = client.close.try_send("server_restart");
         }
     }
 }
@@ -1018,6 +1092,91 @@ mod tests {
         assert_eq!(payload.get("user_id"), Some(&json!(user_id)));
         assert_eq!(payload.get("display_name"), Some(&json!("Rook")));
         assert_eq!(payload.get("created_at"), Some(&json!(created_at)));
+    }
+
+    #[test]
+    fn client_ip_prefers_cloudflare_header_and_takes_first_forwarded_hop() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(client_ip(&headers), "unknown");
+
+        headers.insert(
+            "x-forwarded-for",
+            "203.0.113.7, 172.68.1.1".parse().unwrap(),
+        );
+        assert_eq!(client_ip(&headers), "203.0.113.7");
+
+        headers.insert("cf-connecting-ip", "198.51.100.9".parse().unwrap());
+        assert_eq!(client_ip(&headers), "198.51.100.9");
+    }
+
+    #[tokio::test]
+    async fn disconnect_all_sends_server_restart_reason() {
+        let hub = RealtimeHub::default();
+        let connection_id = Uuid::new_v4();
+        let (tx, _rx) = mpsc::channel(8);
+        let (close, mut close_rx) = mpsc::channel(1);
+
+        hub.register(
+            connection_id,
+            Uuid::new_v4(),
+            "Player".into(),
+            usize::MAX,
+            tx,
+            close,
+        )
+        .await;
+        hub.disconnect_all().await;
+
+        assert_eq!(close_rx.recv().await, Some("server_restart"));
+    }
+
+    #[tokio::test]
+    async fn slow_consumer_is_kicked_with_reason() {
+        let hub = RealtimeHub::default();
+        let session_id = Uuid::new_v4();
+
+        let sender_id = Uuid::new_v4();
+        let (sender_tx, _sender_rx) = mpsc::channel(8);
+        let (sender_close, _sender_close_rx) = mpsc::channel(1);
+        hub.register(
+            sender_id,
+            Uuid::new_v4(),
+            "GM".into(),
+            usize::MAX,
+            sender_tx,
+            sender_close,
+        )
+        .await;
+        assert!(hub.subscribe(sender_id, session_id, true).await);
+
+        let slow_id = Uuid::new_v4();
+        let (slow_tx, _slow_rx) = mpsc::channel(1);
+        let (slow_close, mut slow_close_rx) = mpsc::channel(1);
+        hub.register(
+            slow_id,
+            Uuid::new_v4(),
+            "Player".into(),
+            usize::MAX,
+            slow_tx.clone(),
+            slow_close,
+        )
+        .await;
+        assert!(hub.subscribe(slow_id, session_id, false).await);
+
+        slow_tx
+            .try_send(ServerMessage::Heartbeat { server_time_ms: 0 })
+            .unwrap();
+        hub.publish(
+            sender_id,
+            session_id,
+            "chat:x".into(),
+            "refresh".into(),
+            json!({}),
+        )
+        .await;
+
+        assert_eq!(slow_close_rx.recv().await, Some("slow_consumer"));
+        assert!(!hub.0.lock().await.clients.contains_key(&slow_id));
     }
 
     #[tokio::test]
