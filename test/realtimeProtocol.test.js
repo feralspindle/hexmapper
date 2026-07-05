@@ -22,11 +22,13 @@ describe('realtimeProtocol', () => {
     expect(REALTIME_TABLES.party_calendar_day).toBe('party_calendar_days')
   })
 
-  test('applies equality filters and permits sparse delete payloads', () => {
+  test('applies equality filters strictly, with leniency reserved for sparse delete payloads', () => {
     const mapId = 'c0ffee00-0000-4000-8000-000000000000'
     expect(matchesRealtimeFilter({ map_id: mapId }, `map_id=eq.${mapId}`)).toBe(true)
     expect(matchesRealtimeFilter({ map_id: 'different' }, `map_id=eq.${mapId}`)).toBe(false)
-    expect(matchesRealtimeFilter({ id: 'deleted-row' }, `map_id=eq.${mapId}`)).toBe(true)
+    expect(matchesRealtimeFilter({ id: 'updated-row' }, `map_id=eq.${mapId}`)).toBe(false)
+    expect(matchesRealtimeFilter({ id: 'deleted-row' }, `map_id=eq.${mapId}`, true)).toBe(true)
+    expect(matchesRealtimeFilter({ map_id: 'different' }, `map_id=eq.${mapId}`, true)).toBe(false)
   })
 
   test('detects stale connections and long background suspensions', () => {

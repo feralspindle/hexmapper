@@ -86,6 +86,7 @@ export const useHexStore = defineStore("hex", () => {
   let playerRefreshTimer = null;
   let playerRefreshDebounce = null;
   let playerRefreshInFlight = false;
+  let initGeneration = 0;
 
   const selectedCell = computed(() => {
     if (!selectedHex.value) return null;
@@ -198,6 +199,7 @@ export const useHexStore = defineStore("hex", () => {
   }
 
   async function init(sessionId, mapId) {
+    const generation = ++initGeneration;
     loading.value = true;
     currentSessionId.value = sessionId;
     currentMapId.value = mapId;
@@ -208,9 +210,11 @@ export const useHexStore = defineStore("hex", () => {
     const isGM = useSessionStore().isGM;
     try {
       const rows = await _fetchHexRows(sessionId, mapId, isGM);
+      if (generation !== initGeneration) return;
       _replaceHexCells(rows);
       loadError.value = null;
     } catch (error) {
+      if (generation !== initGeneration) return;
       loadError.value = error;
       console.error(
         "hex init error:",
@@ -220,8 +224,10 @@ export const useHexStore = defineStore("hex", () => {
     loading.value = false;
 
     await _loadPartyHexFromDb();
+    if (generation !== initGeneration) return;
 
     if (channel) realtime.removeChannel(channel);
+    let subscribedRefreshed = false;
     channel = realtime
       .channel(`map:${mapId}:hex`, { sessionId, onReconnect: () => refresh() })
       .on("broadcast", { event: "refresh" }, () => {
@@ -246,7 +252,11 @@ export const useHexStore = defineStore("hex", () => {
       );
     }
 
-    channel.subscribe();
+    channel.subscribe((status) => {
+      if (status !== "SUBSCRIBED" || subscribedRefreshed) return;
+      subscribedRefreshed = true;
+      void refresh();
+    });
 
     if (partyChannel) realtime.removeChannel(partyChannel);
     partyChannel = realtime
@@ -435,11 +445,15 @@ export const useHexStore = defineStore("hex", () => {
         merged.gm_markers != null && data.gm_markers == null
           ? { ...data, gm_markers: merged.gm_markers }
           : data;
-      hexCells.value.set(key, stored);
+      if (hexCells.value.get(key) === merged) {
+        hexCells.value.set(key, stored);
+      }
       _notifyHexChanged();
     } catch (error) {
-      if (existing) hexCells.value.set(key, existing);
-      else hexCells.value.delete(key);
+      if (hexCells.value.get(key) === merged) {
+        if (existing) hexCells.value.set(key, existing);
+        else hexCells.value.delete(key);
+      }
       console.error("upsertHex error:", error instanceof ApiError ? error.message : error);
     }
   }
@@ -611,7 +625,7 @@ export const useHexStore = defineStore("hex", () => {
       _notifyHexChanged();
     } catch (error) {
       console.error("bulkReveal error:", error instanceof ApiError ? error.message : error);
-      await init(currentSessionId.value, currentMapId.value);
+      await refresh();
     }
   }
 
@@ -646,6 +660,7 @@ export const useHexStore = defineStore("hex", () => {
   }
 
   function cleanup() {
+    initGeneration += 1;
     _stopPlayerRefresh();
     if (channel) realtime.removeChannel(channel);
     channel = null;

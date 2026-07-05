@@ -123,7 +123,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!charsResult.error && charsResult.data) {
       const local = new Map(characters.value.map(c => [c.id, c]))
       characters.value = charsResult.data.map(row =>
-        (row.id === activeId.value || _saveTimers.has(row.id)) && local.has(row.id) ? local.get(row.id) : row
+        _saveTimers.has(row.id) && local.has(row.id) ? local.get(row.id) : row
       )
     }
 
@@ -458,6 +458,7 @@ export const useCharacterStore = defineStore('character', () => {
 
   function _subscribeRealtime(sessionId) {
     if (_realtimeChannel) realtime.removeChannel(_realtimeChannel)
+    let subscribedRefreshed = false
     _realtimeChannel = realtime
       .channel(`characters:${sessionId}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', {
@@ -466,8 +467,6 @@ export const useCharacterStore = defineStore('character', () => {
         table: 'characters',
         filter: `session_id=eq.${sessionId}`,
       }, ({ new: row }) => {
-        const authStore = useAuthStore()
-        if (row.user_id === authStore.user?.id) return
         if (!characters.value.find(c => c.id === row.id)) {
           characters.value = [...characters.value, row]
         }
@@ -478,7 +477,7 @@ export const useCharacterStore = defineStore('character', () => {
         table: 'characters',
         filter: `session_id=eq.${sessionId}`,
       }, ({ new: updated }) => {
-        if (updated.id === activeId.value) return
+        if (_saveTimers.has(updated.id)) return
         if (characters.value.some(c => c.id === updated.id)) {
           characters.value = characters.value.map(c =>
             c.id === updated.id ? { ...c, data: _augment(updated.data) } : c
@@ -536,6 +535,7 @@ export const useCharacterStore = defineStore('character', () => {
       .on('broadcast', { event: 'character_updated' }, ({ payload }) => {
         const { characterId, data, sourceClient } = payload
         if (sourceClient === CLIENT_ID) return
+        if (_saveTimers.has(characterId)) return
         if (characters.value.some(c => c.id === characterId)) {
           characters.value = characters.value.map(c =>
             c.id === characterId ? { ...c, data: _augment(data) } : c
@@ -563,7 +563,11 @@ export const useCharacterStore = defineStore('character', () => {
         else memberSelections.value = [...memberSelections.value, entry]
         await _fetchMissingChars([characterId])
       })
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
   }
 
   async function _saveCharacter(charId) {
@@ -600,7 +604,10 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   function cleanup() {
-    for (const timer of _saveTimers.values()) clearTimeout(timer)
+    for (const [charId, timer] of _saveTimers) {
+      clearTimeout(timer)
+      void _saveCharacter(charId)
+    }
     _saveTimers.clear()
     for (const timer of _broadcastTimers.values()) clearTimeout(timer)
     _broadcastTimers.clear()

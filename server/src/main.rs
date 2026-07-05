@@ -28,6 +28,7 @@ async fn main() {
         .expect("failed to fetch Supabase JWKS");
 
     let state = AppState::new(pool, jwks, config.cors_allowed_origins.clone());
+    let shutdown_state = state.clone();
     realtime::spawn_event_listener(config.database_url.clone(), state.clone());
     auth::jwt::spawn_jwks_refresh(config.supabase_url.clone(), state.clone());
     ratelimit::spawn_retain(state.clone());
@@ -91,5 +92,34 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("failed to bind listener");
-    axum::serve(listener, app).await.expect("server error");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(shutdown_state))
+        .await
+        .expect("server error");
+}
+
+// Websocket connections never end on their own, so a plain graceful shutdown would
+// hang; disconnect_all ends every socket loop with a `server_restart` farewell so
+// deploy restarts are attributable client-side instead of looking like failures.
+async fn shutdown_signal(state: AppState) {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install ctrl-c handler");
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    tracing::info!("shutdown signal received; disconnecting realtime clients");
+    state.realtime().disconnect_all().await;
 }

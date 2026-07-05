@@ -23,6 +23,7 @@ const AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 const CLIENT_STALE_TIMEOUT: Duration = Duration::from_secs(75);
 const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const OUTBOUND_CAPACITY: usize = 256;
+const INBOUND_CAPACITY: usize = 64;
 const MAX_FRAME_BYTES: usize = 64 * 1024;
 const MAX_SESSIONS: usize = 8;
 
@@ -258,6 +259,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
         return;
     }
 
+    // Client messages are handled on their own sequential task so a slow
+    // subscribe (two authz queries) can't stall the outbound drain below —
+    // a full outbound queue gets this connection kicked as a slow consumer.
+    // One task per connection keeps subscribe→publish ordering intact.
+    let (inbound_tx, mut inbound_rx) = mpsc::channel::<ClientMessage>(INBOUND_CAPACITY);
+    let inbound_state = state.clone();
+    let inbound_task = tokio::spawn(async move {
+        while let Some(message) = inbound_rx.recv().await {
+            handle_client_message(connection_id, message, &inbound_state).await;
+        }
+    });
+
     let mut heartbeat = tokio::time::interval(Duration::from_secs(25));
     let mut last_pong = Instant::now();
     let reason = loop {
@@ -279,7 +292,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
                             break "frame_too_large";
                         }
                         if let Ok(message) = serde_json::from_str::<ClientMessage>(&text) {
-                            handle_client_message(connection_id, message, &state).await;
+                            if inbound_tx.try_send(message).is_err() {
+                                metrics::counter!("realtime_inbound_dropped_total").increment(1);
+                                send_error(&tx, None, "server_busy", "Too many pending messages; message dropped").await;
+                            }
                         } else {
                             send_error(&tx, None, "invalid_message", "Invalid realtime message").await;
                         }
@@ -330,6 +346,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
         }
     };
 
+    inbound_task.abort();
     state.realtime().remove(connection_id).await;
     metrics::gauge!("realtime_connections").decrement(1.0);
     metrics::counter!("realtime_disconnects_total", "reason" => reason).increment(1);
@@ -833,13 +850,24 @@ impl RealtimeHub {
     async fn broadcast_presence(&self, channel: &str) {
         loop {
             let mut hub = self.0.lock().await;
-            let mut by_user = HashMap::<Uuid, Value>::new();
-            for client in hub.clients.values() {
+            // Deterministic winner per user (highest connection id) so two tabs of
+            // the same user don't flap between payloads on every snapshot rebuild.
+            let mut by_user = HashMap::<Uuid, (Uuid, Value)>::new();
+            for (id, client) in &hub.clients {
                 if let Some(presence) = client.presence.get(channel) {
-                    by_user.insert(client.user_id, presence.payload.clone());
+                    match by_user.get_mut(&client.user_id) {
+                        Some(entry) if entry.0 > *id => {}
+                        Some(entry) => *entry = (*id, presence.payload.clone()),
+                        None => {
+                            by_user.insert(client.user_id, (*id, presence.payload.clone()));
+                        }
+                    }
                 }
             }
-            let presences = by_user.into_values().collect::<Vec<_>>();
+            let presences = by_user
+                .into_values()
+                .map(|(_, payload)| payload)
+                .collect::<Vec<_>>();
             let mut slow = Vec::new();
             for (id, client) in &hub.clients {
                 if client.presence.contains_key(channel) {
@@ -917,7 +945,7 @@ impl RealtimeHub {
         }
     }
 
-    async fn disconnect_all(&self) {
+    pub async fn disconnect_all(&self) {
         let clients = std::mem::take(&mut self.0.lock().await.clients);
         for client in clients.into_values() {
             let _ = client.close.try_send("server_restart");
@@ -997,38 +1025,124 @@ pub fn spawn_event_listener(database_url: String, state: AppState) {
     });
 }
 
+const EVENT_BY_ID: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id = $1";
+const EVENTS_AFTER: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id > $1 order by id";
+
+/// Retries transient query failures so one DB blip doesn't tear down every
+/// realtime client (the caller's error path is `disconnect_all`).
+async fn retry_query<T, Fut>(
+    mut run: impl FnMut() -> Fut,
+    what: &'static str,
+) -> Result<T, sqlx::Error>
+where
+    Fut: std::future::Future<Output = Result<T, sqlx::Error>>,
+{
+    let mut attempt: u32 = 0;
+    loop {
+        match run().await {
+            Ok(value) => return Ok(value),
+            Err(error) if attempt < 2 => {
+                attempt += 1;
+                tracing::warn!(%error, what, attempt, "realtime listener query failed; retrying");
+                tokio::time::sleep(Duration::from_millis(100 << attempt)).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+async fn dispatch_row(state: &AppState, mut row: EventRow) -> Result<(), sqlx::Error> {
+    if row.aggregate_type == "dice_roll" {
+        let roll_id = row.aggregate_id;
+        if let Some(payload) = retry_query(
+            || {
+                sqlx::query_scalar::<_, Value>("select to_jsonb(dr) from dice_rolls dr where id = $1")
+                    .bind(roll_id)
+                    .fetch_optional(state.pool())
+            },
+            "dice_roll_payload",
+        )
+        .await?
+        {
+            row.payload = payload;
+        }
+    }
+    let lag = (chrono::Utc::now() - row.created_at)
+        .num_milliseconds()
+        .max(0) as f64
+        / 1000.0;
+    metrics::histogram!("realtime_event_delivery_lag_seconds").record(lag);
+    state.realtime().dispatch_event(row).await;
+    Ok(())
+}
+
+/// Dispatches every event committed after `last_seen`, returning the new high-water
+/// mark. Covers NOTIFYs lost while the listener connection was down. An event whose
+/// id was assigned before the gap but committed during it can still slip through
+/// (id order != commit order); that window is a single in-flight transaction.
+async fn catch_up(state: &AppState, last_seen: i64) -> Result<i64, sqlx::Error> {
+    let rows = retry_query(
+        || {
+            sqlx::query_as::<_, EventRow>(EVENTS_AFTER)
+                .bind(last_seen)
+                .fetch_all(state.pool())
+        },
+        "events_catch_up",
+    )
+    .await?;
+    let mut max_seen = last_seen;
+    let recovered = rows.len();
+    for row in rows {
+        max_seen = max_seen.max(row.id);
+        dispatch_row(state, row).await?;
+    }
+    if recovered > 0 {
+        metrics::counter!("realtime_events_recovered_total").increment(recovered as u64);
+        tracing::warn!(recovered, "realtime listener dispatched events missed during reconnect");
+    }
+    Ok(max_seen)
+}
+
 async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error> {
     let mut listener = PgListener::connect(database_url).await?;
     listener.listen("hexmap_events").await?;
+    let mut last_seen: i64 = retry_query(
+        || {
+            sqlx::query_scalar("select coalesce(max(id), 0) from events")
+                .fetch_one(state.pool())
+        },
+        "max_event_id",
+    )
+    .await?;
     loop {
-        let notification = listener.recv().await?;
-        let Ok(id) = notification.payload().parse::<i64>() else {
-            continue;
-        };
-        let row = sqlx::query_as::<_, EventRow>(
-            "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id = $1"
-        )
-        .bind(id)
-        .fetch_optional(state.pool())
-        .await?;
-        if let Some(mut row) = row {
-            if row.aggregate_type == "dice_roll" {
-                if let Some(payload) = sqlx::query_scalar::<_, Value>(
-                    "select to_jsonb(dr) from dice_rolls dr where id = $1",
+        // `try_recv` returns Ok(None) when the connection dropped and was silently
+        // re-established — NOTIFYs sent during the gap are lost, so scan the events
+        // table forward instead of trusting the stream. `recv` would swallow that
+        // signal and clients would go permanently stale.
+        match listener.try_recv().await? {
+            Some(notification) => {
+                let Ok(id) = notification.payload().parse::<i64>() else {
+                    continue;
+                };
+                let row = retry_query(
+                    || {
+                        sqlx::query_as::<_, EventRow>(EVENT_BY_ID)
+                            .bind(id)
+                            .fetch_optional(state.pool())
+                    },
+                    "event_by_id",
                 )
-                .bind(row.aggregate_id)
-                .fetch_optional(state.pool())
-                .await?
-                {
-                    row.payload = payload;
+                .await?;
+                if let Some(row) = row {
+                    dispatch_row(state, row).await?;
                 }
+                last_seen = last_seen.max(id);
             }
-            let lag = (chrono::Utc::now() - row.created_at)
-                .num_milliseconds()
-                .max(0) as f64
-                / 1000.0;
-            metrics::histogram!("realtime_event_delivery_lag_seconds").record(lag);
-            state.realtime().dispatch_event(row).await;
+            None => {
+                metrics::counter!("realtime_listener_reconnects_total").increment(1);
+                tracing::warn!("realtime listener reconnected; scanning for missed events");
+                last_seen = catch_up(state, last_seen).await?;
+            }
         }
     }
 }

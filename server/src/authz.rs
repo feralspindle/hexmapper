@@ -136,11 +136,12 @@ pub async fn resolve_display_name(pool: &PgPool, user_id: Uuid) -> Result<String
     Ok(name.unwrap_or_else(|| "Adventurer".to_string()))
 }
 
-/// Returns (user_id, session_id) for a hex_note, or None if it does not exist.
-/// Used to enforce the `owner or session GM` update/delete policy.
-pub async fn hex_note_owner_session(pool: &PgPool, note_id: Uuid) -> Result<Option<(Uuid, Uuid)>, AppError> {
-    let row: Option<(Uuid, Uuid)> = sqlx::query_as(
-        "select user_id, session_id from hex_notes where id = $1",
+/// Returns (user_id, session_id, hex_cell_id) for a hex_note, or None if it does not
+/// exist. Used to enforce the `owner or session GM` update/delete policy; the parent
+/// id rides along so event payloads can carry it for client-side filtering.
+pub async fn hex_note_owner_session(pool: &PgPool, note_id: Uuid) -> Result<Option<(Uuid, Uuid, Uuid)>, AppError> {
+    let row: Option<(Uuid, Uuid, Uuid)> = sqlx::query_as(
+        "select user_id, session_id, hex_cell_id from hex_notes where id = $1",
     )
     .bind(note_id)
     .fetch_optional(pool)
@@ -149,11 +150,11 @@ pub async fn hex_note_owner_session(pool: &PgPool, note_id: Uuid) -> Result<Opti
     Ok(row)
 }
 
-/// Returns (user_id, session_id) for a dungeon_element_note, or None if it does not
-/// exist. Enforces the same `owner or session GM` update/delete policy.
-pub async fn dungeon_element_note_owner_session(pool: &PgPool, note_id: Uuid) -> Result<Option<(Uuid, Uuid)>, AppError> {
-    let row: Option<(Uuid, Uuid)> = sqlx::query_as(
-        "select user_id, session_id from dungeon_element_notes where id = $1",
+/// Returns (user_id, session_id, element_id) for a dungeon_element_note, or None if
+/// it does not exist. Enforces the same `owner or session GM` update/delete policy.
+pub async fn dungeon_element_note_owner_session(pool: &PgPool, note_id: Uuid) -> Result<Option<(Uuid, Uuid, Uuid)>, AppError> {
+    let row: Option<(Uuid, Uuid, Uuid)> = sqlx::query_as(
+        "select user_id, session_id, element_id from dungeon_element_notes where id = $1",
     )
     .bind(note_id)
     .fetch_optional(pool)

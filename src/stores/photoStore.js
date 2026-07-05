@@ -32,6 +32,7 @@ export const usePhotoStore = defineStore('photo', () => {
     await Promise.all([_loadPhotos(sessionId), _loadBroadcastHistory(sessionId)])
     loading.value = false
 
+    let subscribedRefreshed = false
     channel = realtime
       .channel(`photo_broadcasts:${sessionId}`, { sessionId, onReconnect: () => refresh() })
       .on(
@@ -48,7 +49,11 @@ export const usePhotoStore = defineStore('photo', () => {
           _addToBroadcastHistory(resolved)
         },
       )
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
   }
 
   async function _loadBroadcastHistory(sessionId) {

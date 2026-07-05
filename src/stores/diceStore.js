@@ -57,6 +57,7 @@ export const useDiceStore = defineStore('dice', () => {
     cleanup()
     currentSessionId = sessionId
     const generation = loadGeneration
+    let subscribedRefreshed = false
 
     channel = realtime
       .channel(`dice:${sessionId}`, { sessionId, onReconnect: () => refreshHistory(sessionId, generation) })
@@ -84,7 +85,9 @@ export const useDiceStore = defineStore('dice', () => {
         },
       )
       .subscribe(status => {
-        if (status === 'SUBSCRIBED') refreshHistory(sessionId, generation)
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        refreshHistory(sessionId, generation)
       })
 
     return refreshHistory(sessionId, generation)
