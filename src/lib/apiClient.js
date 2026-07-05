@@ -14,7 +14,9 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, body, intent) {
+const REQUEST_TIMEOUT_MS = 15_000
+
+async function request(method, path, body, intent, isRetry = false) {
   const { data: { session } } = await supabase.auth.getSession()
   const requestId = crypto.randomUUID()
 
@@ -29,7 +31,15 @@ async function request(method, path, body, intent) {
       ...(intent ? { 'X-Intent': intent } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
+
+  // A long-hidden tab can outlive its access token before Supabase's auto-refresh
+  // catches up; refresh once and replay rather than failing the first user action.
+  if (res.status === 401 && !isRetry) {
+    const { error } = await supabase.auth.refreshSession()
+    if (!error) return request(method, path, body, intent, true)
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

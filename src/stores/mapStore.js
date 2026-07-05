@@ -16,6 +16,7 @@ export const useMapStore = defineStore('map', () => {
 
   let mapChannel = null
   let _currentSessionId = null
+  let _initGeneration = 0
   const _localOverrides = {}
 
   const activeMap = computed(() =>
@@ -51,9 +52,11 @@ export const useMapStore = defineStore('map', () => {
 
   const activeMapImageUrl = ref(null)
   const _urlTimers = {}
+  const _urlRenewals = {}
 
   async function _refreshUrl(path, targetRef, key) {
     if (_urlTimers[key]) { clearTimeout(_urlTimers[key]); delete _urlTimers[key] }
+    delete _urlRenewals[key]
     if (!path) { targetRef.value = null; return }
     const { data, error } = await supabase.storage
       .from('session-maps')
@@ -67,10 +70,20 @@ export const useMapStore = defineStore('map', () => {
       return
     }
     targetRef.value = data.signedUrl
-    _urlTimers[key] = setTimeout(
-      () => _refreshUrl(path, targetRef, key),
-      URL_EXPIRY_SECONDS * 0.9 * 1000,
-    )
+    const renewalMs = URL_EXPIRY_SECONDS * 0.9 * 1000
+    _urlRenewals[key] = { path, targetRef, at: Date.now() + renewalMs }
+    _urlTimers[key] = setTimeout(() => _refreshUrl(path, targetRef, key), renewalMs)
+  }
+
+  // Background tabs throttle timers, so a long-hidden tab can outlive its signed
+  // URLs; renew any overdue ones as soon as the tab is visible again.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return
+      for (const [key, renewal] of Object.entries(_urlRenewals)) {
+        if (Date.now() >= renewal.at) _refreshUrl(renewal.path, renewal.targetRef, key)
+      }
+    })
   }
 
   watch(() => activeMap.value?.map_image_path, p => _refreshUrl(p, activeMapImageUrl, 'active'), { immediate: false })
@@ -100,11 +113,14 @@ export const useMapStore = defineStore('map', () => {
   }
 
   async function init(sessionId) {
+    const generation = ++_initGeneration
     _currentSessionId = sessionId
     loading.value = true
 
     const { data: mapRows, error } = await supabase
       .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
+
+    if (generation !== _initGeneration) return !error
 
     loadError.value = error ?? null
     if (!error && mapRows) maps.value = mapRows
@@ -117,6 +133,7 @@ export const useMapStore = defineStore('map', () => {
     if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
 
     if (mapChannel) realtime.removeChannel(mapChannel)
+    let subscribedRefreshed = false
     mapChannel = realtime
       .channel(`session:${sessionId}:maps`, { sessionId, onReconnect: () => refresh() })
       .on(
@@ -139,15 +156,21 @@ export const useMapStore = defineStore('map', () => {
           }
         },
       )
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
 
     return !error
   }
 
   function cleanup() {
+    _initGeneration += 1
     if (mapChannel) { realtime.removeChannel(mapChannel); mapChannel = null }
     Object.values(_urlTimers).forEach(clearTimeout)
     Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
+    Object.keys(_urlRenewals).forEach(k => delete _urlRenewals[k])
     activeMapImageUrl.value = null
     maps.value = []
     _currentSessionId = null
@@ -235,6 +258,7 @@ export const useMapStore = defineStore('map', () => {
 
     maps.value = maps.value.map(m => {
       if (m.id !== map.id) return m
+      if (m !== map) return m
       const remaining = _localOverrides[map.id] ?? {}
       return { ...m, ...dbPatch, ...remaining }
     })

@@ -104,6 +104,7 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function _subscribeLoot(sessionId) {
+    let subscribedRefreshed = false
     lootChannel = realtime
       .channel(`vault:loot:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_loot', filter: `session_id=eq.${sessionId}` }, e => {
@@ -114,7 +115,11 @@ export const useVaultStore = defineStore('vault', () => {
           loot.value = loot.value.filter(l => l.id !== e.old.id)
         }
       })
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
   }
 
   function _subscribeItems(sessionId) {
@@ -182,7 +187,7 @@ export const useVaultStore = defineStore('vault', () => {
         silver_change:  silverChange,
         copper_change:  copperChange,
       })
-      if (data) ledger.value = [data, ...ledger.value]
+      if (data && !ledger.value.find(l => l.id === data.id)) ledger.value = [data, ...ledger.value]
     } catch (error) {
       console.error('_addLedgerEntry:', error instanceof ApiError ? error.message : error)
     }

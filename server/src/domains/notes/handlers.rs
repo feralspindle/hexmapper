@@ -84,7 +84,7 @@ pub async fn edit_hex_note(
     Path(note_id): Path<Uuid>,
     Json(req): Json<EditNoteRequest>,
 ) -> Result<Json<HexNoteRow>, AppError> {
-    let (owner_id, session_id) = authz::hex_note_owner_session(state.pool(), note_id)
+    let (owner_id, session_id, hex_cell_id) = authz::hex_note_owner_session(state.pool(), note_id)
         .await?
         .ok_or(AppError::NotFound)?;
     if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
@@ -97,7 +97,7 @@ pub async fn edit_hex_note(
         aggregate_id: note_id,
         session_id: Some(session_id),
         event_type: "hex_note.edited",
-        payload: json!({ "body": body }),
+        payload: json!({ "hex_cell_id": hex_cell_id, "body": body }),
         metadata: auth.metadata(),
     };
 
@@ -113,7 +113,7 @@ pub async fn delete_hex_note(
     auth: AuthUser,
     Path(note_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let (owner_id, session_id) = authz::hex_note_owner_session(state.pool(), note_id)
+    let (owner_id, session_id, hex_cell_id) = authz::hex_note_owner_session(state.pool(), note_id)
         .await?
         .ok_or(AppError::NotFound)?;
     if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
@@ -125,7 +125,7 @@ pub async fn delete_hex_note(
         aggregate_id: note_id,
         session_id: Some(session_id),
         event_type: "hex_note.deleted",
-        payload: json!({}),
+        payload: json!({ "hex_cell_id": hex_cell_id }),
         metadata: auth.metadata(),
     };
 
@@ -190,7 +190,7 @@ pub async fn edit_dungeon_note(
     Path(note_id): Path<Uuid>,
     Json(req): Json<EditNoteRequest>,
 ) -> Result<Json<DungeonElementNoteRow>, AppError> {
-    let (owner_id, session_id) = authz::dungeon_element_note_owner_session(state.pool(), note_id)
+    let (owner_id, session_id, element_id) = authz::dungeon_element_note_owner_session(state.pool(), note_id)
         .await?
         .ok_or(AppError::NotFound)?;
     if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
@@ -203,7 +203,7 @@ pub async fn edit_dungeon_note(
         aggregate_id: note_id,
         session_id: Some(session_id),
         event_type: "dungeon_element_note.edited",
-        payload: json!({ "body": body }),
+        payload: json!({ "element_id": element_id, "body": body }),
         metadata: auth.metadata(),
     };
 
@@ -219,7 +219,7 @@ pub async fn delete_dungeon_note(
     auth: AuthUser,
     Path(note_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let (owner_id, session_id) = authz::dungeon_element_note_owner_session(state.pool(), note_id)
+    let (owner_id, session_id, element_id) = authz::dungeon_element_note_owner_session(state.pool(), note_id)
         .await?
         .ok_or(AppError::NotFound)?;
     if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
@@ -231,7 +231,7 @@ pub async fn delete_dungeon_note(
         aggregate_id: note_id,
         session_id: Some(session_id),
         event_type: "dungeon_element_note.deleted",
-        payload: json!({}),
+        payload: json!({ "element_id": element_id }),
         metadata: auth.metadata(),
     };
 

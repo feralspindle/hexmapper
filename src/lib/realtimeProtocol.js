@@ -36,10 +36,18 @@ export function realtimeOperation(event) {
   return 'UPDATE'
 }
 
-export function matchesRealtimeFilter(row, filter) {
+// A row missing the filtered column only matches when `lenientMissing` is set.
+// Delete payloads are sparse (often `{}` plus injected ids) and their handlers key
+// removals by id, so cross-context delivery is a no-op — but applying an
+// insert/update payload without its scoping column would bleed data across
+// maps/dungeons, so those must not match.
+export function matchesRealtimeFilter(row, filter, lenientMissing = false) {
   if (!filter) return true
   const match = /^([a-zA-Z0-9_]+)=eq\.(.+)$/.exec(filter)
-  return !match || row[match[1]] == null || String(row[match[1]]) === match[2]
+  if (!match) return true
+  const value = row[match[1]]
+  if (value == null) return lenientMissing
+  return String(value) === match[2]
 }
 
 export function realtimeConnectionIsStale(lastMessageAt, now, timeoutMs) {

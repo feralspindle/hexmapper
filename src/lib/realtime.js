@@ -111,7 +111,7 @@ class RustChannel {
     for (const h of this.handlers) {
       if (h.type !== 'postgres_changes' || h.filter?.table !== table) continue
       if (h.filter.event !== '*' && h.filter.event !== eventType) continue
-      if (!matchesRealtimeFilter(row, h.filter.filter)) continue
+      if (!matchesRealtimeFilter(row, h.filter.filter, eventType === 'DELETE')) continue
       h.callback({ eventType, new: eventType === 'DELETE' ? {} : row, old: eventType === 'DELETE' ? row : {} })
     }
   }
@@ -136,6 +136,7 @@ class RustRealtime {
     this.refreshQueued = false
     this.refreshTimer = null
     this.lastRefreshStartedAt = null
+    this.pendingPublishes = []
     this.watchdog = setInterval(() => {
       if (document.visibilityState === 'visible') this.resume()
     }, 15_000)
@@ -256,6 +257,9 @@ class RustRealtime {
       this.connectionId = message.connection_id
       this.readyAt = Date.now()
       for (const sessionId of this.sessionRefs.keys()) this.send({ type: 'subscribe', session_id: sessionId })
+      const queued = this.pendingPublishes
+      this.pendingPublishes = []
+      for (const message of queued) this.send(message)
       if (this.everReady) {
         queueMicrotask(() => this.refreshSnapshots())
         window.dispatchEvent(new CustomEvent('hexmap:realtime-reconnected'))
@@ -291,6 +295,13 @@ class RustRealtime {
 
   send(message) {
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) {
+      // Broadcast-only events (initiative, loot toasts, undo pushes) have no
+      // postgres_changes fallback, so hold them for the next connection instead
+      // of dropping them. Cursor positions are stale the moment they're queued.
+      if (message.type === 'publish' && message.event !== 'cursor') {
+        this.pendingPublishes.push(message)
+        if (this.pendingPublishes.length > 32) this.pendingPublishes.shift()
+      }
       return
     }
     this.socket.send(JSON.stringify(message))

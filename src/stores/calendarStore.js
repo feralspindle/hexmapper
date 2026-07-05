@@ -94,6 +94,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   function _subscribeSettings(sessionId) {
+    let subscribedRefreshed = false
     settingsChannel = realtime
       .channel(`calendar:settings:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', {
@@ -104,7 +105,11 @@ export const useCalendarStore = defineStore('calendar', () => {
           settings.value = { ...DEFAULT_SETTINGS, ...e.new }
         }
       })
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
   }
 
   function _subscribeDays(sessionId) {

@@ -42,6 +42,7 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     if (channel) realtime.removeChannel(channel)
+    let subscribedRefreshed = false
     channel = realtime
       .channel(`session:${sessionId}:chat`, { sessionId, onReconnect: () => refresh() })
       .on(
@@ -55,7 +56,11 @@ export const useChatStore = defineStore('chat', () => {
           playChatSound()
         },
       )
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
   }
 
   async function sendMessage(body) {
