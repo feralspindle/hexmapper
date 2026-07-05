@@ -90,6 +90,12 @@ export const useNotebookStore = defineStore('notebook', () => {
     _subscribeEditing(sessionId)
   }
 
+  async function refresh() {
+    const sessionId = _sessionId
+    if (!sessionId) return
+    await Promise.all([_loadQuests(sessionId), _loadNotes(sessionId)])
+  }
+
   function cleanup() {
     if (questsChannel) { realtime.removeChannel(questsChannel); questsChannel = null }
     if (notesChannel)  { realtime.removeChannel(notesChannel);  notesChannel  = null }
@@ -109,7 +115,7 @@ export const useNotebookStore = defineStore('notebook', () => {
       .eq('session_id', sessionId)
       .order('display_order', { ascending: true })
       .order('created_at',    { ascending: true })
-    if (data) quests.value = data
+    if (data && _sessionId === sessionId) quests.value = data
   }
 
   async function _loadNotes(sessionId) {
@@ -118,12 +124,12 @@ export const useNotebookStore = defineStore('notebook', () => {
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
-    if (data) notes.value = data
+    if (data && _sessionId === sessionId) notes.value = data
   }
 
   function _subscribeQuests(sessionId) {
     questsChannel = realtime
-      .channel(`notebook:quests:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
+      .channel(`notebook:quests:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_quests',
         filter: `session_id=eq.${sessionId}`,
@@ -234,7 +240,7 @@ export const useNotebookStore = defineStore('notebook', () => {
 
   return {
     quests, notes, editingBy,
-    init, cleanup,
+    init, refresh, cleanup,
     addQuest, updateQuest, deleteQuest,
     addNote,  updateNote,  deleteNote,
     setEditing, clearEditing,

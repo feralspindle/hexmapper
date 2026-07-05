@@ -40,6 +40,7 @@ export const useD = defineStore('dungeon', () => {
   let _stopAuthWatch = null
   let _undoing = false
   let _urlTimer = null
+  let _dungeonId = null
 
   const _logUndoError = (label) => (err) =>
     console.error(`undo ${label}:`, err instanceof ApiError ? err.message : err)
@@ -305,7 +306,42 @@ export const useD = defineStore('dungeon', () => {
     await updateDungeon({ fogRevealAll: false })
   }
 
+  async function refresh() {
+    const dungeonId = _dungeonId
+    if (!dungeonId) return
+    try {
+      const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }, { data: fogData }] = await Promise.all([
+        supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
+        supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
+        supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
+        supabase.from('dungeon_fog_cells').select('cell_x, cell_y').eq('dungeon_id', dungeonId),
+      ])
+      if (e1) throw new Error(e1.message)
+      if (_dungeonId !== dungeonId) return
+
+      dungeon.value = { ...dungeonData, ...(_localOverrides[dungeonData.id] ?? {}) }
+
+      const editing = _editingRoom.value
+      const nextRooms = new Map((roomData ?? []).map(r => [r.id, r]))
+      if (editing && nextRooms.has(editing.id)) {
+        const current = rooms.value.get(editing.id)
+        if (current) {
+          const merged = { ...nextRooms.get(editing.id) }
+          for (const field of editing.fields) merged[field] = current[field]
+          nextRooms.set(editing.id, merged)
+        }
+      }
+      rooms.value = nextRooms
+      corridors.value = new Map((corridorData ?? []).map(c => [c.id, c]))
+      fogCells.value = new Set((fogData ?? []).map(r => _fogKey(r.cell_x, r.cell_y)))
+      loadError.value = null
+    } catch (err) {
+      console.error('dungeonStore.refresh error:', err)
+    }
+  }
+
   async function init(sessionId, dungeonId) {
+    _dungeonId = dungeonId
     loading.value = true
     loadError.value = null
     drawMode.value = 'select'
@@ -347,7 +383,7 @@ export const useD = defineStore('dungeon', () => {
     _subscribeChangesChannel(sessionId, dungeonId)
 
     dungeonChannel = realtime
-      .channel(`dungeon:${dungeonId}:meta`, { sessionId, onReconnect: () => init(sessionId, dungeonId) })
+      .channel(`dungeon:${dungeonId}:meta`, { sessionId, onReconnect: () => refresh() })
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'dungeons', filter: `id=eq.${dungeonId}` },
@@ -702,6 +738,7 @@ export const useD = defineStore('dungeon', () => {
     if (undoChannel)     realtime.removeChannel(undoChannel)
     if (changesChannel)  realtime.removeChannel(changesChannel)
     if (_urlTimer)       { clearTimeout(_urlTimer); _urlTimer = null }
+    _dungeonId      = null
     dungeonChannel  = null
     roomChannel     = null
     corridorChannel = null
@@ -737,6 +774,7 @@ export const useD = defineStore('dungeon', () => {
     fogMode,
     fogRevealAll,
     init,
+    refresh,
     undo,
     addRoom,
     updateRoom,

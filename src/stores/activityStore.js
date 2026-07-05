@@ -9,21 +9,32 @@ export const useActivityStore = defineStore('activity', () => {
   let channel = null
   let _dungeonId = null
 
-  async function init(sessionId, dungeonId) {
-    _dungeonId = dungeonId
-    if (channel) realtime.removeChannel(channel)
-
+  async function _fetchActivities(dungeonId) {
     const { data } = await supabase
       .from('dungeon_activity')
       .select('*')
       .eq('dungeon_id', dungeonId)
       .order('created_at', { ascending: false })
       .limit(100)
+    return data
+  }
 
-    activities.value = data ?? []
+  async function refresh() {
+    const dungeonId = _dungeonId
+    if (!dungeonId) return
+    const data = await _fetchActivities(dungeonId)
+    if (data && _dungeonId === dungeonId) activities.value = data
+  }
+
+  async function init(sessionId, dungeonId) {
+    _dungeonId = dungeonId
+    if (channel) realtime.removeChannel(channel)
+
+    const data = await _fetchActivities(dungeonId)
+    if (_dungeonId === dungeonId) activities.value = data ?? []
 
     channel = realtime
-      .channel(`dungeon:${dungeonId}:activity`, { sessionId, onReconnect: () => init(sessionId, dungeonId) })
+      .channel(`dungeon:${dungeonId}:activity`, { sessionId, onReconnect: () => refresh() })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dungeon_activity', filter: `dungeon_id=eq.${dungeonId}` },
@@ -62,5 +73,5 @@ export const useActivityStore = defineStore('activity', () => {
     _dungeonId = null
   }
 
-  return { activities, init, record, cleanup }
+  return { activities, init, refresh, record, cleanup }
 })

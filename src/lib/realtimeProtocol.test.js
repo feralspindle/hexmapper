@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accessTokenNeedsRefresh, connectionWasStable } from './realtimeProtocol.js'
+import { accessTokenNeedsRefresh, connectionWasStable, snapshotRefreshDelay } from './realtimeProtocol.js'
 
 const NOW_MS = 1_750_000_000_000
 const NOW_S = NOW_MS / 1000
@@ -34,5 +34,24 @@ describe('connectionWasStable', () => {
 
   it('treats a connection that never became ready as unstable', () => {
     expect(connectionWasStable(null, NOW_MS, 30_000)).toBe(false)
+  })
+})
+
+describe('snapshotRefreshDelay', () => {
+  it('runs immediately when no refresh has happened yet', () => {
+    expect(snapshotRefreshDelay(null, NOW_MS, 10_000)).toBe(0)
+  })
+
+  it('runs immediately once the minimum interval has elapsed', () => {
+    expect(snapshotRefreshDelay(NOW_MS - 10_000, NOW_MS, 10_000)).toBe(0)
+    expect(snapshotRefreshDelay(NOW_MS - 60_000, NOW_MS, 10_000)).toBe(0)
+  })
+
+  it('waits out the remainder of the interval after a recent refresh', () => {
+    expect(snapshotRefreshDelay(NOW_MS - 4_000, NOW_MS, 10_000)).toBe(6_000)
+  })
+
+  it('waits the full interval when called back-to-back, coalescing a reconnect storm', () => {
+    expect(snapshotRefreshDelay(NOW_MS, NOW_MS, 10_000)).toBe(10_000)
   })
 })

@@ -36,6 +36,21 @@ export const useCalendarStore = defineStore('calendar', () => {
     _subscribeDays(sessionId)
   }
 
+  async function refresh() {
+    const sessionId = _sessionId
+    if (!sessionId) return
+    await _loadSettings(sessionId)
+    for (const year of [..._fetchedYears]) {
+      const { data, error } = await supabase
+        .from('party_calendar_days')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('year', year)
+      if (error || _sessionId !== sessionId) return
+      days.value = [...days.value.filter(d => d.year !== year), ...(data ?? [])]
+    }
+  }
+
   function cleanup() {
     if (settingsChannel) { realtime.removeChannel(settingsChannel); settingsChannel = null }
     if (daysChannel)     { realtime.removeChannel(daysChannel);     daysChannel     = null }
@@ -53,6 +68,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       .eq('session_id', sessionId)
       .maybeSingle()
     if (error) { console.error('calendarStore._loadSettings:', error.message); return }
+    if (_sessionId !== sessionId) return
     if (data) settings.value = { ...DEFAULT_SETTINGS, ...data }
     _settingsLoaded = true
   }
@@ -79,7 +95,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   function _subscribeSettings(sessionId) {
     settingsChannel = realtime
-      .channel(`calendar:settings:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
+      .channel(`calendar:settings:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_calendar_settings',
         filter: `session_id=eq.${sessionId}`,
@@ -148,7 +164,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   return {
     settings, days,
-    init, cleanup,
+    init, refresh, cleanup,
     upsertDay, updateSettings, ensureYear,
   }
 })

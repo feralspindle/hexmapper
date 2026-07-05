@@ -17,15 +17,23 @@ export const usePhotoStore = defineStore('photo', () => {
   let channel            = null
   let currentSessionId   = null
 
+  async function refresh() {
+    const sessionId = currentSessionId
+    if (!sessionId) return
+    await Promise.all([_loadPhotos(sessionId), _loadBroadcastHistory(sessionId)])
+  }
+
   async function init(sessionId) {
     if (currentSessionId === sessionId) return
     cleanup()
     currentSessionId = sessionId
 
+    loading.value = true
     await Promise.all([_loadPhotos(sessionId), _loadBroadcastHistory(sessionId)])
+    loading.value = false
 
     channel = realtime
-      .channel(`photo_broadcasts:${sessionId}`, { sessionId, onReconnect: () => { cleanup(); return init(sessionId) } })
+      .channel(`photo_broadcasts:${sessionId}`, { sessionId, onReconnect: () => refresh() })
       .on(
         'postgres_changes',
         {
@@ -50,6 +58,7 @@ export const usePhotoStore = defineStore('photo', () => {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
     if (error) { console.error('photoStore._loadBroadcastHistory:', error.message); return }
+    if (currentSessionId !== sessionId) return
     const seen = new Set()
     broadcastHistory.value = (data ?? []).filter(row => {
       if (seen.has(row.photo_url)) return false
@@ -66,14 +75,13 @@ export const usePhotoStore = defineStore('photo', () => {
   }
 
   async function _loadPhotos(sessionId) {
-    loading.value = true
     const { data, error } = await supabase
       .from('reference_photos')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
-    loading.value = false
     if (error) { console.error('photoStore._loadPhotos:', error.message); return }
+    if (currentSessionId !== sessionId) return
     photos.value = (data ?? []).map(_withUrl)
   }
 
@@ -169,6 +177,6 @@ export const usePhotoStore = defineStore('photo', () => {
 
   return {
     photos, broadcastHistory, currentBroadcast, loading, uploading,
-    init, uploadPhoto, deletePhoto, broadcastPhoto, dismissBroadcast, cleanup,
+    init, refresh, uploadPhoto, deletePhoto, broadcastPhoto, dismissBroadcast, cleanup,
   }
 })
