@@ -69,19 +69,33 @@ export async function closePartyPanel(page) {
     if ((await page.locator('.ds-party-panel').count()) === 0) return
     if ((await page.locator('.ds-wm-overlay').count()) > 0) return
 
-    const toggle = page.locator('[data-testid="hex-party-toggle"][aria-pressed="true"]').first()
-    if (await toggle.isVisible().catch(() => false)) {
-      await toggle.click({ timeout: 1000 }).catch(() => {})
+    const close = page.getByTestId('party-panel-close')
+    if (await close.isVisible().catch(() => false)) {
+      await close.click({ timeout: 1000 }).catch(() => {})
       await page.waitForTimeout(100)
+      continue
     }
+
+    const toggles = page.locator('[data-testid="hex-party-toggle"][aria-pressed="true"]')
+    const count = await toggles.count()
+    for (let i = 0; i < count; i += 1) {
+      const toggle = toggles.nth(i)
+      if (await toggle.isVisible().catch(() => false)) {
+        await toggle.click({ timeout: 1000 }).catch(() => {})
+        break
+      }
+    }
+    await page.waitForTimeout(100)
   }
 }
 
 export async function prepareHexInteractions(page) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await dismissWelcome(page)
-    await closeMapSettings(page)
+    // The floating party panel sits above the map settings panel, so it must
+    // go first or it intercepts the settings close click.
     await closePartyPanel(page)
+    await closeMapSettings(page)
     if (
       (await page.locator('.ds-wm-overlay').count()) === 0 &&
       (await page.locator('.map-settings-panel').count()) === 0 &&

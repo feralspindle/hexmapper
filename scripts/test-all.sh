@@ -9,8 +9,8 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-PG_HOST=127.0.0.1
-PG_PORT=54322
+PG_HOST="${HEXMAP_PG_HOST:-127.0.0.1}"
+PG_PORT="${HEXMAP_PG_PORT:-54322}"
 SCRATCH_DB=hexmap_prepush_scratch
 
 pg() {

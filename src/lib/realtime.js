@@ -391,6 +391,12 @@ class RustRealtime {
 
 const rustRealtime = new RustRealtime()
 
+// E2E hook: Playwright's setOffline blocks new requests but cannot sever an
+// established websocket, so the reconnect spec closes it through this handle.
+if (usingRustRealtime && typeof window !== 'undefined') {
+  window.__hexmapRealtime = rustRealtime
+}
+
 export const realtime = usingRustRealtime ? rustRealtime : {
   channel: (name, options) => supabase.channel(name, options),
   removeChannel: channel => supabase.removeChannel(channel),

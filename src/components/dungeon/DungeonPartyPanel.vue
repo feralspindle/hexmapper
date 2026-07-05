@@ -28,7 +28,7 @@
             <h4>The Party</h4>
             <span class="ds-party-meta">{{ onlineCount }} online</span>
 
-            <button class="ds-panel-action" @click.stop="closeParty()">
+            <button class="ds-panel-action" data-testid="party-panel-close" @click.stop="closeParty()">
                 <svg
                     width="10"
                     height="10"
