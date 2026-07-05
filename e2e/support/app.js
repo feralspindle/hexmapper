@@ -147,15 +147,15 @@ export async function joinCampaign(page, account, sessionId) {
   await prepareHexInteractions(page)
 }
 
-export async function openRolePage(browser, account) {
-  const context = await browser.newContext()
+export async function openRolePage(browser, account, contextOptions = {}) {
+  const context = await browser.newContext(contextOptions)
   const page = await context.newPage()
   await loginByEmail(page, account)
   return { context, page }
 }
 
-export async function createThreeRoleCampaign(browser, accounts, { mode, name }) {
-  const gm = await openRolePage(browser, accounts.gm)
+export async function createThreeRoleCampaign(browser, accounts, { mode, name, contextOptions = {} }) {
+  const gm = await openRolePage(browser, accounts.gm, contextOptions)
   const sessionId = await createCampaign(gm.page, name, { playMode: mode === 'gm_less' ? 'gm_less' : 'gm' })
   if (mode === 'blank' || mode === 'gm_less') {
     await chooseBlankSlate(gm.page)
@@ -164,13 +164,13 @@ export async function createThreeRoleCampaign(browser, accounts, { mode, name })
   }
 
   const player1 = {
-    context: await browser.newContext(),
+    context: await browser.newContext(contextOptions),
   }
   player1.page = await player1.context.newPage()
   await joinCampaign(player1.page, accounts.player1, sessionId)
 
   const player2 = {
-    context: await browser.newContext(),
+    context: await browser.newContext(contextOptions),
   }
   player2.page = await player2.context.newPage()
   await joinCampaign(player2.page, accounts.player2, sessionId)

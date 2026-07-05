@@ -4,6 +4,11 @@ import { e2eAccounts, missingE2EAccountEnv, uniqueCampaignName } from './support
 
 const missingEnv = missingE2EAccountEnv()
 
+// At the default 1280x720 the crowded topbar squeezes the breadcrumb nav
+// (min-width: 0, overflow: hidden) to zero width, so the "back to parent"
+// button exists but is unclickable. Give every role a roomier window.
+const contextOptions = { viewport: { width: 1920, height: 1080 } }
+
 test.describe.serial('players follow the GM active map', () => {
   test.skip(
     missingEnv.length > 0,
@@ -14,6 +19,7 @@ test.describe.serial('players follow the GM active map', () => {
     const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
       mode: 'fow',
       name: uniqueCampaignName('E2E Map Follow'),
+      contextOptions,
     })
 
     try {
