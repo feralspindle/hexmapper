@@ -5,6 +5,13 @@
 {$DOMAIN} {
 	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
 
+	# JSON access logs to the container's stdout (docker logs caddy). Needed to
+	# attribute ws upgrades and API calls to a client IP (issue #24).
+	log {
+		output stdout
+		format json
+	}
+
 	encode zstd gzip
 
 	# Security headers + CSP (ported from vercel.json). The API is now same-origin,
