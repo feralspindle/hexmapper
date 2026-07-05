@@ -1,6 +1,11 @@
 name: E2E
 
+# Playwright multiplayer suite against staging. Runs nightly, on demand, and as
+# the post-deploy check in deploy-frontend.yml / deploy-server.yml (both call
+# this via workflow_call so the job is defined exactly once).
+
 on:
+  workflow_call: {}
   workflow_dispatch: {}
   schedule:
     - cron: '17 10 * * *'

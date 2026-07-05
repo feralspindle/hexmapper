@@ -50,11 +50,15 @@ CI to run the real flow when secrets are configured.
 - Player -> GM and player -> player: blank-map terrain paint and marker sync.
 - GM -> players: oracle yes/no rolls sync to both players.
 - Player -> GM and player -> player: custom oracle table rolls sync to everyone.
+- Dice: player and GM rolls appear exactly once in every tab (echo suppression).
+- Chat: messages reach every tab exactly once, in both directions.
+- Map follow: GM switches to a child map and back; all players follow.
+- Reconnect: a player who drops offline sees the disconnect banner, misses a GM
+  reveal, then converges after reconnect with no hex-grid teardown/remount.
 
 ## Next High-Value Specs
 
-- Dice: player roll appears for GM and other players; GM annotation appears for players.
-- Chat: player message appears in every tab and toast behavior does not duplicate messages.
+- Dice: GM annotation on a roll appears for players.
 - Party notebook: player adds a note/quest, GM edits/completes it, all players update.
 - Vault: loot claim/split/store flows across GM and players.
 - Dungeon: GM creates rooms/corridors/fog, players receive allowed view only.

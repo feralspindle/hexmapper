@@ -131,7 +131,15 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useHexStore } from "@/stores/hexStore.js";
 import { useMapStore } from "@/stores/mapStore.js";
-import { HEX_SIZE, hexToPixel, hexCorners, cornersToPoints } from "@/composables/useHexGeometry.js";
+import {
+    HEX_SIZE,
+    DEFAULT_GRID_COLS,
+    DEFAULT_GRID_ROWS,
+    hexToPixel,
+    hexCorners,
+    cornersToPoints,
+    hexHeight,
+} from "@/composables/useHexGeometry.js";
 import HexCell from "./HexCell.vue";
 
 const props = defineProps({
@@ -148,6 +156,8 @@ const props = defineProps({
     mapGridOffsetX: { type: Number, default: 0 },
     mapGridOffsetY: { type: Number, default: 0 },
     mapImageScale: { type: Number, default: 1 },
+    mapGridCols: { type: Number, default: null },
+    mapGridRows: { type: Number, default: null },
     moveMode: { type: String, default: "none" },
     panMode: { type: Boolean, default: false },
     mapFogRevealAll: { type: Boolean, default: false },
@@ -159,6 +169,7 @@ const emit = defineEmits([
     "hex-context",
     "image-offset-change",
     "grid-offset-change",
+    "grid-dims",
 ]);
 
 const hexStore = useHexStore();
@@ -283,29 +294,58 @@ const gridTransform = computed(() => {
     return parts.join(" ");
 });
 
+const IMAGE_GRID_MARGIN = 0.1;
+
+const imageCoverCols = computed(() => {
+    if (!(props.imageMode && imageNaturalWidth.value > 0 && hexSize.value > 0)) return 0;
+    return Math.ceil((imageNaturalWidth.value * props.mapImageScale) / (hexSize.value * 1.5));
+});
+
+const imageCoverRows = computed(() => {
+    const h = hexHProp.value ?? hexHeight(hexSize.value);
+    if (!(props.imageMode && imageNaturalHeight.value > 0 && h > 0)) return 0;
+    return Math.ceil((imageNaturalHeight.value * props.mapImageScale) / h);
+});
+
+const imageBufferCols = computed(() => Math.ceil(imageCoverCols.value * IMAGE_GRID_MARGIN));
+const imageBufferRows = computed(() => Math.ceil(imageCoverRows.value * IMAGE_GRID_MARGIN));
+
 const gridCols = computed(() => {
-    if (props.imageMode && imageNaturalWidth.value > 0 && hexSize.value > 0) {
-        return Math.ceil(imageNaturalWidth.value / (hexSize.value * 1.5)) + 4;
+    if (imageCoverCols.value > 0) {
+        if (props.mapGridCols != null) return Math.max(props.mapGridCols, imageCoverCols.value);
+        return imageCoverCols.value + imageBufferCols.value * 2;
     }
-    return 60;
+    return props.mapGridCols ?? DEFAULT_GRID_COLS;
 });
 
 const gridRows = computed(() => {
-    const h = hexHProp.value ?? Math.sqrt(3) * hexSize.value;
-    if (props.imageMode && imageNaturalHeight.value > 0 && h > 0) {
-        return Math.ceil(imageNaturalHeight.value / h) + 6;
+    if (imageCoverRows.value > 0) {
+        if (props.mapGridRows != null) return Math.max(props.mapGridRows, imageCoverRows.value);
+        return imageCoverRows.value + imageBufferRows.value * 2;
     }
-    return 40;
+    return props.mapGridRows ?? DEFAULT_GRID_ROWS;
 });
 
 const visibleCoords = computed(() => {
     const cols = gridCols.value;
     const rows = gridRows.value;
-    const imageLoaded = props.imageMode && imageNaturalWidth.value > 0;
-    const qStart = imageLoaded ? -4 : -Math.floor(cols / 2);
-    const rBuffer = imageLoaded ? 4 : Math.floor(rows / 2);
     const coords = [];
-    for (let q = qStart; q < cols; q++) {
+    if (props.imageMode && imageCoverCols.value > 0) {
+        const leftBuf = Math.floor((cols - imageCoverCols.value) / 2);
+        const topBuf = Math.floor((rows - imageCoverRows.value) / 2);
+        for (let q = -leftBuf; q < cols - leftBuf; q++) {
+            const qOffset = Math.floor(q / 2);
+            for (let r = -topBuf - qOffset; r < rows - topBuf - qOffset; r++) {
+                coords.push({ q, r });
+            }
+        }
+        return coords;
+    }
+    // qStart of -cols/3 keeps the default 90-col window at q in [-30, 60), the
+    // exact extent maps rendered before grid size became adjustable.
+    const qStart = -Math.floor(cols / 3);
+    const rBuffer = Math.floor(rows / 2);
+    for (let q = qStart; q < cols + qStart; q++) {
         const qOffset = Math.floor(q / 2);
         for (let r = -rBuffer - qOffset; r < rows - rBuffer - qOffset; r++) {
             coords.push({ q, r });
@@ -313,6 +353,12 @@ const visibleCoords = computed(() => {
     }
     return coords;
 });
+
+watch(
+    [gridCols, gridRows],
+    ([cols, rows]) => emit("grid-dims", { cols, rows }),
+    { immediate: true },
+);
 
 function onPanStart(e) {
     const inMoveMode = props.moveMode !== "none";

@@ -40,7 +40,9 @@ export const useD = defineStore('dungeon', () => {
   let _stopAuthWatch = null
   let _undoing = false
   let _urlTimer = null
+  let _urlRenewal = null
   let _dungeonId = null
+  let _initGeneration = 0
 
   const _logUndoError = (label) => (err) =>
     console.error(`undo ${label}:`, err instanceof ApiError ? err.message : err)
@@ -157,6 +159,7 @@ export const useD = defineStore('dungeon', () => {
 
   async function _refreshImageUrl(path) {
     if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
+    _urlRenewal = null
     if (!path) { dungeonImageUrl.value = null; return }
     const { data, error } = await supabase.storage
       .from('session-maps')
@@ -167,7 +170,18 @@ export const useD = defineStore('dungeon', () => {
       return
     }
     dungeonImageUrl.value = data.signedUrl
-    _urlTimer = setTimeout(() => _refreshImageUrl(path), URL_EXPIRY_SECONDS * 0.9 * 1000)
+    const renewalMs = URL_EXPIRY_SECONDS * 0.9 * 1000
+    _urlRenewal = { path, at: Date.now() + renewalMs }
+    _urlTimer = setTimeout(() => _refreshImageUrl(path), renewalMs)
+  }
+
+  // Background tabs throttle timers, so a long-hidden tab can outlive its signed
+  // URL; renew an overdue one as soon as the tab is visible again.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return
+      if (_urlRenewal && Date.now() >= _urlRenewal.at) _refreshImageUrl(_urlRenewal.path)
+    })
   }
 
   watch(() => dungeon.value?.map_image_path, p => _refreshImageUrl(p ?? null), { immediate: false })
@@ -341,6 +355,7 @@ export const useD = defineStore('dungeon', () => {
   }
 
   async function init(sessionId, dungeonId) {
+    const generation = ++_initGeneration
     _dungeonId = dungeonId
     loading.value = true
     loadError.value = null
@@ -355,6 +370,7 @@ export const useD = defineStore('dungeon', () => {
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
       ])
 
+      if (generation !== _initGeneration) return
       if (e1) throw new Error(e1.message)
 
       dungeon.value = dungeonData
@@ -365,15 +381,18 @@ export const useD = defineStore('dungeon', () => {
         .from('dungeon_fog_cells')
         .select('cell_x, cell_y')
         .eq('dungeon_id', dungeonId)
+      if (generation !== _initGeneration) return
       fogCells.value = new Set((fogData ?? []).map(r => _fogKey(r.cell_x, r.cell_y)))
 
       if (dungeonData?.map_image_path) _refreshImageUrl(dungeonData.map_image_path)
     } catch (err) {
+      if (generation !== _initGeneration) return
       loadError.value = err.message ?? 'Failed to load dungeon'
       console.error('dungeonStore.init error:', err)
     } finally {
-      loading.value = false
+      if (generation === _initGeneration) loading.value = false
     }
+    if (generation !== _initGeneration) return
 
     if (dungeonChannel) realtime.removeChannel(dungeonChannel)
     if (roomChannel) realtime.removeChannel(roomChannel)
@@ -382,6 +401,7 @@ export const useD = defineStore('dungeon', () => {
     _subscribeUndoChannel(sessionId, dungeonId)
     _subscribeChangesChannel(sessionId, dungeonId)
 
+    let subscribedRefreshed = false
     dungeonChannel = realtime
       .channel(`dungeon:${dungeonId}:meta`, { sessionId, onReconnect: () => refresh() })
       .on(
@@ -392,7 +412,11 @@ export const useD = defineStore('dungeon', () => {
           dungeon.value = { ...row, ...local }
         },
       )
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
 
     fogChannel = realtime
       .channel(`dungeon:${dungeonId}:fog`, { sessionId })
@@ -729,6 +753,7 @@ export const useD = defineStore('dungeon', () => {
   }
 
   function cleanup() {
+    _initGeneration += 1
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
     if (dungeonChannel)  realtime.removeChannel(dungeonChannel)
     if (roomChannel)     realtime.removeChannel(roomChannel)
@@ -738,6 +763,7 @@ export const useD = defineStore('dungeon', () => {
     if (undoChannel)     realtime.removeChannel(undoChannel)
     if (changesChannel)  realtime.removeChannel(changesChannel)
     if (_urlTimer)       { clearTimeout(_urlTimer); _urlTimer = null }
+    _urlRenewal     = null
     _dungeonId      = null
     dungeonChannel  = null
     roomChannel     = null

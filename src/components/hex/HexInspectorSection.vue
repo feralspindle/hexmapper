@@ -604,10 +604,15 @@
                             placeholder="Map name…"
                             class="ds-input"
                             style="flex: 1; font-size: 13px"
+                            data-testid="child-map-name"
                             @keyup.enter="confirmNewChildMap"
                             @keyup.escape="addingChildMap = false"
                         />
-                        <button class="ds-btn" @click="confirmNewChildMap">
+                        <button
+                            class="ds-btn"
+                            data-testid="child-map-confirm"
+                            @click="confirmNewChildMap"
+                        >
                             Add
                         </button>
                     </div>
@@ -615,6 +620,7 @@
                         v-else
                         class="hm-dashed-btn"
                         style="margin-top: 6px"
+                        data-testid="add-child-map"
                         @click="startAddChildMap"
                     >
                         + Add Child Map

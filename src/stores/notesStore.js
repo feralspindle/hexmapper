@@ -46,6 +46,7 @@ export const useNotesStore = defineStore('notes', () => {
         if (currentContextKey !== key) return
         if (data) notes.value = data
 
+        let subscribedRefreshed = false
         channel = realtime
           .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
           .on('postgres_changes', {
@@ -54,7 +55,11 @@ export const useNotesStore = defineStore('notes', () => {
             table: 'hex_notes',
             filter: `hex_cell_id=eq.${hexCellId}`,
           }, handleRealtimeEvent)
-          .subscribe()
+          .subscribe(status => {
+            if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+            subscribedRefreshed = true
+            void refresh()
+          })
         channel._ctx = { type: 'hex', hexCellId, sessionId }
       } finally {
         if (currentContextKey === key) _pendingInit = null
@@ -84,6 +89,7 @@ export const useNotesStore = defineStore('notes', () => {
         if (currentContextKey !== key) return
         if (data) notes.value = data
 
+        let subscribedRefreshed = false
         channel = realtime
           .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
           .on('postgres_changes', {
@@ -92,7 +98,11 @@ export const useNotesStore = defineStore('notes', () => {
             table: 'dungeon_element_notes',
             filter: `element_id=eq.${elementId}`,
           }, handleRealtimeEvent)
-          .subscribe()
+          .subscribe(status => {
+            if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+            subscribedRefreshed = true
+            void refresh()
+          })
         channel._ctx = { type: 'dungeon', elementId, elementType, sessionId }
       } finally {
         if (currentContextKey === key) _pendingInit = null
@@ -102,12 +112,10 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   function handleRealtimeEvent({ eventType, new: row, old }) {
-    const authStore = useAuthStore()
     if (eventType === 'INSERT') {
-      if (row.user_id === authStore.user?.id) return
+      if (notes.value.some(n => n.id === row.id)) return
       notes.value = [...notes.value, row]
     } else if (eventType === 'UPDATE') {
-      if (row.user_id === authStore.user?.id) return
       notes.value = notes.value.map(n => (n.id === row.id ? row : n))
     } else if (eventType === 'DELETE') {
       notes.value = notes.value.filter(n => n.id !== old.id)
@@ -145,7 +153,8 @@ export const useNotesStore = defineStore('notes', () => {
           body: body.trim(),
         })
       }
-      notes.value = notes.value.map(n => (n.id === optimisticId ? data : n))
+      const replaced = notes.value.map(n => (n.id === optimisticId ? data : n))
+      notes.value = replaced.filter((n, i) => replaced.findIndex(x => x.id === n.id) === i)
       const where = ctx?.type === 'hex' ? 'hex cell' : (ctx?.elementType ?? 'element')
       useActivityStore().record('added note to', where)
     } catch (error) {

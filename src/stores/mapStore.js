@@ -16,7 +16,33 @@ export const useMapStore = defineStore('map', () => {
 
   let mapChannel = null
   let _currentSessionId = null
+  let _initGeneration = 0
   const _localOverrides = {}
+  const _overrideAt = {}
+  const OVERRIDE_MAX_AGE_MS = 10000
+
+  // Overrides are released when a server row confirms the written value, not on
+  // the PATCH ack — a stale realtime echo delivered after the ack would otherwise
+  // briefly revert the field. The age cap stops a lost echo from masking another
+  // client's later write indefinitely.
+  function _mergeLocalOverrides(row) {
+    const local = _localOverrides[row.id]
+    if (!local) return row
+    if (Date.now() - (_overrideAt[row.id] ?? 0) > OVERRIDE_MAX_AGE_MS) {
+      delete _localOverrides[row.id]
+      delete _overrideAt[row.id]
+      return row
+    }
+    for (const [field, val] of Object.entries(local)) {
+      if (row[field] === val) delete local[field]
+    }
+    if (Object.keys(local).length === 0) {
+      delete _localOverrides[row.id]
+      delete _overrideAt[row.id]
+      return row
+    }
+    return { ...row, ...local }
+  }
 
   const activeMap = computed(() =>
     maps.value.find(m => m.id === useSessionStore().activeMapId) ?? null
@@ -51,9 +77,11 @@ export const useMapStore = defineStore('map', () => {
 
   const activeMapImageUrl = ref(null)
   const _urlTimers = {}
+  const _urlRenewals = {}
 
   async function _refreshUrl(path, targetRef, key) {
     if (_urlTimers[key]) { clearTimeout(_urlTimers[key]); delete _urlTimers[key] }
+    delete _urlRenewals[key]
     if (!path) { targetRef.value = null; return }
     const { data, error } = await supabase.storage
       .from('session-maps')
@@ -67,10 +95,20 @@ export const useMapStore = defineStore('map', () => {
       return
     }
     targetRef.value = data.signedUrl
-    _urlTimers[key] = setTimeout(
-      () => _refreshUrl(path, targetRef, key),
-      URL_EXPIRY_SECONDS * 0.9 * 1000,
-    )
+    const renewalMs = URL_EXPIRY_SECONDS * 0.9 * 1000
+    _urlRenewals[key] = { path, targetRef, at: Date.now() + renewalMs }
+    _urlTimers[key] = setTimeout(() => _refreshUrl(path, targetRef, key), renewalMs)
+  }
+
+  // Background tabs throttle timers, so a long-hidden tab can outlive its signed
+  // URLs; renew any overdue ones as soon as the tab is visible again.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return
+      for (const [key, renewal] of Object.entries(_urlRenewals)) {
+        if (Date.now() >= renewal.at) _refreshUrl(renewal.path, renewal.targetRef, key)
+      }
+    })
   }
 
   watch(() => activeMap.value?.map_image_path, p => _refreshUrl(p, activeMapImageUrl, 'active'), { immediate: false })
@@ -89,6 +127,8 @@ export const useMapStore = defineStore('map', () => {
   const mapScale         = computed(() => activeMap.value?.map_scale          ?? null)
   const mapScaleUnit     = computed(() => activeMap.value?.map_scale_unit     ?? 'miles')
   const mapImageScale    = computed(() => activeMap.value?.map_image_scale    ?? 1)
+  const mapGridCols      = computed(() => activeMap.value?.map_grid_cols      ?? null)
+  const mapGridRows      = computed(() => activeMap.value?.map_grid_rows      ?? null)
 
   async function refresh() {
     const sessionId = _currentSessionId
@@ -96,15 +136,18 @@ export const useMapStore = defineStore('map', () => {
     const { data: mapRows, error } = await supabase
       .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
     if (error || !mapRows || _currentSessionId !== sessionId) return
-    maps.value = mapRows.map(row => ({ ...row, ...(_localOverrides[row.id] ?? {}) }))
+    maps.value = mapRows.map(row => _mergeLocalOverrides(row))
   }
 
   async function init(sessionId) {
+    const generation = ++_initGeneration
     _currentSessionId = sessionId
     loading.value = true
 
     const { data: mapRows, error } = await supabase
       .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
+
+    if (generation !== _initGeneration) return !error
 
     loadError.value = error ?? null
     if (!error && mapRows) maps.value = mapRows
@@ -117,6 +160,7 @@ export const useMapStore = defineStore('map', () => {
     if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
 
     if (mapChannel) realtime.removeChannel(mapChannel)
+    let subscribedRefreshed = false
     mapChannel = realtime
       .channel(`session:${sessionId}:maps`, { sessionId, onReconnect: () => refresh() })
       .on(
@@ -129,29 +173,32 @@ export const useMapStore = defineStore('map', () => {
               (a, b) => new Date(a.created_at) - new Date(b.created_at),
             )
           } else if (eventType === 'UPDATE') {
-            maps.value = maps.value.map(m => {
-              if (m.id !== row.id) return m
-              const local = _localOverrides[row.id] ?? {}
-              return { ...row, ...local }
-            })
+            maps.value = maps.value.map(m => (m.id === row.id ? _mergeLocalOverrides(row) : m))
           } else if (eventType === 'DELETE') {
             maps.value = maps.value.filter(m => m.id !== old.id)
           }
         },
       )
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
 
     return !error
   }
 
   function cleanup() {
+    _initGeneration += 1
     if (mapChannel) { realtime.removeChannel(mapChannel); mapChannel = null }
     Object.values(_urlTimers).forEach(clearTimeout)
     Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
+    Object.keys(_urlRenewals).forEach(k => delete _urlRenewals[k])
     activeMapImageUrl.value = null
     maps.value = []
     _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
+    Object.keys(_overrideAt).forEach(k => delete _overrideAt[k])
   }
 
   async function createChildMap(parentHexCellId, name) {
@@ -197,7 +244,10 @@ export const useMapStore = defineStore('map', () => {
     if (patch.mapHexWidth      !== undefined) dbPatch.map_hex_width      = patch.mapHexWidth
     if (patch.mapHexHeight     !== undefined) dbPatch.map_hex_height     = patch.mapHexHeight
     if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
+    if (patch.mapGridCols      !== undefined) dbPatch.map_grid_cols      = patch.mapGridCols
+    if (patch.mapGridRows      !== undefined) dbPatch.map_grid_rows      = patch.mapGridRows
     _localOverrides[map.id] = { ...(_localOverrides[map.id] ?? {}), ...dbPatch }
+    _overrideAt[map.id] = Date.now()
     maps.value = maps.value.map(m => (m.id === map.id ? { ...m, ...dbPatch } : m))
   }
 
@@ -220,23 +270,18 @@ export const useMapStore = defineStore('map', () => {
     if (patch.mapScale         !== undefined) dbPatch.map_scale          = patch.mapScale
     if (patch.mapScaleUnit     !== undefined) dbPatch.map_scale_unit     = patch.mapScaleUnit
     if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
+    if (patch.mapGridCols      !== undefined) dbPatch.map_grid_cols      = patch.mapGridCols
+    if (patch.mapGridRows      !== undefined) dbPatch.map_grid_rows      = patch.mapGridRows
 
     try {
       await apiClient.patch(`/maps/${map.id}`, dbPatch, 'update_map_settings')
     } catch (error) { console.error('updateActiveMap:', error instanceof ApiError ? error.message : error); return false }
 
-    const overrides = _localOverrides[map.id]
-    if (overrides) {
-      for (const [field, val] of Object.entries(dbPatch)) {
-        if (overrides[field] === val) delete overrides[field]
-      }
-      if (Object.keys(overrides).length === 0) delete _localOverrides[map.id]
-    }
-
     maps.value = maps.value.map(m => {
       if (m.id !== map.id) return m
-      const remaining = _localOverrides[map.id] ?? {}
-      return { ...m, ...dbPatch, ...remaining }
+      if (m !== map) return m
+      const overrides = _localOverrides[map.id] ?? {}
+      return { ...m, ...dbPatch, ...overrides }
     })
     return true
   }
@@ -296,6 +341,8 @@ export const useMapStore = defineStore('map', () => {
     mapScale,
     mapScaleUnit,
     mapImageScale,
+    mapGridCols,
+    mapGridRows,
     init,
     refresh,
     cleanup,

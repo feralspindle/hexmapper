@@ -85,6 +85,7 @@ export const useNotebookStore = defineStore('notebook', () => {
     cleanup()
     _sessionId = sessionId
     await Promise.all([_loadQuests(sessionId), _loadNotes(sessionId)])
+    if (_sessionId !== sessionId) return
     _subscribeQuests(sessionId)
     _subscribeNotes(sessionId)
     _subscribeEditing(sessionId)
@@ -128,6 +129,7 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   function _subscribeQuests(sessionId) {
+    let subscribedRefreshed = false
     questsChannel = realtime
       .channel(`notebook:quests:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
       .on('postgres_changes', {
@@ -149,7 +151,11 @@ export const useNotebookStore = defineStore('notebook', () => {
           quests.value = quests.value.filter(q => q.id !== e.old.id)
         }
       })
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh()
+      })
   }
 
   function _subscribeNotes(sessionId) {

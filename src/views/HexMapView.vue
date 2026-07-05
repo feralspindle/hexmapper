@@ -93,6 +93,8 @@
                     :map-grid-offset-x="mapStore.mapGridOffsetX"
                     :map-grid-offset-y="mapStore.mapGridOffsetY"
                     :map-image-scale="mapStore.mapImageScale"
+                    :map-grid-cols="mapStore.mapGridCols"
+                    :map-grid-rows="mapStore.mapGridRows"
                     :map-fog-reveal-all="
                         hexMode === 'blank' || mapStore.mapFogRevealAll
                     "
@@ -104,6 +106,7 @@
                     @hex-context="onHexContext"
                     @image-offset-change="onImageOffsetChange"
                     @grid-offset-change="onGridOffsetChange"
+                    @grid-dims="gridDims = $event"
                 />
 
                 <MapScale
@@ -122,6 +125,8 @@
                 <MapImageSettings
                     v-if="showMapSettings && sessionStore.isGM"
                     :hex-mode="hexMode"
+                    :effective-cols="gridDims.cols"
+                    :effective-rows="gridDims.rows"
                     v-model:move-mode="moveMode"
                     @close="showMapSettings = false"
                 />
@@ -225,6 +230,7 @@ import MapScale from "@/components/hex/MapScale.vue";
 import { mapBootstrapAction } from "@/lib/mapBootstrap.js";
 
 const hexGridEl = ref(null);
+const gridDims = ref({ cols: null, rows: null });
 const charOpen = ref(false);
 const showMapSettings = ref(false);
 const moveMode = ref("none");

@@ -47,7 +47,9 @@ export const useOracleStore = defineStore('oracle', () => {
     error.value = null
     try {
       await Promise.all([loadTables(sessionId), loadRolls(sessionId)])
+      if (_sessionId !== sessionId) return
       await loadRows()
+      if (_sessionId !== sessionId) return
       subscribe(sessionId)
     } catch (err) {
       error.value = err instanceof ApiError ? err.message : String(err)

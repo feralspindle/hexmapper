@@ -39,6 +39,42 @@
       </div>
     </div>
 
+    <div class="map-settings-section">
+      <div class="map-settings-subsection">
+        <div class="map-settings-label">Grid size</div>
+        <div class="map-size-row">
+          <span class="map-grid-axis-label">Cols</span>
+          <button class="map-step-btn" title="Fewer columns" @click="stepGridCols(-GRID_STEP)">−</button>
+          <input
+            v-model.number="gridColsDraft"
+            type="number" :min="GRID_MIN" :max="GRID_MAX" step="1"
+            class="map-size-input"
+            @input="_gridEdited.cols = true"
+            @change="saveGridCols"
+          />
+          <button class="map-step-btn" title="More columns" @click="stepGridCols(GRID_STEP)">+</button>
+        </div>
+        <div class="map-size-row" style="margin-top:6px">
+          <span class="map-grid-axis-label">Rows</span>
+          <button class="map-step-btn" title="Fewer rows" @click="stepGridRows(-GRID_STEP)">−</button>
+          <input
+            v-model.number="gridRowsDraft"
+            type="number" :min="GRID_MIN" :max="GRID_MAX" step="1"
+            class="map-size-input"
+            @input="_gridEdited.rows = true"
+            @change="saveGridRows"
+          />
+          <button class="map-step-btn" title="More rows" @click="stepGridRows(GRID_STEP)">+</button>
+        </div>
+        <p class="map-settings-hint">Number of hex columns and rows on the map.</p>
+        <button
+          v-if="mapStore.mapGridCols != null || mapStore.mapGridRows != null"
+          class="map-reset-btn"
+          @click="resetGridSize"
+        >Reset to default</button>
+      </div>
+    </div>
+
     <div v-if="hexMode === 'fow'" class="map-settings-section">
       <div v-if="mapStore.activeMapImageUrl" class="map-preview">
         <img :src="mapStore.activeMapImageUrl" alt="Map image" />
@@ -224,10 +260,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useMapStore } from '@/stores/mapStore.js'
+import { DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS } from '@/composables/useHexGeometry.js'
 
 const props = defineProps({
   moveMode: { type: String, default: 'none' },
   hexMode:  { type: String, default: null },
+  effectiveCols: { type: Number, default: null },
+  effectiveRows: { type: Number, default: null },
 })
 const emit = defineEmits(['update:moveMode', 'close'])
 
@@ -238,6 +277,10 @@ const uploadError = ref('')
 
 const isAlignmentLocked = computed(() => mapStore.mapOffsetLocked)
 
+const GRID_MIN = 10
+const GRID_MAX = 150
+const GRID_STEP = 5
+
 const hexWidthDraft      = ref(mapStore.mapHexWidth)
 const hexHeightDraft     = ref(mapStore.mapHexHeight)
 const imageRotationDraft = ref(mapStore.mapImageRotation)
@@ -245,6 +288,9 @@ const gridRotationDraft  = ref(mapStore.mapGridRotation)
 const scaleDraft         = ref(mapStore.mapScale)
 const scaleUnitDraft     = ref(mapStore.mapScaleUnit)
 const imageScaleDraft    = ref(Math.round((mapStore.mapImageScale ?? 1) * 100))
+const gridColsDraft      = ref(props.effectiveCols ?? mapStore.mapGridCols ?? DEFAULT_GRID_COLS)
+const gridRowsDraft      = ref(props.effectiveRows ?? mapStore.mapGridRows ?? DEFAULT_GRID_ROWS)
+const _gridEdited        = { cols: false, rows: false }
 
 watch(() => mapStore.activeMap?.id, () => {
   hexWidthDraft.value      = mapStore.mapHexWidth
@@ -254,6 +300,10 @@ watch(() => mapStore.activeMap?.id, () => {
   scaleDraft.value         = mapStore.mapScale
   scaleUnitDraft.value     = mapStore.mapScaleUnit
   imageScaleDraft.value    = Math.round((mapStore.mapImageScale ?? 1) * 100)
+  _gridEdited.cols         = false
+  _gridEdited.rows         = false
+  gridColsDraft.value      = props.effectiveCols ?? mapStore.mapGridCols ?? DEFAULT_GRID_COLS
+  gridRowsDraft.value      = props.effectiveRows ?? mapStore.mapGridRows ?? DEFAULT_GRID_ROWS
 })
 watch(() => mapStore.mapHexWidth,       v => { hexWidthDraft.value      = v })
 watch(() => mapStore.mapHexHeight,      v => { hexHeightDraft.value     = v })
@@ -262,6 +312,8 @@ watch(() => mapStore.mapGridRotation,   v => { gridRotationDraft.value  = v })
 watch(() => mapStore.mapScale,          v => { scaleDraft.value         = v })
 watch(() => mapStore.mapScaleUnit,      v => { scaleUnitDraft.value     = v })
 watch(() => mapStore.mapImageScale,     v => { imageScaleDraft.value    = Math.round((v ?? 1) * 100) })
+watch(() => props.effectiveCols,        v => { if (v != null && !_gridEdited.cols) gridColsDraft.value = v })
+watch(() => props.effectiveRows,        v => { if (v != null && !_gridEdited.rows) gridRowsDraft.value = v })
 
 const hexHeightDraftInput = computed({
   get: () => hexHeightDraft.value ?? Math.round(Math.sqrt(3) * hexWidthDraft.value / 2),
@@ -286,22 +338,18 @@ async function handleUpload(event) {
 
 function _clampDeg(v) { return Math.max(0, Math.min(359, v || 0)) }
 
-let _imageRotTimer = null
-let _gridRotTimer  = null
-
-function _scheduleImageRotSave() {
-  mapStore.applyLocalPatch({ mapImageRotation: imageRotationDraft.value })
-  clearTimeout(_imageRotTimer)
-  _imageRotTimer = setTimeout(() => {
-    mapStore.updateActiveMap({ mapImageRotation: imageRotationDraft.value })
+const _saveTimers = {}
+function _scheduleSave(key, getPatch) {
+  mapStore.applyLocalPatch(getPatch())
+  clearTimeout(_saveTimers[key])
+  _saveTimers[key] = setTimeout(() => {
+    delete _saveTimers[key]
+    mapStore.updateActiveMap(getPatch())
   }, 250)
 }
-function _scheduleGridRotSave() {
-  mapStore.applyLocalPatch({ mapGridRotation: gridRotationDraft.value })
-  clearTimeout(_gridRotTimer)
-  _gridRotTimer = setTimeout(() => {
-    mapStore.updateActiveMap({ mapGridRotation: gridRotationDraft.value })
-  }, 250)
+function _cancelSave(key) {
+  clearTimeout(_saveTimers[key])
+  delete _saveTimers[key]
 }
 
 async function rotateImageBy(delta) {
@@ -311,7 +359,7 @@ async function rotateImageBy(delta) {
 }
 function saveImageRotation() {
   imageRotationDraft.value = _clampDeg(imageRotationDraft.value)
-  _scheduleImageRotSave()
+  _scheduleSave('imageRotation', () => ({ mapImageRotation: imageRotationDraft.value }))
 }
 async function rotateGridBy(delta) {
   gridRotationDraft.value = ((gridRotationDraft.value + delta) % 360 + 360) % 360
@@ -320,37 +368,59 @@ async function rotateGridBy(delta) {
 }
 function saveGridRotation() {
   gridRotationDraft.value = _clampDeg(gridRotationDraft.value)
-  _scheduleGridRotSave()
+  _scheduleSave('gridRotation', () => ({ mapGridRotation: gridRotationDraft.value }))
 }
 
-let _imageScaleTimer = null
 function saveImageScaleDebounced() {
-  const pct = Math.max(25, Math.min(400, imageScaleDraft.value || 100))
-  imageScaleDraft.value = pct
-  const scale = pct / 100
-  mapStore.applyLocalPatch({ mapImageScale: scale })
-  clearTimeout(_imageScaleTimer)
-  _imageScaleTimer = setTimeout(() => {
-    mapStore.updateActiveMap({ mapImageScale: scale })
-  }, 250)
+  imageScaleDraft.value = Math.max(25, Math.min(400, imageScaleDraft.value || 100))
+  _scheduleSave('imageScale', () => ({ mapImageScale: imageScaleDraft.value / 100 }))
 }
 
-let _hexSizeTimer = null
 function saveHexSizeDebounced() {
   if (hexWidthDraft.value != null)
     hexWidthDraft.value = Math.max(20, Math.min(300, hexWidthDraft.value || 20))
-  mapStore.applyLocalPatch({ mapHexWidth: hexWidthDraft.value, mapHexHeight: hexHeightDraft.value })
-  clearTimeout(_hexSizeTimer)
-  _hexSizeTimer = setTimeout(() => {
-    mapStore.updateActiveMap({
-      mapHexWidth:  hexWidthDraft.value,
-      mapHexHeight: hexHeightDraft.value,
-    })
-  }, 250)
+  _scheduleSave('hexSize', () => ({
+    mapHexWidth:  hexWidthDraft.value,
+    mapHexHeight: hexHeightDraft.value,
+  }))
 }
 async function resetHeight() {
   hexHeightDraft.value = null
   await mapStore.updateActiveMap({ mapHexHeight: null })
+}
+
+function _clampGrid(v, fallback) {
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(GRID_MIN, Math.min(GRID_MAX, n))
+}
+
+function saveGridCols() {
+  _gridEdited.cols = true
+  gridColsDraft.value = _clampGrid(gridColsDraft.value, mapStore.mapGridCols ?? DEFAULT_GRID_COLS)
+  _scheduleSave('gridCols', () => ({ mapGridCols: gridColsDraft.value }))
+}
+function saveGridRows() {
+  _gridEdited.rows = true
+  gridRowsDraft.value = _clampGrid(gridRowsDraft.value, mapStore.mapGridRows ?? DEFAULT_GRID_ROWS)
+  _scheduleSave('gridRows', () => ({ mapGridRows: gridRowsDraft.value }))
+}
+function stepGridCols(delta) {
+  gridColsDraft.value = (Number(gridColsDraft.value) || DEFAULT_GRID_COLS) + delta
+  saveGridCols()
+}
+function stepGridRows(delta) {
+  gridRowsDraft.value = (Number(gridRowsDraft.value) || DEFAULT_GRID_ROWS) + delta
+  saveGridRows()
+}
+
+async function resetGridSize() {
+  _cancelSave('gridCols')
+  _cancelSave('gridRows')
+  _gridEdited.cols = false
+  _gridEdited.rows = false
+  mapStore.applyLocalPatch({ mapGridCols: null, mapGridRows: null })
+  await mapStore.updateActiveMap({ mapGridCols: null, mapGridRows: null })
 }
 
 async function toggleLock() {
@@ -597,6 +667,29 @@ async function setUnit(unit) {
   margin-top: 5px;
   accent-color: var(--ink-2);
 }
+
+.map-grid-axis-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  width: 26px;
+  flex-shrink: 0;
+}
+
+.map-step-btn {
+  width: 26px; height: 26px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ink-2);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  transition: background .15s, color .15s;
+}
+.map-step-btn:hover { background: var(--paper-3); color: var(--ink); }
 
 .map-reset-btn {
   margin-top: 4px;
