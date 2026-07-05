@@ -1,4 +1,6 @@
 export const HEX_SIZE = 48
+export const DEFAULT_GRID_COLS = 90
+export const DEFAULT_GRID_ROWS = 40
 
 export function hexToPixel(q, r, size = HEX_SIZE, hexH = null) {
   const h = hexH ?? (Math.sqrt(3) * size)

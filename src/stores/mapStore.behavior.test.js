@@ -114,6 +114,49 @@ describe('mapStore behavior', () => {
     errorSpy.mockRestore()
   })
 
+  test('grid size getters expose the stored columns and rows', async () => {
+    const store = await initWith([map('m1', { map_grid_cols: 80, map_grid_rows: 55 })])
+
+    expect(store.mapGridCols).toBe(80)
+    expect(store.mapGridRows).toBe(55)
+  })
+
+  test('grid size getters default to null when the map has no override', async () => {
+    const store = await initWith([map('m1')])
+
+    expect(store.mapGridCols).toBeNull()
+    expect(store.mapGridRows).toBeNull()
+  })
+
+  test('updateActiveMap sends grid size and resetting clears the override', async () => {
+    const store = await initWith([map('m1', { map_grid_cols: null, map_grid_rows: null })])
+
+    store.applyLocalPatch({ mapGridCols: 90, mapGridRows: 70 })
+    expect(store.mapGridCols).toBe(90)
+    expect(store.mapGridRows).toBe(70)
+
+    await store.updateActiveMap({ mapGridCols: 90, mapGridRows: 70 })
+    expect(kit.apiClient.patch).toHaveBeenCalledWith('/maps/m1', { map_grid_cols: 90, map_grid_rows: 70 }, 'update_map_settings')
+
+    store.applyLocalPatch({ mapGridCols: null, mapGridRows: null })
+    await store.updateActiveMap({ mapGridCols: null, mapGridRows: null })
+    expect(store.mapGridCols).toBeNull()
+    expect(store.mapGridRows).toBeNull()
+  })
+
+  test('a stale echo arriving after the PATCH ack does not revert the saved value', async () => {
+    const store = await initWith([map('m1', { map_grid_cols: null })])
+
+    store.applyLocalPatch({ mapGridCols: 89 })
+    await store.updateActiveMap({ mapGridCols: 89 })
+
+    kit.channels[0].emitPostgres('maps', 'UPDATE', map('m1', { map_grid_cols: null, name: 'Stale' }))
+    expect(store.mapGridCols).toBe(89)
+
+    kit.channels[0].emitPostgres('maps', 'UPDATE', map('m1', { map_grid_cols: 89 }))
+    expect(store.mapGridCols).toBe(89)
+  })
+
   test('realtime DELETE drops the map', async () => {
     const store = await initWith([map('m1'), map('m2')])
     kit.channels[0].emitPostgres('maps', 'DELETE', {}, { id: 'm2' })

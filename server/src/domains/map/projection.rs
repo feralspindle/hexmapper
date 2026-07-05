@@ -36,12 +36,14 @@ fn snapshot_columns(s: &str) -> String {
         ({s}->>'parent_map_id')::uuid,
         ({s}->>'parent_hex_id')::uuid,
         ({s}->>'party_hex_q')::int,
-        ({s}->>'party_hex_r')::int
+        ({s}->>'party_hex_r')::int,
+        ({s}->>'map_grid_cols')::int,
+        ({s}->>'map_grid_rows')::int
         "#
     )
 }
 
-const COLS: &str = "id, session_id, name, map_type, map_image_path, map_hex_width, map_hex_height, map_image_rotation, map_grid_rotation, map_image_offset_x, map_image_offset_y, map_grid_offset_x, map_grid_offset_y, map_offset_locked, created_at, fog_reveal_all, map_scale, map_scale_unit, map_image_scale, parent_map_id, parent_hex_id, party_hex_q, party_hex_r";
+const COLS: &str = "id, session_id, name, map_type, map_image_path, map_hex_width, map_hex_height, map_image_rotation, map_grid_rotation, map_image_offset_x, map_image_offset_y, map_grid_offset_x, map_grid_offset_y, map_offset_locked, created_at, fog_reveal_all, map_scale, map_scale_unit, map_image_scale, parent_map_id, parent_hex_id, party_hex_q, party_hex_r, map_grid_cols, map_grid_rows";
 
 /// Inserts a map, filling any column the `fields` payload omits with its table
 /// default, and records a `map.created` snapshot. `fields` may include session_id
@@ -60,7 +62,8 @@ pub async fn create(
                 id, session_id, name, map_type, map_image_path, map_hex_width, map_hex_height,
                 map_image_rotation, map_grid_rotation, map_image_offset_x, map_image_offset_y,
                 map_grid_offset_x, map_grid_offset_y, map_offset_locked, fog_reveal_all,
-                map_scale, map_scale_unit, map_image_scale, parent_map_id, parent_hex_id, party_hex_q, party_hex_r
+                map_scale, map_scale_unit, map_image_scale, parent_map_id, parent_hex_id, party_hex_q, party_hex_r,
+                map_grid_cols, map_grid_rows
             )
             values (
                 $1, $2,
@@ -83,7 +86,9 @@ pub async fn create(
                 ($3->>'parent_map_id')::uuid,
                 ($3->>'parent_hex_id')::uuid,
                 ($3->>'party_hex_q')::int,
-                ($3->>'party_hex_r')::int
+                ($3->>'party_hex_r')::int,
+                ($3->>'map_grid_cols')::int,
+                ($3->>'map_grid_rows')::int
             )
             returning *
         ),
@@ -128,7 +133,9 @@ pub async fn update(tx: &mut Transaction<'_, Postgres>, id: Uuid, patch: &Value,
                 parent_map_id      = case when $2 ? 'parent_map_id' then ($2->>'parent_map_id')::uuid else parent_map_id end,
                 parent_hex_id      = case when $2 ? 'parent_hex_id' then ($2->>'parent_hex_id')::uuid else parent_hex_id end,
                 party_hex_q        = case when $2 ? 'party_hex_q' then round(($2->>'party_hex_q')::numeric)::int else party_hex_q end,
-                party_hex_r        = case when $2 ? 'party_hex_r' then round(($2->>'party_hex_r')::numeric)::int else party_hex_r end
+                party_hex_r        = case when $2 ? 'party_hex_r' then round(($2->>'party_hex_r')::numeric)::int else party_hex_r end,
+                map_grid_cols      = case when $2 ? 'map_grid_cols' then round(($2->>'map_grid_cols')::numeric)::int else map_grid_cols end,
+                map_grid_rows      = case when $2 ? 'map_grid_rows' then round(($2->>'map_grid_rows')::numeric)::int else map_grid_rows end
             where id = $1
             returning *
         ),
