@@ -51,6 +51,8 @@
                     class="ds-die-btn"
                     :class="{ active: pending[die] > 0 }"
                     :title="`Left-click add ${die}, right-click remove`"
+                    data-testid="dice-die"
+                    :data-die="die"
                     @click="addDie(die)"
                     @contextmenu.prevent="removeDie(die)"
                 >
@@ -182,7 +184,12 @@
                 >
                     <i class="fa-solid fa-floppy-disk" />
                 </button>
-                <button class="ds-btn tiny" :disabled="!hasDice" @click="roll">
+                <button
+                    class="ds-btn tiny"
+                    :disabled="!hasDice"
+                    data-testid="dice-roll"
+                    @click="roll"
+                >
                     Roll!
                 </button>
             </div>
@@ -322,6 +329,7 @@
                 class="ds-roll-row"
                 :class="{ crit: isCrit(entry), fumble: isFumble(entry) }"
                 :style="{ '--roll-color': rollColor(entry.user_id) }"
+                data-testid="dice-roll-row"
             >
                 <div class="ds-roll-dot" />
                 <div>

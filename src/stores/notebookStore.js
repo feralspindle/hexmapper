@@ -85,6 +85,7 @@ export const useNotebookStore = defineStore('notebook', () => {
     cleanup()
     _sessionId = sessionId
     await Promise.all([_loadQuests(sessionId), _loadNotes(sessionId)])
+    if (_sessionId !== sessionId) return
     _subscribeQuests(sessionId)
     _subscribeNotes(sessionId)
     _subscribeEditing(sessionId)

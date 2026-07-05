@@ -37,6 +37,7 @@ export const useVaultStore = defineStore('vault', () => {
     cleanup()
     _sessionId = sessionId
     await Promise.all([_loadLoot(sessionId), _loadItems(sessionId), _loadContainers(sessionId), _loadLedger(sessionId)])
+    if (_sessionId !== sessionId) return
     _subscribeLoot(sessionId)
     _subscribeItems(sessionId)
     _subscribeContainers(sessionId)

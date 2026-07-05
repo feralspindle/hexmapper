@@ -8,6 +8,7 @@ export const useActivityStore = defineStore('activity', () => {
   const activities = ref([])
   let channel = null
   let _dungeonId = null
+  let _initGeneration = 0
 
   async function _fetchActivities(dungeonId) {
     const { data } = await supabase
@@ -27,11 +28,13 @@ export const useActivityStore = defineStore('activity', () => {
   }
 
   async function init(sessionId, dungeonId) {
+    const generation = ++_initGeneration
     _dungeonId = dungeonId
-    if (channel) realtime.removeChannel(channel)
+    if (channel) { realtime.removeChannel(channel); channel = null }
 
     const data = await _fetchActivities(dungeonId)
-    if (_dungeonId === dungeonId) activities.value = data ?? []
+    if (generation !== _initGeneration) return
+    activities.value = data ?? []
 
     channel = realtime
       .channel(`dungeon:${dungeonId}:activity`, { sessionId, onReconnect: () => refresh() })
@@ -68,6 +71,7 @@ export const useActivityStore = defineStore('activity', () => {
   }
 
   function cleanup() {
+    _initGeneration += 1
     if (channel) { realtime.removeChannel(channel); channel = null }
     activities.value = []
     _dungeonId = null

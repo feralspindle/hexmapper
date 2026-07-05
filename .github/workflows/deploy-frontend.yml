@@ -62,53 +62,5 @@ jobs:
   e2e-staging:
     needs: build-and-ship
     if: github.ref_name == 'staging'
-    runs-on: ubuntu-latest
-    environment: staging
-    env:
-      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
-      E2E_GM_EMAIL: ${{ secrets.E2E_GM_EMAIL }}
-      E2E_GM_PASSWORD: ${{ secrets.E2E_GM_PASSWORD }}
-      E2E_PLAYER1_EMAIL: ${{ secrets.E2E_PLAYER1_EMAIL }}
-      E2E_PLAYER1_PASSWORD: ${{ secrets.E2E_PLAYER1_PASSWORD }}
-      E2E_PLAYER2_EMAIL: ${{ secrets.E2E_PLAYER2_EMAIL }}
-      E2E_PLAYER2_PASSWORD: ${{ secrets.E2E_PLAYER2_PASSWORD }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check E2E secrets
-        id: e2e-config
-        run: |
-          missing=0
-          for name in E2E_BASE_URL E2E_GM_EMAIL E2E_GM_PASSWORD E2E_PLAYER1_EMAIL E2E_PLAYER1_PASSWORD E2E_PLAYER2_EMAIL E2E_PLAYER2_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "::warning::$name is not configured; skipping E2E run"
-              missing=1
-            fi
-          done
-          if [ "$missing" -eq 0 ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/setup-node@v4
-        if: steps.e2e-config.outputs.ready == 'true'
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-        if: steps.e2e-config.outputs.ready == 'true'
-
-      - run: npx playwright install --with-deps chromium
-        if: steps.e2e-config.outputs.ready == 'true'
-
-      - run: npm run test:e2e
-        if: steps.e2e-config.outputs.ready == 'true'
-
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report-frontend-deploy
-          path: playwright-report/
-          if-no-files-found: ignore
+    uses: ./.github/workflows/test-e2e.yml
+    secrets: inherit
