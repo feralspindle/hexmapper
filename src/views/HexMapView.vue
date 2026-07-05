@@ -12,7 +12,45 @@
             @toggle-char="charOpen = !charOpen"
         />
 
-        <div v-if="showModePicker" class="hm-setup-bg">
+        <div v-if="mapsBlocked" class="hm-setup-bg">
+            <div
+                data-testid="maps-blocked"
+                style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 14px;
+                    padding: 28px 32px;
+                    background: var(--paper, #ede1c7);
+                    border: 1px solid var(--rule, #c9b990);
+                    border-radius: 4px;
+                    max-width: 380px;
+                    text-align: center;
+                "
+            >
+                <span
+                    style="
+                        font-family: var(--font-display);
+                        font-size: 14px;
+                        color: var(--ink, #1a1410);
+                    "
+                    >Couldn't load this session's maps</span
+                >
+                <span
+                    style="
+                        font-family: var(--font-mono);
+                        font-size: 11px;
+                        line-height: 1.5;
+                        color: var(--ink-mute, #6b5d49);
+                    "
+                    >Nothing has been changed. This is usually temporary —
+                    try again in a moment.</span
+                >
+                <button class="ds-btn" @click="bootstrapMaps">Retry</button>
+            </div>
+        </div>
+
+        <div v-else-if="showModePicker" class="hm-setup-bg">
             <HexModePicker @pick-fow="onPickFow" @pick-blank="onPickBlank" />
         </div>
 
@@ -184,6 +222,7 @@ import PartyNotebook       from "@/components/common/PartyNotebook.vue";
 
 import HexBottomBar from "@/components/hex/HexBottomBar.vue";
 import MapScale from "@/components/hex/MapScale.vue";
+import { mapBootstrapAction } from "@/lib/mapBootstrap.js";
 
 const hexGridEl = ref(null);
 const charOpen = ref(false);
@@ -313,7 +352,7 @@ watch(
 );
 
 watch(
-    () => mapStore.effectiveMapId,
+    () => sessionStore.activeMapId,
     async (newId) => {
         if (newId) {
             moveMode.value = "none";
@@ -322,23 +361,38 @@ watch(
     },
 );
 
-onMounted(async () => {
-    await prefs.load();
-    if (sessionStore.sessionId !== sessionId) {
-        await sessionStore.joinSession(sessionId);
-    }
-    const mapsLoaded = await mapStore.init(sessionId);
+const mapsBlocked = ref(false);
 
-    if (mapsLoaded && mapStore.maps.length === 0) {
+async function bootstrapMaps() {
+    mapsBlocked.value = false;
+    const mapsLoaded = await mapStore.init(sessionId);
+    const action = mapBootstrapAction({
+        mapsLoaded,
+        mapsCount: mapStore.maps.length,
+        activeMapId: sessionStore.activeMapId,
+        isGM: sessionStore.isGM,
+    });
+    if (action === "blocked") {
+        mapsBlocked.value = true;
+    } else if (action === "create") {
         const map = await mapStore.createMap({
             name: "World Map",
             mapType: "hex",
         });
         if (map) await mapStore.setActiveMap(map.id);
-    } else {
-        const startMapId = mapStore.effectiveMapId;
-        if (startMapId) await hexStore.init(sessionId, startMapId);
+    } else if (action === "adopt_first") {
+        await mapStore.setActiveMap(mapStore.maps[0].id);
+    } else if (action === "init") {
+        await hexStore.init(sessionId, sessionStore.activeMapId);
     }
+}
+
+onMounted(async () => {
+    await prefs.load();
+    if (sessionStore.sessionId !== sessionId) {
+        await sessionStore.joinSession(sessionId);
+    }
+    await bootstrapMaps();
 
     diceStore.init(sessionId);
     chatStore.init(sessionId);

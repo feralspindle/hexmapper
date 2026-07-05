@@ -2138,7 +2138,7 @@ textarea.ds-input {
     color: var(--ink-2);
 }
 
-/* ─── Hex-map nav: restyle ds-tb-btn to match native AppNav buttons ─── */
+/* ─── Hex-map nav: ds-tb-btn restyle ─── */
 .hm-nav .ds-tb-btn {
     color: #dca85a !important;
     border: none;

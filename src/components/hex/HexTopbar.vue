@@ -87,7 +87,7 @@
                     >…</span
                 >
                 <button
-                    v-else
+                    v-else-if="sessionStore.isGM"
                     style="
                         background: none;
                         border: none;
@@ -103,10 +103,23 @@
                         white-space: nowrap;
                         flex-shrink: 1;
                     "
-                    @click="mapStore.navigateLocal(segment.id)"
+                    @click="mapStore.setActiveMap(segment.id)"
                 >
                     {{ segment.name }}
                 </button>
+                <span
+                    v-else
+                    style="
+                        color: rgba(237, 225, 199, 0.55);
+                        max-width: 120px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        flex-shrink: 1;
+                    "
+                >
+                    {{ segment.name }}
+                </span>
             </template>
             <span style="opacity: 0.4; flex-shrink: 0">/</span>
             <span

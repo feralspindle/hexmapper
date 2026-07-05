@@ -323,7 +323,7 @@ const fullBreadcrumbPath = computed(() => {
 });
 
 function goToMap(mapId) {
-    if (mapId) mapStore.navigateLocal(mapId);
+    if (mapId && sessionStore.isGM) mapStore.setActiveMap(mapId);
     router.push({
         name: "hex-map",
         params: { sessionId: route.params.sessionId },

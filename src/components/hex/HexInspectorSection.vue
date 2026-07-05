@@ -572,6 +572,7 @@
                                 "
                             >{{ m.name }}</span>
                             <button
+                                v-if="sessionStore.isGM"
                                 style="
                                     font-family: var(--font-mono);
                                     font-size: 10px;
@@ -583,7 +584,7 @@
                                     flex-shrink: 0;
                                     white-space: nowrap;
                                 "
-                                @click="mapStore.navigateLocal(m.id)"
+                                @click="mapStore.setActiveMap(m.id)"
                             >
                                 Enter →
                             </button>

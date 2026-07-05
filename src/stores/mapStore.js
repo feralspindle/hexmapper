@@ -14,33 +14,12 @@ export const useMapStore = defineStore('map', () => {
   const loading = ref(false)
   const loadError = ref(null)
 
-  const newMapModalOpen = ref(false)
-
   let mapChannel = null
   let _currentSessionId = null
   const _localOverrides = {}
 
-  const localMapId = ref(null)
-
-  const effectiveMapId = computed(() => {
-    const sessionStore = useSessionStore()
-    return localMapId.value ?? sessionStore.activeMapId
-  })
-
-  function _localViewKey() {
-    return `map_view_${_currentSessionId}`
-  }
-
-  watch(
-    () => useSessionStore().activeMapId,
-    (newId) => {
-      localMapId.value = null
-      if (newId && _currentSessionId) localStorage.setItem(_localViewKey(), newId)
-    },
-  )
-
   const activeMap = computed(() =>
-    maps.value.find(m => m.id === effectiveMapId.value) ?? null
+    maps.value.find(m => m.id === useSessionStore().activeMapId) ?? null
   )
 
   const parentMap = computed(() => {
@@ -132,21 +111,7 @@ export const useMapStore = defineStore('map', () => {
 
     loading.value = false
 
-    const saved = localStorage.getItem(_localViewKey())
-    if (saved && maps.value.find(m => m.id === saved)) {
-      localMapId.value = saved
-    } else {
-      const sessionStore = useSessionStore()
-      let cur = maps.value.find(m => m.id === sessionStore.activeMapId)
-      if (cur?.parent_map_id) {
-        while (cur.parent_map_id) {
-          const parent = maps.value.find(m => m.id === cur.parent_map_id)
-          if (!parent) break
-          cur = parent
-        }
-        localMapId.value = cur.id
-      }
-    }
+    localStorage.removeItem(`map_view_${sessionId}`)
 
     const activeImgPath = activeMap.value?.map_image_path
     if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
@@ -185,14 +150,8 @@ export const useMapStore = defineStore('map', () => {
     Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
     activeMapImageUrl.value = null
     maps.value = []
-    localMapId.value = null
     _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
-  }
-
-  function navigateLocal(mapId) {
-    localMapId.value = mapId
-    if (_currentSessionId) localStorage.setItem(_localViewKey(), mapId)
   }
 
   async function createChildMap(parentHexCellId, name) {
@@ -209,7 +168,7 @@ export const useMapStore = defineStore('map', () => {
     if (!maps.value.find(m => m.id === data.id)) {
       maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     }
-    navigateLocal(data.id)
+    await setActiveMap(data.id)
     return data
   }
 
@@ -222,20 +181,6 @@ export const useMapStore = defineStore('map', () => {
       maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     }
     return data
-  }
-
-  async function renameMap(mapId, name) {
-    try {
-      await apiClient.patch(`/maps/${mapId}`, { name }, 'rename_map')
-      maps.value = maps.value.map(m => (m.id === mapId ? { ...m, name } : m))
-    } catch (error) { console.error('renameMap:', error instanceof ApiError ? error.message : error) }
-  }
-
-  async function deleteMap(mapId) {
-    if (maps.value.length <= 1) return
-    try {
-      await apiClient.delete(`/maps/${mapId}`, 'delete_map')
-    } catch (error) { console.error('deleteMap:', error instanceof ApiError ? error.message : error) }
   }
 
   async function setActiveMap(mapId) {
@@ -332,9 +277,7 @@ export const useMapStore = defineStore('map', () => {
     maps,
     loading,
     loadError,
-    newMapModalOpen,
     activeMap,
-    effectiveMapId,
     parentMap,
     childMapsByHexId,
     ancestorChain,
@@ -358,10 +301,7 @@ export const useMapStore = defineStore('map', () => {
     cleanup,
     createMap,
     createChildMap,
-    navigateLocal,
     applyLocalPatch,
-    renameMap,
-    deleteMap,
     setActiveMap,
     updateActiveMap,
     setFogRevealAll,

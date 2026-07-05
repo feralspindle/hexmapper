@@ -71,4 +71,11 @@ describe('mapStore.init read/write gap', () => {
     const wouldAutoCreate = mapsLoaded && store.maps.length === 0
     expect(wouldAutoCreate).toBe(false)
   })
+
+  test('init clears the legacy per-browser map override key', async () => {
+    localStorage.setItem('map_view_session-1', 'stale-map-id')
+    const store = useMapStore()
+    await store.init('session-1')
+    expect(localStorage.getItem('map_view_session-1')).toBeNull()
+  })
 })
