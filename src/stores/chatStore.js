@@ -13,6 +13,7 @@ export const useChatStore = defineStore('chat', () => {
 
   let channel     = null
   let _sessionId  = null
+  let _initGeneration = 0
 
   async function _fetchLatest(sessionId) {
     const { data } = await supabase
@@ -34,14 +35,16 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function init(sessionId) {
+    const generation = ++_initGeneration
     _sessionId = sessionId
+    if (channel) { realtime.removeChannel(channel); channel = null }
 
     const data = await _fetchLatest(sessionId)
-    if (data && _sessionId === sessionId) {
+    if (generation !== _initGeneration) return
+    if (data) {
       messages.value = [...data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     }
 
-    if (channel) realtime.removeChannel(channel)
     let subscribedRefreshed = false
     channel = realtime
       .channel(`session:${sessionId}:chat`, { sessionId, onReconnect: () => refresh() })
@@ -94,6 +97,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function cleanup() {
+    _initGeneration += 1
     if (channel) { realtime.removeChannel(channel); channel = null }
     messages.value      = []
     latestMessage.value = null

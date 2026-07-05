@@ -23,6 +23,16 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      # Vitest doesn't mount every component, so a broken .vue template can pass
+      # the suite and only fail at deploy time. Compile everything here instead.
+      - name: Build check
+        run: npm run build
+
+      # The Playwright suites only execute nightly / post-deploy on staging; this
+      # catches a spec that fails to even parse or collect before it merges.
+      - name: E2E spec collection check
+        run: npx playwright test --list
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4

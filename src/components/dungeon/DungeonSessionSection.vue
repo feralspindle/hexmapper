@@ -28,6 +28,7 @@
           class="ds-chat-msg"
           :class="msg.id?.toString().startsWith('pending-') ? 'opacity-50' : ''"
           :style="{ '--msg-color': msgColor(msg.user_id) }"
+          data-testid="chat-message"
         >
           <div class="ds-chat-meta">
             <span class="ds-chat-who">{{ gmName(msg.user_id, msg.display_name) }}</span>
@@ -45,9 +46,10 @@
           maxlength="500"
           class="ds-input"
           style="flex:1;padding:6px 8px;font-style:normal;font-size:13px"
+          data-testid="chat-input"
           @keydown.enter.prevent="send"
         />
-        <button class="ds-btn tiny" :disabled="!draft.trim()" @click="send">Send</button>
+        <button class="ds-btn tiny" :disabled="!draft.trim()" data-testid="chat-send" @click="send">Send</button>
       </div>
     </div>
 

@@ -103,6 +103,7 @@
                         white-space: nowrap;
                         flex-shrink: 1;
                     "
+                    data-testid="map-breadcrumb"
                     @click="mapStore.setActiveMap(segment.id)"
                 >
                     {{ segment.name }}
@@ -131,6 +132,7 @@
                     max-width: 140px;
                     flex-shrink: 1;
                 "
+                data-testid="active-map-name"
                 >{{ mapStore.activeMap?.name }}</span
             >
         </nav>

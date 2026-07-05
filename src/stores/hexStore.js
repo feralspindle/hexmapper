@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, computed } from "vue";
+import { ref, computed, toRaw } from "vue";
 import { supabase } from "@/lib/supabase";
 import { realtime, usingRustRealtime } from "@/lib/realtime.js";
 import { apiClient, ApiError } from "@/lib/apiClient.js";
@@ -445,12 +445,14 @@ export const useHexStore = defineStore("hex", () => {
         merged.gm_markers != null && data.gm_markers == null
           ? { ...data, gm_markers: merged.gm_markers }
           : data;
-      if (hexCells.value.get(key) === merged) {
+      // hexCells is reactive, so .get() returns a proxy — compare against the
+      // raw object or this stale-response guard never matches anything.
+      if (toRaw(hexCells.value.get(key)) === merged) {
         hexCells.value.set(key, stored);
       }
       _notifyHexChanged();
     } catch (error) {
-      if (hexCells.value.get(key) === merged) {
+      if (toRaw(hexCells.value.get(key)) === merged) {
         if (existing) hexCells.value.set(key, existing);
         else hexCells.value.delete(key);
       }
