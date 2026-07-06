@@ -143,7 +143,7 @@ export const useSessionStore = defineStore('session', () => {
       const data = await apiClient.post(`/sessions/${id}/join`, undefined, 'join_session')
       _applySessionRow(data)
       _subscribeToSession(id)
-    } catch (e) {
+    } catch {
       error.value = 'Session not found. Check the ID and try again.'
     } finally {
       loading.value = false

@@ -10,6 +10,7 @@
         <div class="flex gap-2 justify-center">
           <button
             class="px-4 py-1.5 border border-stone-600 text-sm text-stone-300 bg-stone-800 hover:bg-stone-700 transition-colors font-display tracking-wide"
+            data-testid="confirm-cancel"
             @click="cancel"
           >
             Cancel
@@ -17,6 +18,7 @@
           <button
             class="px-4 py-1.5 border text-sm transition-colors font-display tracking-wide"
             :class="state.confirmClass"
+            data-testid="confirm-accept"
             @click="accept"
           >
             <i v-if="state.confirmIcon" :class="[state.confirmIcon, 'mr-1']" />{{ state.confirmLabel }}

@@ -98,7 +98,19 @@ describe('dungeonStore', () => {
     expect([...store.rooms.keys()]).toHaveLength(1)
     expect(store.undoStack.at(-1)).toMatchObject({ type: 'delete_room', roomId: 'server-room' })
     expect(kit.activity.record).toHaveBeenCalledWith('added room', 'Vault')
-    expect(channelNamed(':changes').send).toHaveBeenCalledWith(expect.objectContaining({ event: 'room_upsert' }))
+  })
+
+  test('addRoom keeps a foreign edit that arrived before the API response', async () => {
+    const store = await loadedStore()
+    kit.api['post /dungeon-rooms'] = body => {
+      channelNamed(':rooms').emitPostgres('dungeon_rooms', 'UPDATE', room('server-room', { name: 'Renamed Meanwhile', source_client: 'other' }))
+      return room('server-room', body)
+    }
+
+    await store.addRoom({ name: 'Vault' })
+
+    expect(store.rooms.get('server-room').name).toBe('Renamed Meanwhile')
+    expect([...store.rooms.keys()]).toHaveLength(1)
   })
 
   test('a failed addRoom removes the optimistic room', async () => {
@@ -168,15 +180,15 @@ describe('dungeonStore', () => {
     expect(store.undoStack.at(-1)).toEqual({ type: 'delete_room', roomId: 'other-room' })
   })
 
-  test('room change broadcasts from other clients apply and clear a deleted selection', async () => {
+  test('remote room events apply and a remote delete clears the selection', async () => {
     const store = await loadedStore()
-    const changes = channelNamed(':changes')
+    const roomsChannel = channelNamed(':rooms')
 
-    changes.emitBroadcast('room_upsert', { room: room('r1'), _src: 'other-client' })
+    roomsChannel.emitPostgres('dungeon_rooms', 'INSERT', room('r1', { source_client: 'other' }))
     expect(store.rooms.get('r1')).toBeTruthy()
 
     store.selectElement('room', 'r1')
-    changes.emitBroadcast('room_delete', { roomId: 'r1', _src: 'other-client' })
+    roomsChannel.emitPostgres('dungeon_rooms', 'DELETE', {}, { id: 'r1' })
     expect(store.rooms.size).toBe(0)
     expect(store.selectedElement).toBeNull()
   })
@@ -186,31 +198,102 @@ describe('dungeonStore', () => {
     const store = await loadedStore()
     store.beginRoomEdit('r1', ['name'])
 
-    channelNamed(':changes').emitBroadcast('room_upsert', {
-      room: room('r1', { name: 'Remote Name', notes: 'new notes' }),
-      _src: 'other-client',
-    })
+    channelNamed(':rooms').emitPostgres('dungeon_rooms', 'UPDATE', room('r1', { name: 'Remote Name', notes: 'new notes', source_client: 'other' }))
 
     expect(store.rooms.get('r1').name).toBe('Local Draft')
     expect(store.rooms.get('r1').notes).toBe('new notes')
 
     store.endRoomEdit()
-    channelNamed(':changes').emitBroadcast('room_upsert', {
-      room: room('r1', { name: 'Remote Name 2' }),
-      _src: 'other-client',
-    })
+    channelNamed(':rooms').emitPostgres('dungeon_rooms', 'UPDATE', room('r1', { name: 'Remote Name 2', source_client: 'other' }))
     expect(store.rooms.get('r1').name).toBe('Remote Name 2')
   })
 
-  test('room postgres events respect the source_client echo guard', async () => {
+  test('own INSERT echoes are suppressed; own UPDATE echoes apply once no write is in flight', async () => {
+    kit.responses.dungeon_rooms = { data: [room('r1')], error: null }
+    const store = await loadedStore()
+    await store.updateRoom('r1', { name: 'Mine' })
+    const clientId = kit.apiClient.patch.mock.calls[0][1].source_client
+    const roomsChannel = channelNamed(':rooms')
+
+    roomsChannel.emitPostgres('dungeon_rooms', 'INSERT', room('r-echo', { source_client: clientId }))
+    expect(store.rooms.has('r-echo')).toBe(false)
+
+    roomsChannel.emitPostgres('dungeon_rooms', 'UPDATE', room('r1', { name: 'Server Truth', source_client: clientId }))
+    expect(store.rooms.get('r1').name).toBe('Server Truth')
+  })
+
+  test('a foreign update older than my own is corrected by my own echo (no stuck stale row)', async () => {
+    kit.responses.dungeon_rooms = { data: [room('r1', { name: 'v0' })], error: null }
     const store = await loadedStore()
     const roomsChannel = channelNamed(':rooms')
 
-    roomsChannel.emitPostgres('dungeon_rooms', 'INSERT', room('r-other', { source_client: 'other' }))
-    expect(store.rooms.has('r-other')).toBe(true)
+    await store.updateRoom('r1', { name: 'v2' })
+    const clientId = kit.apiClient.patch.mock.calls[0][1].source_client
 
-    roomsChannel.emitPostgres('dungeon_rooms', 'DELETE', {}, { id: 'r-other' })
-    expect(store.rooms.has('r-other')).toBe(false)
+    roomsChannel.emitPostgres('dungeon_rooms', 'UPDATE', room('r1', { name: 'v1', source_client: 'other' }))
+    expect(store.rooms.get('r1').name).toBe('v1')
+
+    roomsChannel.emitPostgres('dungeon_rooms', 'UPDATE', room('r1', { name: 'v2', source_client: clientId }))
+    expect(store.rooms.get('r1').name).toBe('v2')
+  })
+
+  test('a failed updateRoom does not roll back over a newer remote row', async () => {
+    kit.responses.dungeon_rooms = { data: [room('r1', { name: 'v0' })], error: null }
+    const store = await loadedStore()
+    kit.api['patch /dungeon-rooms/r1'] = () => {
+      channelNamed(':rooms').emitPostgres('dungeon_rooms', 'UPDATE', room('r1', { name: 'Theirs', source_client: 'other' }))
+      throw new kit.ApiError('nope', 500)
+    }
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await store.updateRoom('r1', { name: 'Doomed Edit' })
+
+    expect(store.rooms.get('r1').name).toBe('Theirs')
+    errorSpy.mockRestore()
+  })
+
+  test('a failed deleteRoom does not resurrect over a remote re-insert', async () => {
+    kit.responses.dungeon_rooms = { data: [room('r1', { name: 'v0' })], error: null }
+    const store = await loadedStore()
+    kit.api['delete /dungeon-rooms/r1'] = () => {
+      channelNamed(':rooms').emitPostgres('dungeon_rooms', 'UPDATE', room('r1', { name: 'Theirs', source_client: 'other' }))
+      throw new kit.ApiError('nope', 500)
+    }
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await store.deleteRoom('r1')
+
+    expect(store.rooms.get('r1').name).toBe('Theirs')
+    errorSpy.mockRestore()
+  })
+
+  test('a failed reveal does not roll back a cell another client revealed meanwhile', async () => {
+    const store = await loadedStore()
+    kit.api['post /dungeon-fog/reveal'] = () => {
+      channelNamed(':fog').emitPostgres('dungeon_fog_cells', 'INSERT', { cell_x: 3, cell_y: 3, source_client: 'other' })
+      throw new kit.ApiError('nope', 500)
+    }
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await store.revealFogCell('d1', 3, 3)
+
+    expect(store.isCellRevealed(3, 3)).toBe(true)
+    errorSpy.mockRestore()
+  })
+
+  test('a failed bulk reveal rolls back only the unconfirmed cells', async () => {
+    const store = await loadedStore()
+    kit.api['post /dungeon-fog/reveal-bulk'] = () => {
+      channelNamed(':fog').emitPostgres('dungeon_fog_cells', 'INSERT', { cell_x: 1, cell_y: 1, source_client: 'other' })
+      throw new kit.ApiError('nope', 500)
+    }
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await store.revealFogCells('d1', [{ cellX: 1, cellY: 1 }, { cellX: 2, cellY: 2 }])
+
+    expect(store.isCellRevealed(1, 1)).toBe(true)
+    expect(store.isCellRevealed(2, 2)).toBe(false)
+    errorSpy.mockRestore()
   })
 
   test('revealFogCell is optimistic and rolls back when the API rejects', async () => {
@@ -321,7 +404,6 @@ describe('dungeonStore', () => {
     expect(store.corridors.get('server-corridor')).toBeTruthy()
     expect([...store.corridors.keys()]).toHaveLength(1)
     expect(store.undoStack.at(-1)).toMatchObject({ type: 'delete_corridor', corridorId: 'server-corridor' })
-    expect(channelNamed(':changes').send).toHaveBeenCalledWith(expect.objectContaining({ event: 'corridor_upsert' }))
   })
 
   test('a failed addCorridor removes the optimistic corridor', async () => {
@@ -367,26 +449,17 @@ describe('dungeonStore', () => {
     expect(kit.apiClient.post).toHaveBeenCalledWith('/dungeon-corridors', expect.objectContaining({ id: 'co1' }), 'undo_insert_corridor')
   })
 
-  test('corridor broadcasts and postgres events from other clients apply with echo guards', async () => {
+  test('corridor postgres events from other clients apply and a remote delete clears the selection', async () => {
     const store = await loadedStore()
+    const corridorsChannel = channelNamed(':corridors')
 
-    channelNamed(':changes').emitBroadcast('corridor_upsert', {
-      corridor: { id: 'co1', dungeon_id: 'd1' },
-      _src: 'other-client',
-    })
+    corridorsChannel.emitPostgres('dungeon_corridors', 'INSERT', { id: 'co1', dungeon_id: 'd1', source_client: 'other' })
     expect(store.corridors.has('co1')).toBe(true)
 
     store.selectElement('corridor', 'co1')
-    channelNamed(':changes').emitBroadcast('corridor_delete', { corridorId: 'co1', _src: 'other-client' })
+    corridorsChannel.emitPostgres('dungeon_corridors', 'DELETE', {}, { id: 'co1' })
     expect(store.corridors.size).toBe(0)
     expect(store.selectedElement).toBeNull()
-
-    const corridorsChannel = channelNamed(':corridors')
-    corridorsChannel.emitPostgres('dungeon_corridors', 'INSERT', { id: 'co2', dungeon_id: 'd1', source_client: 'other' })
-    expect(store.corridors.has('co2')).toBe(true)
-
-    corridorsChannel.emitPostgres('dungeon_corridors', 'DELETE', {}, { id: 'co2' })
-    expect(store.corridors.has('co2')).toBe(false)
   })
 
   test('a reconnect refresh re-syncs everything but preserves fields being edited locally', async () => {
@@ -408,11 +481,29 @@ describe('dungeonStore', () => {
     expect(store.isCellRevealed(4, 4)).toBe(true)
   })
 
-  test('cleanup removes all seven channels and resets state', async () => {
+  test('a stale reconnect refresh cannot clobber state after cleanup and re-init', async () => {
+    const store = await loadedStore()
+    const staleMeta = channelNamed(':meta')
+
+    let resolveStale
+    kit.responses.dungeons = () => new Promise(resolve => (resolveStale = () => resolve({ data: dungeonRow({ name: 'Stale Crypt' }), error: null })))
+    const staleRefresh = staleMeta.reconnect()
+
+    store.cleanup()
+    kit.responses.dungeons = { data: dungeonRow({ name: 'Fresh Crypt' }), error: null }
+    await store.init('s1', 'd1')
+
+    resolveStale()
+    await staleRefresh
+
+    expect(store.dungeon.name).toBe('Fresh Crypt')
+  })
+
+  test('cleanup removes all six channels and resets state', async () => {
     const store = await loadedStore()
     store.cleanup()
 
-    expect(kit.channels).toHaveLength(7)
+    expect(kit.channels).toHaveLength(6)
     expect(kit.channels.every(c => c.removed)).toBe(true)
     expect(store.dungeon).toBeNull()
     expect(store.rooms.size).toBe(0)

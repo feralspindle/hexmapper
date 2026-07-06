@@ -2,7 +2,10 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
+import { mergeRealtimeSnapshot } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+
+const FEED_LIMIT = 100
 
 export const useActivityStore = defineStore('activity', () => {
   const activities = ref([])
@@ -10,44 +13,44 @@ export const useActivityStore = defineStore('activity', () => {
   let _dungeonId = null
   let _initGeneration = 0
 
-  async function _fetchActivities(dungeonId) {
+  async function refresh(generation = _initGeneration) {
+    const dungeonId = _dungeonId
+    if (!dungeonId) return
     const { data } = await supabase
       .from('dungeon_activity')
       .select('*')
       .eq('dungeon_id', dungeonId)
       .order('created_at', { ascending: false })
-      .limit(100)
-    return data
-  }
-
-  async function refresh() {
-    const dungeonId = _dungeonId
-    if (!dungeonId) return
-    const data = await _fetchActivities(dungeonId)
-    if (data && _dungeonId === dungeonId) activities.value = data
+      .limit(FEED_LIMIT)
+    if (!data || _dungeonId !== dungeonId || generation !== _initGeneration) return
+    activities.value = mergeRealtimeSnapshot(data, activities.value, FEED_LIMIT)
   }
 
   async function init(sessionId, dungeonId) {
     const generation = ++_initGeneration
     _dungeonId = dungeonId
+    activities.value = []
     if (channel) { realtime.removeChannel(channel); channel = null }
 
-    const data = await _fetchActivities(dungeonId)
-    if (generation !== _initGeneration) return
-    activities.value = data ?? []
-
+    let subscribedRefreshed = false
     channel = realtime
-      .channel(`dungeon:${dungeonId}:activity`, { sessionId, onReconnect: () => refresh() })
+      .channel(`dungeon:${dungeonId}:activity`, { sessionId, onReconnect: () => refresh(generation) })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dungeon_activity', filter: `dungeon_id=eq.${dungeonId}` },
         ({ new: row }) => {
           if (!activities.value.some(a => a.id === row.id)) {
-            activities.value = [row, ...activities.value].slice(0, 100)
+            activities.value = [row, ...activities.value].slice(0, FEED_LIMIT)
           }
         },
       )
-      .subscribe()
+      .subscribe(status => {
+        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
+        subscribedRefreshed = true
+        void refresh(generation)
+      })
+
+    return refresh(generation)
   }
 
   async function record(verb, what) {
@@ -66,7 +69,7 @@ export const useActivityStore = defineStore('activity', () => {
     }
 
     if (!activities.value.some(a => a.id === data.id)) {
-      activities.value = [data, ...activities.value].slice(0, 100)
+      activities.value = [data, ...activities.value].slice(0, FEED_LIMIT)
     }
   }
 

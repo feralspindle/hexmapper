@@ -79,14 +79,12 @@
 import { ref, watch, nextTick } from 'vue'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
-import { useAuthStore } from '@/stores/authStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { useTimeAgo } from '@/composables/useTimeAgo.js'
 
 const chatStore     = useChatStore()
 const activityStore = useActivityStore()
-const authStore     = useAuthStore()
 const { gmName }    = useGMLabel()
 const { timeAgo }   = useTimeAgo()
 

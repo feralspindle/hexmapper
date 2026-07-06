@@ -367,7 +367,7 @@ import { useNotesStore } from '@/stores/notesStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useMapStore } from '@/stores/mapStore.js'
-import { iconForType, faClassForType } from '@/lib/roomItems.js'
+import { faClassForType } from '@/lib/roomItems.js'
 
 const props = defineProps({
   context: { type: String, required: true },

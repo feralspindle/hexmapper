@@ -124,6 +124,7 @@ export const useMapStore = defineStore('map', () => {
   const mapGridOffsetY   = computed(() => activeMap.value?.map_grid_offset_y  ?? 0)
   const mapOffsetLocked  = computed(() => activeMap.value?.map_offset_locked  ?? false)
   const mapFogRevealAll  = computed(() => activeMap.value?.fog_reveal_all     ?? false)
+  const mapExplorationMode = computed(() => activeMap.value?.exploration_mode ?? false)
   const mapScale         = computed(() => activeMap.value?.map_scale          ?? null)
   const mapScaleUnit     = computed(() => activeMap.value?.map_scale_unit     ?? 'miles')
   const mapImageScale    = computed(() => activeMap.value?.map_image_scale    ?? 1)
@@ -235,6 +236,24 @@ export const useMapStore = defineStore('map', () => {
     await sessionStore.setActiveMapId(mapId)
   }
 
+  async function renameMap(mapId, name) {
+    try {
+      await apiClient.patch(`/maps/${mapId}`, { name }, 'rename_map')
+    } catch (error) { console.error('renameMap:', error instanceof ApiError ? error.message : error); return false }
+    maps.value = maps.value.map(m => (m.id === mapId ? { ...m, name } : m))
+    return true
+  }
+
+  async function deleteMap(mapId) {
+    const sessionStore = useSessionStore()
+    if (mapId === sessionStore.activeMapId) return false
+    try {
+      await apiClient.delete(`/maps/${mapId}`, 'delete_map')
+    } catch (error) { console.error('deleteMap:', error instanceof ApiError ? error.message : error); return false }
+    maps.value = maps.value.filter(m => m.id !== mapId)
+    return true
+  }
+
   function applyLocalPatch(patch) {
     const map = activeMap.value
     if (!map) return
@@ -298,6 +317,18 @@ export const useMapStore = defineStore('map', () => {
     }
   }
 
+  async function setExplorationMode(value) {
+    const map = activeMap.value
+    if (!map) return
+    maps.value = maps.value.map(m => m.id === map.id ? { ...m, exploration_mode: value } : m)
+    try {
+      await apiClient.patch(`/maps/${map.id}`, { exploration_mode: value }, value ? 'enable_exploration_mode' : 'disable_exploration_mode')
+    } catch (error) {
+      console.error('setExplorationMode:', error instanceof ApiError ? error.message : error)
+      maps.value = maps.value.map(m => m.id === map.id ? { ...m, exploration_mode: !value } : m)
+    }
+  }
+
   async function uploadMapImage(file) {
     const sessionStore = useSessionStore()
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('Only JPEG, PNG, and WebP images are allowed.')
@@ -338,6 +369,7 @@ export const useMapStore = defineStore('map', () => {
     mapGridOffsetY,
     mapOffsetLocked,
     mapFogRevealAll,
+    mapExplorationMode,
     mapScale,
     mapScaleUnit,
     mapImageScale,
@@ -350,8 +382,11 @@ export const useMapStore = defineStore('map', () => {
     createChildMap,
     applyLocalPatch,
     setActiveMap,
+    renameMap,
+    deleteMap,
     updateActiveMap,
     setFogRevealAll,
+    setExplorationMode,
     uploadMapImage,
   }
 })

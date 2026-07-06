@@ -100,8 +100,38 @@ describe('activityStore', () => {
     await first
 
     expect(store.activities.map(a => a.id)).toEqual(['new'])
-    expect(kit.channels).toHaveLength(1)
-    expect(kit.channels[0].removed).toBe(false)
+    expect(kit.channels).toHaveLength(2)
+    expect(kit.channels[0].removed).toBe(true)
+    expect(kit.channels[1].removed).toBe(false)
+  })
+
+  test('an INSERT arriving while the snapshot is in flight is merged, not dropped', async () => {
+    let resolveFetch
+    kit.responses.dungeon_activity = () => new Promise(resolve => (resolveFetch = () => resolve({ data: [activity('a1', { created_at: '2026-07-06T10:00:00Z' })], error: null })))
+    const store = useActivityStore()
+    const pending = store.init('s1', 'd1')
+
+    kit.channels[0].emitPostgres('dungeon_activity', 'INSERT', activity('a2', { created_at: '2026-07-06T11:00:00Z' }))
+    resolveFetch()
+    await pending
+
+    expect(store.activities.map(a => a.id)).toEqual(['a2', 'a1'])
+  })
+
+  test('the first SUBSCRIBED status triggers exactly one catch-up refresh', async () => {
+    kit.responses.dungeon_activity = { data: [], error: null }
+    const store = useActivityStore()
+    await store.init('s1', 'd1')
+
+    kit.responses.dungeon_activity = { data: [activity('a1')], error: null }
+    kit.channels[0].setStatus('SUBSCRIBED')
+    await new Promise(resolve => setTimeout(resolve))
+    expect(store.activities.map(a => a.id)).toEqual(['a1'])
+
+    const queriesAfterFirst = kit.queries.length
+    kit.channels[0].setStatus('SUBSCRIBED')
+    await new Promise(resolve => setTimeout(resolve))
+    expect(kit.queries.length).toBe(queriesAfterFirst)
   })
 
   test('overlapping inits for the same dungeon never leave a duplicate channel', async () => {
@@ -128,7 +158,7 @@ describe('activityStore', () => {
     resolveFetch()
     await pending
 
-    expect(kit.channels).toHaveLength(0)
+    expect(kit.channels.every(c => c.removed)).toBe(true)
     expect(store.activities).toEqual([])
   })
 

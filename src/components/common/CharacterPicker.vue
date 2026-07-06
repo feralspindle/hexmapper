@@ -4,6 +4,7 @@
       class="ds-tb-btn"
       :class="{ active: open }"
       style="max-width:160px"
+      data-testid="char-picker-toggle"
       @click="open = !open"
     >
       <i class="fa-solid fa-chevron-down shrink-0 transition-transform" style="font-size:11px" :class="open ? 'rotate-180' : ''" />
@@ -64,7 +65,7 @@
 
           <div class="cp-divider" />
 
-          <button class="cp-row cp-row--muted" @click="newCharOpen = true; open = false">
+          <button class="cp-row cp-row--muted" data-testid="char-picker-new" @click="newCharOpen = true; open = false">
             <i class="fa-solid fa-user-plus" />
             {{ sessionStore.isGM ? 'New NPC' : 'New trashbag' }}
           </button>
@@ -72,7 +73,7 @@
             <i class="fa-solid fa-box-archive" />
             Use trashbag from another campaign
           </button>
-          <button class="cp-row cp-row--muted" @click="importMode = true">
+          <button class="cp-row cp-row--muted" data-testid="char-picker-import" @click="importMode = true">
             <i class="fa-solid fa-file-import" />
             Import trashbag
           </button>
@@ -113,10 +114,10 @@
               </button>
               <span class="cp-import-title">Import trashbag</span>
             </div>
-            <textarea v-model="pasteText" rows="6" placeholder="Paste trashbag JSON here" class="cp-textarea" />
+            <textarea v-model="pasteText" rows="6" placeholder="Paste trashbag JSON here" class="cp-textarea" data-testid="char-import-json" />
             <p v-if="importError" class="cp-error">{{ importError }}</p>
             <div class="cp-import-btns">
-              <button class="ds-btn tiny" style="flex:1" @click="handlePaste">Import JSON</button>
+              <button class="ds-btn tiny" style="flex:1" data-testid="char-import-submit" @click="handlePaste">Import JSON</button>
               <label class="ds-btn tiny" style="flex:1;text-align:center;cursor:pointer">
                 Upload file
                 <input type="file" accept=".json,application/json" style="display:none" @change="handleFile" />

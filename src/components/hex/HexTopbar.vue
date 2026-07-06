@@ -180,6 +180,7 @@
             class="ds-tb-btn"
             :class="{ active: charOpen }"
             title="Character sheet"
+            data-testid="char-sheet-toggle"
             @click="$emit('toggle-char')"
         >
             <svg
@@ -285,12 +286,12 @@ import BugReportButton from "@/components/common/BugReportButton.vue";
 import CharacterPicker from "@/components/common/CharacterPicker.vue";
 import SessionTorchTimer from "@/components/common/SessionTorchTimer.vue";
 
-const props = defineProps({
+defineProps({
     hexMode: { type: String, default: null },
     charOpen: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["switch-mode", "toggle-char"]);
+defineEmits(["switch-mode", "toggle-char"]);
 
 const sessionStore = useSessionStore();
 const authStore = useAuthStore();

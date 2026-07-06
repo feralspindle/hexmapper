@@ -1,5 +1,5 @@
 <template>
-    <div class="cs-root">
+    <div class="cs-root" data-testid="char-sheet">
         <template v-if="!characterStore.character">
             <div class="cs-empty-state">
                 <svg
@@ -56,7 +56,7 @@
                         "
                     >
                         <div style="min-width: 0">
-                            <div class="cs-char-name">{{ char.name }}</div>
+                            <div class="cs-char-name" data-testid="char-name">{{ char.name }}</div>
                             <div class="cs-char-role">
                                 {{ char.ancestry }} {{ char.class }} · Lvl
                                 {{ char.level
@@ -152,6 +152,7 @@
                     :key="t.id"
                     class="cs-tab"
                     :class="{ active: subTab === t.id }"
+                    :data-testid="`char-tab-${t.id}`"
                     @click="subTab = t.id"
                 >
                     {{ t.label }}
@@ -169,15 +170,17 @@
                                 v-if="canEdit"
                                 class="cs-adj-btn"
                                 title="−1 HP"
+                                data-testid="hp-minus"
                                 @click="characterStore.adjustHp(-1)"
                             >
                                 −
                             </button>
-                            <span class="cs-big-val">{{ char.currentHp }}</span>
+                            <span class="cs-big-val" data-testid="hp-value">{{ char.currentHp }}</span>
                             <button
                                 v-if="canEdit"
                                 class="cs-adj-btn"
                                 title="+1 HP"
+                                data-testid="hp-plus"
                                 @click="characterStore.adjustHp(1)"
                             >
                                 +
@@ -213,6 +216,53 @@
                                 class="cs-hp-bar-fill"
                                 :style="{ width: hpPct() + '%' }"
                             />
+                        </div>
+
+                        <div
+                            v-if="canEdit || (char.tempHp ?? 0) > 0"
+                            class="cs-temp-hp"
+                        >
+                            <span class="cs-temp-hp-label">Temp</span>
+                            <button
+                                v-if="canEdit"
+                                class="cs-adj-btn cs-adj-btn-sm"
+                                title="−1 Temp HP"
+                                data-testid="temp-hp-minus"
+                                @click="characterStore.adjustTempHp(-1)"
+                            >
+                                −
+                            </button>
+                            <input
+                                v-if="editingTempHp && canEdit"
+                                ref="tempHpInputRef"
+                                v-model.number="tempHpDraft"
+                                type="number"
+                                min="0"
+                                class="cs-input cs-temp-hp-input"
+                                @keyup.enter="saveTempHp"
+                                @keyup.escape="editingTempHp = false"
+                                @blur="saveTempHp"
+                            />
+                            <button
+                                v-else-if="canEdit"
+                                class="cs-temp-hp-val"
+                                data-testid="temp-hp-value"
+                                @click="startEditTempHp"
+                            >
+                                {{ char.tempHp ?? 0 }}
+                            </button>
+                            <span v-else class="cs-temp-hp-val cs-temp-hp-static" data-testid="temp-hp-value">{{
+                                char.tempHp ?? 0
+                            }}</span>
+                            <button
+                                v-if="canEdit"
+                                class="cs-adj-btn cs-adj-btn-sm"
+                                title="+1 Temp HP"
+                                data-testid="temp-hp-plus"
+                                @click="characterStore.adjustTempHp(1)"
+                            >
+                                +
+                            </button>
                         </div>
                     </div>
 
@@ -425,6 +475,107 @@
                             + Restore Token
                         </button>
                     </template>
+                </div>
+
+                <div v-if="!isGmCharacter" class="cs-renown-block">
+                    <div class="cs-renown-header">
+                        <span class="cs-section-label">Renown</span>
+                        <input
+                            v-if="editingRenown && canEdit"
+                            ref="renownInputRef"
+                            v-model.number="renownDraft"
+                            type="number"
+                            class="cs-input cs-renown-input"
+                            @keyup.enter="saveRenown"
+                            @keyup.escape="editingRenown = false"
+                            @blur="saveRenown"
+                        />
+                        <button
+                            v-else-if="canEdit"
+                            class="cs-renown-value"
+                            title="Set renown"
+                            data-testid="renown-value"
+                            @click="startEditRenown"
+                        >
+                            {{ renownValue }}
+                        </button>
+                        <span v-else class="cs-renown-value cs-renown-static" data-testid="renown-value">{{
+                            renownValue
+                        }}</span>
+                    </div>
+
+                    <div v-if="canEdit" class="cs-renown-controls">
+                        <button
+                            class="cs-adj-btn cs-adj-btn-sm"
+                            title="−1 Renown"
+                            data-testid="renown-minus"
+                            @click="bumpRenown(-1)"
+                        >
+                            −
+                        </button>
+                        <input
+                            v-model="renownReason"
+                            type="text"
+                            class="cs-input cs-renown-reason"
+                            placeholder="reason (optional)"
+                            maxlength="120"
+                            @keyup.enter="bumpRenown(1)"
+                        />
+                        <button
+                            class="cs-adj-btn cs-adj-btn-sm"
+                            title="+1 Renown"
+                            data-testid="renown-plus"
+                            @click="bumpRenown(1)"
+                        >
+                            +
+                        </button>
+                    </div>
+
+                    <button
+                        v-if="renownLogCount"
+                        class="cs-renown-log-toggle"
+                        @click="showRenownLog = !showRenownLog"
+                    >
+                        {{ showRenownLog ? "Hide" : "Show" }} history ({{
+                            renownLogCount
+                        }})
+                    </button>
+
+                    <ul
+                        v-if="showRenownLog && renownLogCount"
+                        class="cs-renown-log"
+                    >
+                        <li
+                            v-for="entry in renownLog"
+                            :key="entry.id"
+                            class="cs-renown-log-row"
+                        >
+                            <span
+                                class="cs-renown-delta"
+                                :class="
+                                    entry.delta > 0
+                                        ? 'cs-renown-gain'
+                                        : 'cs-renown-loss'
+                                "
+                            >
+                                {{ entry.delta > 0 ? "+" : "" }}{{ entry.delta }}
+                            </span>
+                            <span class="cs-renown-reason-text">{{
+                                entry.reason || "—"
+                            }}</span>
+                            <span class="cs-renown-when">{{
+                                timeAgo(entry.at)
+                            }}</span>
+                            <button
+                                v-if="canEdit"
+                                class="cs-renown-del"
+                                title="Remove entry"
+                                @click="characterStore.deleteRenownEntry(entry.id)"
+                            >
+                                ×
+                            </button>
+                        </li>
+                    </ul>
                 </div>
 
                 <div>
@@ -1124,6 +1275,7 @@
                             :key="item.instanceId"
                             class="cs-list-item"
                             :class="{ disabled: item.disabled }"
+                            data-testid="gear-item"
                         >
                             <template v-if="editingGearId !== item.instanceId">
                                 <div
@@ -1207,7 +1359,7 @@
                                             </div>
                                             <div class="cs-list-sub">
                                                 <template v-if="isGemItem(item)">
-                                                    {{ calcCharGearItemSlots(item) }} slot{{ calcCharGearItemSlots(item) !== 1 ? 's' : '' }} total · ×{{ item.quantity }} (10/slot)
+                                                    {{ calcGearItemSlots(item) }} slot{{ calcGearItemSlots(item) !== 1 ? 's' : '' }} total · ×{{ item.quantity }} (10/slot)
                                                 </template>
                                                 <template v-else>
                                                     {{ item.slots }} slot{{
@@ -1398,6 +1550,7 @@
                         v-if="canEdit"
                         class="cs-add-btn"
                         style="margin-top: 8px"
+                        data-testid="gear-add"
                         @click="showAddGear = !showAddGear"
                     >
                         + Add Gear
@@ -1408,6 +1561,7 @@
                                 v-model="newGearDraft.name"
                                 placeholder="Item name"
                                 class="cs-input"
+                                data-testid="gear-name-input"
                                 @keyup.enter="submitAddGear"
                             />
                             <div style="display: flex; gap: 6px">
@@ -1477,6 +1631,7 @@
                             <div class="cs-form-actions">
                                 <button
                                     class="cs-btn primary"
+                                    data-testid="gear-submit"
                                     @click="submitAddGear"
                                 >
                                     Add
@@ -1693,6 +1848,7 @@
                                     class="cs-big-val cs-clickable"
                                     style="font-size: 20px"
                                     v-tooltip.bottom="'Click to edit'"
+                                    :data-testid="`coin-${coin.key}`"
                                     @click="startEditCoin(coin.key)"
                                 >
                                     {{ char[coin.key] ?? 0 }}
@@ -1708,6 +1864,7 @@
                                         color: var(--ink);
                                         line-height: 1.2;
                                     "
+                                    :data-testid="`coin-${coin.key}`"
                                 >
                                     {{ char[coin.key] ?? 0 }}
                                 </div>
@@ -1927,7 +2084,8 @@ import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useVaultStore } from "@/stores/vaultStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
-import { supabase } from "@/lib/supabase";
+import { useTimeAgo } from "@/composables/useTimeAgo.js";
+import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
@@ -1935,16 +2093,7 @@ const sessionStore = useSessionStore();
 const authStore    = useAuthStore();
 const vaultStore   = useVaultStore();
 
-const { setActive, characters, currentSessionId, saving, updateField } = characterStore;
 const { confirm } = useConfirmDialog();
-
-function augmentData(data) {
-    return {
-        ...data,
-        currentHp: data.currentHp ?? data.maxHitPoints ?? 0,
-        luckTokens: data.luckTokens ?? { current: 1, max: 3 },
-    };
-}
 
 const canEdit = computed(() => characterStore.canEditActiveCharacter);
 const char = computed(() => characterStore.character);
@@ -2014,18 +2163,6 @@ function atkEffectiveBonus(atk) {
     return atk.bonus;
 }
 
-const GEM_NAMES = ['emerald', 'pearl', 'ruby', 'sapphire', 'diamond']
-
-function isGemItem(item) {
-    const n = (item.name ?? '').toLowerCase()
-    return GEM_NAMES.some(g => n.includes(g))
-}
-
-function calcCharGearItemSlots(item) {
-    if (isGemItem(item)) return Math.ceil((item.quantity ?? 1) / 10)
-    return (item.slots ?? 0) * (item.quantity ?? 1)
-}
-
 const rationSlots = computed(() => {
     const count = char.value?.rations ?? 0;
     return count > 0 ? Math.ceil(count / 3) : 0;
@@ -2033,18 +2170,8 @@ const rationSlots = computed(() => {
 
 const coinGearSlots = computed(() => {
     if (!char.value) return 0
-    return ['gold', 'silver', 'copper']
-        .map(c => Math.max(0, Math.ceil(((char.value[c] ?? 0) - 100) / 100)))
-        .reduce((s, n) => s + n, 0)
-})
-
-const coinSlotBreakdown = computed(() => {
-    if (!char.value) return ''
-    const parts = []
-    if ((char.value.gold   ?? 0) > 0) parts.push(`${char.value.gold}gp`)
-    if ((char.value.silver ?? 0) > 0) parts.push(`${char.value.silver}sp`)
-    if ((char.value.copper ?? 0) > 0) parts.push(`${char.value.copper}cp`)
-    return parts.join(' · ')
+    const total = (char.value.gold ?? 0) + (char.value.silver ?? 0) + (char.value.copper ?? 0)
+    return Math.max(0, Math.ceil((total - 100) / 100))
 })
 
 const effectiveGearSlotsUsed = computed(() => {
@@ -2052,7 +2179,7 @@ const effectiveGearSlotsUsed = computed(() => {
         ? (char.value?.gearSlotsUsed ?? 0)
         : char.value.gear
               .filter((item) => !item.disabled)
-              .reduce((sum, item) => sum + calcCharGearItemSlots(item), 0)
+              .reduce((sum, item) => sum + calcGearItemSlots(item), 0)
     return gearSlots + rationSlots.value + coinGearSlots.value
 });
 
@@ -2117,6 +2244,21 @@ const acInputRef = ref(null);
 const editingXP = ref(false);
 const xpDraft = ref(0);
 const xpInputRef = ref(null);
+
+const editingTempHp = ref(false);
+const tempHpDraft = ref(0);
+const tempHpInputRef = ref(null);
+
+function startEditTempHp() {
+    tempHpDraft.value = char.value.tempHp ?? 0;
+    editingTempHp.value = true;
+    nextTick(() => tempHpInputRef.value?.focus());
+}
+function saveTempHp() {
+    if (!editingTempHp.value) return;
+    characterStore.setTempHp(tempHpDraft.value);
+    editingTempHp.value = false;
+}
 
 function startEditMaxHp() {
     maxHpDraft.value = char.value.maxHitPoints ?? 0;
@@ -2344,11 +2486,15 @@ function startGearEdit(item) {
     };
 }
 function saveGearEdit(instanceId) {
-    characterStore.updateGearItem(instanceId, {
+    const patch = {
         ...editGearDraft.value,
         slots: Math.round(Math.max(0, Number(editGearDraft.value.slots) || 0)),
         quantity: Number(editGearDraft.value.quantity) || 1,
-    });
+    };
+    const name = (patch.name ?? "").trim();
+    if (name) patch.name = name;
+    else delete patch.name;
+    characterStore.updateGearItem(instanceId, patch);
     editingGearId.value = null;
 }
 
@@ -2394,6 +2540,36 @@ const dexMod = computed(() => {
     const dex = char.value?.stats?.DEX;
     return dex !== undefined ? statMod(dex) : 0;
 });
+
+const { timeAgo } = useTimeAgo();
+
+const renownValue = computed(() => characterStore.renownValue());
+const renownLogCount = computed(() => char.value?.renownLog?.length ?? 0);
+const showRenownLog = ref(false);
+const renownLog = computed(() =>
+    showRenownLog.value ? [...(char.value?.renownLog ?? [])].reverse() : [],
+);
+
+const renownReason = ref("");
+const editingRenown = ref(false);
+const renownDraft = ref(0);
+const renownInputRef = ref(null);
+
+function bumpRenown(delta) {
+    characterStore.adjustRenown(delta, renownReason.value);
+    renownReason.value = "";
+}
+function startEditRenown() {
+    renownDraft.value = renownValue.value;
+    editingRenown.value = true;
+    nextTick(() => renownInputRef.value?.focus());
+}
+function saveRenown() {
+    if (!editingRenown.value) return;
+    editingRenown.value = false;
+    if (typeof renownDraft.value !== "number") return;
+    characterStore.setRenown(renownDraft.value);
+}
 
 const editingInitiative = ref(false);
 const initiativeDraft = ref(0);
@@ -2658,6 +2834,166 @@ button.cs-big-val:hover .cs-tip {
     background: linear-gradient(90deg, #6b3a2a, var(--accent, #c8a86b));
     display: block;
     transition: width 0.3s ease;
+}
+
+.cs-temp-hp {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+}
+.cs-temp-hp-label {
+    font-family: var(--font-zine, "Special Elite", serif);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #3f6b8a;
+}
+.cs-adj-btn-sm {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+}
+.cs-temp-hp-val {
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 13px;
+    font-weight: 700;
+    color: #3f6b8a;
+    min-width: 14px;
+    text-align: center;
+}
+button.cs-temp-hp-val {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+button.cs-temp-hp-val:hover {
+    color: var(--accent-2, #b8541c);
+}
+.cs-temp-hp-input {
+    width: 44px;
+    text-align: center;
+    padding: 2px 4px;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-weight: 700;
+}
+
+.cs-renown-block {
+    background: var(--paper-2, #e4d8c0);
+    border: 1px solid var(--rule, #d4c4a8);
+    padding: 8px 10px;
+}
+.cs-renown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.cs-renown-value {
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 18px;
+    font-weight: 700;
+    color: #6b4e8a;
+    min-width: 20px;
+    text-align: right;
+}
+button.cs-renown-value {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+button.cs-renown-value:hover {
+    color: var(--accent-2, #b8541c);
+}
+.cs-renown-input {
+    width: 56px;
+    text-align: center;
+    padding: 2px 4px;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-weight: 700;
+}
+.cs-renown-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+}
+.cs-renown-reason {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 3px 6px;
+    font-size: 11px;
+}
+.cs-renown-log-toggle {
+    margin-top: 8px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: var(--font-zine, "Special Elite", serif);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #9e8e7e);
+}
+.cs-renown-log-toggle:hover {
+    color: var(--accent-2, #b8541c);
+}
+.cs-renown-log {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+.cs-renown-log-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    padding: 2px 0;
+    border-top: 1px dotted var(--rule, #d4c4a8);
+}
+.cs-renown-delta {
+    flex: 0 0 auto;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-weight: 700;
+    min-width: 22px;
+    text-align: center;
+}
+.cs-renown-gain {
+    color: #3f7a4f;
+}
+.cs-renown-loss {
+    color: #a33d3d;
+}
+.cs-renown-reason-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink, #1a1410);
+}
+.cs-renown-when {
+    flex: 0 0 auto;
+    font-size: 10px;
+    color: var(--ink-mute, #9e8e7e);
+}
+.cs-renown-del {
+    flex: 0 0 auto;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-mute, #9e8e7e);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+}
+.cs-renown-del:hover {
+    color: #a33d3d;
 }
 
 .cs-stats-grid {

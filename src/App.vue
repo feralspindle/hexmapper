@@ -1,5 +1,7 @@
 <template>
-  <RouterView />
+  <!-- Views capture route params once on mount, so a param-only navigation
+       (e.g. dungeon A -> dungeon B) must remount rather than reuse the component. -->
+  <RouterView :key="$route.path" />
   <RealtimeStatusBanner />
 </template>
 

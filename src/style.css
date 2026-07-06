@@ -968,6 +968,26 @@ textarea.ds-input {
     border-color: var(--ink-mute);
 }
 
+.hm-card-icon-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--ink-mute);
+    transition: color 0.12s;
+}
+
+.hm-card-icon-btn:hover {
+    color: var(--ink-2);
+}
+
+.hm-card-icon-btn--danger:hover {
+    color: #8a1c1c;
+}
+
 .hm-inspector-empty {
     text-align: center;
     padding: 26px 18px;
@@ -1576,6 +1596,17 @@ textarea.ds-input {
 .ds-hp-max-val {
     font-size: 12px;
     opacity: 0.5;
+}
+.ds-temp-hp-badge {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 700;
+    color: #3f6b8a;
+    background: rgba(63, 107, 138, 0.14);
+    border: 1px solid rgba(63, 107, 138, 0.3);
+    border-radius: 3px;
+    padding: 1px 4px;
+    line-height: 1;
 }
 .ds-hp-bar {
     height: 4px;

@@ -26,6 +26,7 @@
                   type="text"
                   placeholder="Aldric Thornwood"
                   class="bg-stone-800 border border-stone-600 rounded px-2 py-1.5 text-xs text-stone-100 focus:outline-none focus:border-parchment-400 placeholder-stone-600"
+                  data-testid="new-char-name"
                 />
               </label>
               <label class="flex-1 flex flex-col gap-1">
@@ -127,6 +128,7 @@
             :disabled="!form.name.trim() || saving"
             class="flex-1 py-2 text-xs rounded font-semibold transition-colors disabled:opacity-40 disabled:cursor-default"
             :class="form.name.trim() && !saving ? 'bg-parchment-500 hover:bg-parchment-400 text-stone-900' : 'bg-stone-700 text-stone-500'"
+            data-testid="new-char-create"
             @click="submit"
           >
             <i v-if="saving" class="fa-solid fa-spinner fa-spin mr-1" />

@@ -79,7 +79,7 @@ import { useAuthStore } from '@/stores/authStore.js'
 import { supabase } from '@/lib/supabase.js'
 import { activeNavDropdown } from '@/composables/useNavDropdown.js'
 
-const props = defineProps({ label: { type: String, default: '' } })
+defineProps({ label: { type: String, default: '' } })
 
 const isStaging = import.meta.env.VITE_APP_ENV === 'staging'
 

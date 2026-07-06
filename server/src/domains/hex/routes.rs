@@ -11,4 +11,5 @@ pub fn router() -> Router<AppState> {
         .route("/hex-cells/delete", post(handlers::delete_hex))
         .route("/hex-cells/bulk-reveal", post(handlers::bulk_reveal))
         .route("/hex-cells/clear", post(handlers::clear_hex))
+        .route("/hex-cells/explore", post(handlers::explore_hex))
 }

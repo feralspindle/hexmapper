@@ -138,6 +138,27 @@
                     </svg>
                     <span class="ds-tip">Hide all hexes</span>
                 </button>
+                <button
+                    v-if="explorationAvailable"
+                    class="ds-tool"
+                    data-testid="hex-exploration-mode"
+                    :aria-pressed="explorationMode"
+                    @click="emit('toggle-exploration')"
+                >
+                    <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                    </svg>
+                    <span class="ds-tip">Exploration mode — unentered hexes generate on arrival</span>
+                </button>
             </div>
             <div class="ds-tool-group">
                 <span class="ds-tool-label">Map</span>
@@ -192,6 +213,27 @@
                         />
                     </svg>
                     <span class="ds-tip">Map settings</span>
+                </button>
+                <button
+                    v-if="explorationAvailable"
+                    class="ds-tool"
+                    data-testid="hex-exploration-mode"
+                    :aria-pressed="explorationMode"
+                    @click="emit('toggle-exploration')"
+                >
+                    <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                    </svg>
+                    <span class="ds-tip">Exploration mode — unentered hexes generate on arrival</span>
                 </button>
             </div>
             <div class="ds-tool-group">
@@ -516,15 +558,17 @@ import { usePartyNotebook } from "@/composables/usePartyNotebook.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 import { soundEnabled, toggleSound } from "@/lib/soundSettings.js";
 
-const props = defineProps({
+defineProps({
     hexMode: { type: String, default: null },
     activeTool: { type: String, default: "select" },
     settingsOpen: { type: Boolean, default: false },
     isGM: { type: Boolean, default: false },
     floating: { type: Boolean, default: false },
+    explorationAvailable: { type: Boolean, default: false },
+    explorationMode: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["tool", "reveal-all", "hide-all", "map-settings"]);
+const emit = defineEmits(["tool", "reveal-all", "hide-all", "map-settings", "toggle-exploration"]);
 
 const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook();
 const { visible: partyVisible, toggle: toggleParty } = usePartyPanel();
