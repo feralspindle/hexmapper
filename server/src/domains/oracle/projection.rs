@@ -13,17 +13,18 @@ pub async fn append_table_created(
     let sql = format!(
         r#"
         {APPEND_EVENT_CTE}
-        insert into oracle_tables (id, session_id, created_by, name, description, mode, created_at, updated_at)
+        insert into oracle_tables (id, session_id, created_by, name, description, mode, tag, created_at, updated_at)
         select aggregate_id,
                session_id,
                (metadata->>'user_id')::uuid,
                payload->>'name',
                coalesce(payload->>'description', ''),
                coalesce(payload->>'mode', 'weighted'),
+               nullif(payload->>'tag', ''),
                created_at,
                created_at
         from evt
-        returning id, session_id, created_by, name, description, mode, created_at, updated_at
+        returning id, session_id, created_by, name, description, mode, tag, created_at, updated_at
         "#
     );
 
@@ -50,10 +51,11 @@ pub async fn append_table_updated(
             name = case when evt.payload ? 'name' then evt.payload->>'name' else ot.name end,
             description = case when evt.payload ? 'description' then coalesce(evt.payload->>'description', '') else ot.description end,
             mode = case when evt.payload ? 'mode' then evt.payload->>'mode' else ot.mode end,
+            tag = case when evt.payload ? 'tag' then nullif(evt.payload->>'tag', '') else ot.tag end,
             updated_at = evt.created_at
         from evt
         where ot.id = evt.aggregate_id
-        returning ot.id, ot.session_id, ot.created_by, ot.name, ot.description, ot.mode, ot.created_at, ot.updated_at
+        returning ot.id, ot.session_id, ot.created_by, ot.name, ot.description, ot.mode, ot.tag, ot.created_at, ot.updated_at
         "#
     );
 

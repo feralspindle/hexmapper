@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::authz;
-use crate::domains::oracle::projection;
+use crate::domains::oracle::{projection, roll};
 use crate::error::AppError;
 use crate::events::NewEvent;
 use crate::retry_tx;
@@ -20,6 +20,7 @@ const MAX_DESC_LEN: usize = 500;
 const MAX_RESULT_LEN: usize = 500;
 const MAX_NOTES_LEN: usize = 1000;
 const MAX_QUESTION_LEN: usize = 500;
+const MAX_TAG_LEN: usize = 60;
 
 #[derive(Debug, Deserialize)]
 pub struct SessionQuery {
@@ -34,6 +35,7 @@ pub struct OracleTableRow {
     pub name: String,
     pub description: String,
     pub mode: String,
+    pub tag: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -74,6 +76,7 @@ pub struct CreateTableRequest {
     pub description: String,
     #[serde(default = "default_table_mode")]
     pub mode: String,
+    pub tag: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,6 +84,7 @@ pub struct UpdateTableRequest {
     pub name: Option<String>,
     pub description: Option<String>,
     pub mode: Option<String>,
+    pub tag: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,7 +142,7 @@ pub async fn list_tables(
     require_member(&state, auth.user_id, query.session_id).await?;
     let rows = sqlx::query_as(
         r#"
-        select id, session_id, created_by, name, description, mode, created_at, updated_at
+        select id, session_id, created_by, name, description, mode, tag, created_at, updated_at
         from oracle_tables
         where session_id = $1
         order by updated_at desc, created_at desc
@@ -182,13 +186,14 @@ pub async fn create_table(
     let name = clean_text(&req.name, "table name", 1, MAX_NAME_LEN)?;
     let description = clean_text(&req.description, "description", 0, MAX_DESC_LEN)?;
     validate_mode(&req.mode)?;
+    let tag = clean_tag(req.tag.as_deref())?;
 
     let event = NewEvent {
         aggregate_type: "oracle_table",
         aggregate_id: Uuid::new_v4(),
         session_id: Some(req.session_id),
         event_type: "oracle_table.created",
-        payload: json!({ "name": name, "description": description, "mode": req.mode }),
+        payload: json!({ "name": name, "description": description, "mode": req.mode, "tag": tag }),
         metadata: auth.metadata(),
     };
 
@@ -224,6 +229,9 @@ pub async fn update_table(
     if let Some(mode) = req.mode {
         validate_mode(&mode)?;
         payload.insert("mode".to_string(), json!(mode));
+    }
+    if let Some(tag) = req.tag {
+        payload.insert("tag".to_string(), json!(clean_tag(Some(&tag))?));
     }
     if payload.is_empty() {
         return Err(AppError::BadRequest("empty table update".to_string()));
@@ -525,6 +533,20 @@ fn clean_text(value: &str, field: &str, min: usize, max: usize) -> Result<String
     Ok(trimmed)
 }
 
+fn clean_tag(value: Option<&str>) -> Result<Option<String>, AppError> {
+    let Some(value) = value else { return Ok(None) };
+    let trimmed = value.trim().to_lowercase();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > MAX_TAG_LEN {
+        return Err(AppError::BadRequest(format!(
+            "tag cannot exceed {MAX_TAG_LEN} characters"
+        )));
+    }
+    Ok(Some(trimmed))
+}
+
 fn validate_mode(mode: &str) -> Result<(), AppError> {
     if matches!(mode, "weighted" | "range") {
         Ok(())
@@ -650,41 +672,33 @@ async fn table_result(
         return Err(AppError::BadRequest("table has no rows".to_string()));
     }
 
-    if scope.mode == "range"
-        && rows
-            .iter()
-            .all(|row| row.range_min.is_some() && row.range_max.is_some())
-    {
-        let min = rows.iter().filter_map(|row| row.range_min).min().unwrap();
-        let max = rows.iter().filter_map(|row| row.range_max).max().unwrap();
-        let roll = rand::thread_rng().gen_range(min..=max);
-        let row = rows
-            .iter()
-            .find(|row| row.range_min.unwrap() <= roll && roll <= row.range_max.unwrap())
-            .ok_or_else(|| {
-                AppError::BadRequest("range table has a gap for the rolled value".to_string())
-            })?;
+    let roll_rows: Vec<roll::RollRow> = rows
+        .iter()
+        .map(|row| roll::RollRow {
+            weight: row.weight,
+            range_min: row.range_min,
+            range_max: row.range_max,
+        })
+        .collect();
 
-        return Ok(json!({
-            "table_mode": "range",
-            "roll": roll,
-            "row_id": row.id,
-            "result": row.result,
-            "notes": row.notes,
-        }));
-    }
-
-    let total_weight: i32 = rows.iter().map(|row| row.weight).sum();
-    if total_weight <= 0 {
-        return Err(AppError::BadRequest(
-            "table has no positive row weights".to_string(),
-        ));
-    }
-
-    let mut roll = rand::thread_rng().gen_range(1..=total_weight);
-    for row in rows {
-        roll -= row.weight;
-        if roll <= 0 {
+    match roll::resolve(&scope.mode, &roll_rows) {
+        roll::TableRoll::Range { roll, index } => {
+            let row = &rows[index];
+            return Ok(json!({
+                "table_mode": "range",
+                "roll": roll,
+                "row_id": row.id,
+                "result": row.result,
+                "notes": row.notes,
+            }));
+        }
+        roll::TableRoll::RangeGap { .. } => {
+            return Err(AppError::BadRequest(
+                "range table has a gap for the rolled value".to_string(),
+            ));
+        }
+        roll::TableRoll::Weighted { total_weight, index } => {
+            let row = &rows[index];
             return Ok(json!({
                 "table_mode": "weighted",
                 "total_weight": total_weight,
@@ -693,6 +707,7 @@ async fn table_result(
                 "notes": row.notes,
             }));
         }
+        roll::TableRoll::NoPositiveWeight => {}
     }
 
     Err(AppError::BadRequest(

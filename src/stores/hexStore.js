@@ -58,6 +58,8 @@ function cellKey(q, r) {
   return `${q}:${r}`;
 }
 
+// Mirrors the server's sentinel contract (server/src/domains/hex/visibility.rs):
+// fogged cells expose coordinates plus revealed/explored flags, nothing else.
 function hiddenCellSentinel(row) {
   return {
     session_id: row.session_id,
@@ -65,6 +67,7 @@ function hiddenCellSentinel(row) {
     q: row.q,
     r: row.r,
     revealed: false,
+    explored: row.explored ?? true,
   };
 }
 
@@ -104,22 +107,15 @@ export const useHexStore = defineStore("hex", () => {
     hexCells.value = next;
   }
 
-  async function _fetchHexRows(sessionId, mapId, isGM) {
-    if (!isGM) {
-      const query = new URLSearchParams({
-        session_id: sessionId,
-        map_id: mapId,
-      });
-      return apiClient.get(`/hex-cells?${query.toString()}`);
-    }
-
-    const { data, error } = await supabase
-      .from("hex_cells")
-      .select("*")
-      .eq("map_id", mapId);
-
-    if (error) throw error;
-    return data ?? [];
+  // All roles fetch through the server so unexplored cells arrive as
+  // sentinels; a direct supabase read would hand the solo driver (who is
+  // the session owner under RLS) the full contents of fogged hexes.
+  async function _fetchHexRows(sessionId, mapId) {
+    const query = new URLSearchParams({
+      session_id: sessionId,
+      map_id: mapId,
+    });
+    return apiClient.get(`/hex-cells?${query.toString()}`);
   }
 
   async function _refreshPlayerHexes() {
@@ -136,7 +132,7 @@ export const useHexStore = defineStore("hex", () => {
     const mapId = currentMapId.value;
     playerRefreshInFlight = true;
     try {
-      const rows = await _fetchHexRows(sessionId, mapId, false);
+      const rows = await _fetchHexRows(sessionId, mapId);
       if (
         currentSessionId.value === sessionId &&
         currentMapId.value === mapId &&
@@ -183,7 +179,7 @@ export const useHexStore = defineStore("hex", () => {
     const mapId = currentMapId.value;
     if (!sessionId || !mapId) return;
     try {
-      const rows = await _fetchHexRows(sessionId, mapId, useSessionStore().isGM);
+      const rows = await _fetchHexRows(sessionId, mapId);
       if (currentSessionId.value !== sessionId || currentMapId.value !== mapId)
         return;
       _replaceHexCells(rows);
@@ -209,7 +205,7 @@ export const useHexStore = defineStore("hex", () => {
 
     const isGM = useSessionStore().isGM;
     try {
-      const rows = await _fetchHexRows(sessionId, mapId, isGM);
+      const rows = await _fetchHexRows(sessionId, mapId);
       if (generation !== initGeneration) return;
       _replaceHexCells(rows);
       loadError.value = null;
@@ -353,6 +349,40 @@ export const useHexStore = defineStore("hex", () => {
       event: "party",
       payload: { q, r },
     });
+    if (useSessionStore().playMode === "gm_less" && isCellUnexplored(q, r))
+      await exploreHex(q, r);
+  }
+
+  function isCellUnexplored(q, r) {
+    const cell = hexCells.value.get(cellKey(q, r));
+    if (cell) return cell.explored === false;
+    return useMapStore().mapExplorationMode;
+  }
+
+  async function exploreHex(q, r) {
+    if (!currentMapId.value) return null;
+    try {
+      const data = await apiClient.post("/hex-cells/explore", {
+        session_id: currentSessionId.value,
+        map_id: currentMapId.value,
+        q,
+        r,
+      }, "explore_hex");
+      if (data?.cell) hexCells.value.set(cellKey(q, r), data.cell);
+      if (data?.generated) _notifyHexChanged();
+      return data;
+    } catch (error) {
+      console.error("exploreHex error:", error instanceof ApiError ? error.message : error);
+      return null;
+    }
+  }
+
+  async function markUnexplored(q, r) {
+    await upsertHex(q, r, { explored: false, revealed: false });
+  }
+
+  async function markExplored(q, r) {
+    await upsertHex(q, r, { explored: true });
   }
 
   async function clearPartyHex() {
@@ -374,7 +404,7 @@ export const useHexStore = defineStore("hex", () => {
     if (eventType === "INSERT" || eventType === "UPDATE") {
       if (row.source_client === CLIENT_ID) return;
       const isGM = useSessionStore().isGM;
-      if (!isGM && row.revealed === false) {
+      if (row.explored === false || (!isGM && row.revealed === false)) {
         hexCells.value.set(cellKey(row.q, row.r), hiddenCellSentinel(row));
         return;
       }
@@ -434,6 +464,7 @@ export const useHexStore = defineStore("hex", () => {
       if (useSessionStore().hexMode === "blank") body.revealed = true;
       else delete body.revealed;
     }
+    if (!("explored" in patch)) delete body.explored;
 
     const intent = "revealed" in patch
       ? (patch.revealed ? "reveal_hex" : "hide_hex")
@@ -708,6 +739,10 @@ export const useHexStore = defineStore("hex", () => {
     clearAll,
     setPartyHex,
     clearPartyHex,
+    isCellUnexplored,
+    exploreHex,
+    markUnexplored,
+    markExplored,
     cleanup,
   };
 });

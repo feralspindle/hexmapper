@@ -57,14 +57,15 @@ describe('hexStore behavior', () => {
     localStorage.clear()
   })
 
-  test('GM init loads all cells straight from supabase', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0), cell(1, 2)], error: null }
+  test('GM init fetches through the API so unexplored cells stay redacted', async () => {
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0), cell(1, 2)]
     const store = useHexStore()
     await store.init('s1', 'm1')
 
     expect(store.hexCells.size).toBe(2)
     expect(store.hexCells.get('1:2').id).toBe('cell-1-2')
-    expect(kit.apiClient.get).not.toHaveBeenCalled()
+    expect(kit.apiClient.get).toHaveBeenCalledWith('/hex-cells?session_id=s1&map_id=m1')
+    expect(kit.queries.filter(q => q.table === 'hex_cells')).toHaveLength(0)
   })
 
   test('player init fetches the redacted view through the API', async () => {
@@ -78,7 +79,7 @@ describe('hexStore behavior', () => {
   })
 
   test('selectHex toggles selection and selectedCell resolves from the grid', async () => {
-    kit.responses.hex_cells = { data: [cell(3, 4, { label: 'Ruins' })], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(3, 4, { label: 'Ruins' })]
     const store = useHexStore()
     await store.init('s1', 'm1')
 
@@ -103,7 +104,7 @@ describe('hexStore behavior', () => {
   })
 
   test('a failed upsert rolls back to the previous cell (or removes a new one)', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0, { terrain_type: 'plains' })], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0, { terrain_type: 'plains' })]
     const store = useHexStore()
     await store.init('s1', 'm1')
 
@@ -183,15 +184,85 @@ describe('hexStore behavior', () => {
     await store.init('s1', 'm1')
 
     hexChannel().emitPostgres('hex_cells', 'UPDATE', cell(0, 0, { revealed: false, label: 'Secret Fort', gm_markers: '[]' }))
-    expect(store.hexCells.get('0:0')).toEqual({ session_id: 's1', map_id: 'm1', q: 0, r: 0, revealed: false })
+    expect(store.hexCells.get('0:0')).toEqual({ session_id: 's1', map_id: 'm1', q: 0, r: 0, revealed: false, explored: true })
 
     hexChannel().emitPostgres('hex_cells', 'UPDATE', cell(1, 1, { revealed: true, gm_markers: '["trap"]' }))
     expect(store.hexCells.get('1:1').gm_markers).toBeUndefined()
     expect(store.hexCells.get('1:1').revealed).toBe(true)
   })
 
+  test('unexplored cells arrive as fog sentinels even for the GM', async () => {
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    hexChannel().emitPostgres('hex_cells', 'UPDATE', cell(2, 2, { explored: false, revealed: false, terrain_type: 'swamp', label: "Witch's hut" }))
+    expect(store.hexCells.get('2:2')).toEqual({ session_id: 's1', map_id: 'm1', q: 2, r: 2, revealed: false, explored: false })
+  })
+
+  test('upsertHex only sends explored when the patch sets it', async () => {
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0, { explored: true })]
+    kit.api['post /hex-cells/upsert'] = body => body
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.upsertHex(0, 0, { label: 'Camp' })
+    expect(kit.apiClient.post.mock.calls.at(-1)[1].explored).toBeUndefined()
+
+    await store.markUnexplored(0, 0)
+    expect(kit.apiClient.post.mock.calls.at(-1)[1]).toMatchObject({ explored: false, revealed: false })
+
+    await store.markExplored(0, 0)
+    expect(kit.apiClient.post.mock.calls.at(-1)[1].explored).toBe(true)
+  })
+
+  test('moving the party onto an unexplored hex asks the server to generate it', async () => {
+    kit.session.playMode = 'gm_less'
+    kit.mapStore.mapExplorationMode = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    const generated = cell(4, 4, { explored: true, terrain_type: 'forest', label: 'Standing stones' })
+    kit.api['post /hex-cells/explore'] = () => ({ generated: true, cell: generated })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(4, 4)
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith(
+      '/hex-cells/explore',
+      { session_id: 's1', map_id: 'm1', q: 4, r: 4 },
+      'explore_hex',
+    )
+    expect(store.hexCells.get('4:4')).toEqual(generated)
+  })
+
+  test('moving the party onto an explored hex skips generation', async () => {
+    kit.session.playMode = 'gm_less'
+    kit.mapStore.mapExplorationMode = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(1, 1, { explored: true })]
+    kit.api['post /hex-cells/explore'] = vi.fn()
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(1, 1)
+
+    expect(kit.api['post /hex-cells/explore']).not.toHaveBeenCalled()
+  })
+
+  test('GM-led sessions never trigger generation on party movement', async () => {
+    kit.session.playMode = 'gm'
+    kit.mapStore.mapExplorationMode = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.api['post /hex-cells/explore'] = vi.fn()
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(4, 4)
+
+    expect(kit.api['post /hex-cells/explore']).not.toHaveBeenCalled()
+  })
+
   test('realtime DELETE removes the cell', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0)], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0)]
     const store = useHexStore()
     await store.init('s1', 'm1')
 
@@ -201,7 +272,7 @@ describe('hexStore behavior', () => {
   })
 
   test('toggleRevealed sends the reveal intent with the flipped value', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0, { revealed: false })], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0, { revealed: false })]
     kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'server-cell' })
     const store = useHexStore()
     await store.init('s1', 'm1')
@@ -216,7 +287,7 @@ describe('hexStore behavior', () => {
   })
 
   test('revealAll flips every cell, updates map fog, and posts one bulk call', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0, { revealed: false }), cell(1, 1, { revealed: false })], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0, { revealed: false }), cell(1, 1, { revealed: false })]
     const store = useHexStore()
     await store.init('s1', 'm1')
 
@@ -232,7 +303,7 @@ describe('hexStore behavior', () => {
   })
 
   test('a failed bulk reveal re-syncs from the server instead of trusting local state', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0, { revealed: false })], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0, { revealed: false })]
     kit.api['post /hex-cells/bulk-reveal'] = new kit.ApiError('nope', 500)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const store = useHexStore()
@@ -245,7 +316,7 @@ describe('hexStore behavior', () => {
   })
 
   test('deleteHex rolls back on failure', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0)], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0)]
     kit.api['post /hex-cells/delete'] = new kit.ApiError('nope', 500)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const store = useHexStore()
@@ -258,7 +329,7 @@ describe('hexStore behavior', () => {
   })
 
   test('ensureCellExists returns the existing id without an API call', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0)], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0)]
     const store = useHexStore()
     await store.init('s1', 'm1')
 
@@ -270,7 +341,7 @@ describe('hexStore behavior', () => {
   })
 
   test('clearAll wipes the grid only when the API call succeeds', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0)], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0)]
     const store = useHexStore()
     await store.init('s1', 'm1')
 
@@ -324,7 +395,7 @@ describe('hexStore behavior', () => {
   })
 
   test('cleanup removes all three channels and resets state', async () => {
-    kit.responses.hex_cells = { data: [cell(0, 0)], error: null }
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0)]
     const store = useHexStore()
     await store.init('s1', 'm1')
     store.cleanup()

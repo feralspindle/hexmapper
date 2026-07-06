@@ -96,6 +96,61 @@
                 </button>
             </div>
 
+            <div
+                v-if="
+                    sessionStore.isGM &&
+                    ((sessionStore.playMode === 'gm_less' &&
+                        mapStore.mapExplorationMode) ||
+                        hexStore.selectedCell?.explored === false)
+                "
+                style="display: flex; align-items: center; gap: 8px"
+            >
+                <span
+                    style="
+                        font-family: var(--font-mono);
+                        font-size: 10px;
+                        letter-spacing: 0.06em;
+                        flex: 1;
+                    "
+                    :style="{
+                        color:
+                            hexStore.selectedCell?.explored === false
+                                ? '#8a6a1c'
+                                : 'var(--ink-mute, #6b5d49)',
+                    }"
+                >
+                    {{
+                        hexStore.selectedCell?.explored === false
+                            ? "◌ Unexplored — generates on entry"
+                            : "Explored"
+                    }}
+                </span>
+                <button
+                    v-if="hexStore.selectedCell?.explored === false"
+                    class="hm-ghost-btn"
+                    @click="
+                        hexStore.markExplored(
+                            hexStore.selectedHex.q,
+                            hexStore.selectedHex.r,
+                        )
+                    "
+                >
+                    Mark explored
+                </button>
+                <button
+                    v-else
+                    class="hm-ghost-btn"
+                    @click="
+                        hexStore.markUnexplored(
+                            hexStore.selectedHex.q,
+                            hexStore.selectedHex.r,
+                        )
+                    "
+                >
+                    Mark unexplored
+                </button>
+            </div>
+
             <div>
                 <div
                     style="

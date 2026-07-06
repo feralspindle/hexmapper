@@ -61,10 +61,15 @@
                 :active-tool="activeTool"
                 :settings-open="showMapSettings"
                 :is-g-m="sessionStore.isGM"
+                :exploration-available="sessionStore.playMode === 'gm_less'"
+                :exploration-mode="mapStore.mapExplorationMode"
                 @tool="setTool"
                 @reveal-all="hexStore.revealAll()"
                 @hide-all="hexStore.hideAll()"
                 @map-settings="showMapSettings = !showMapSettings"
+                @toggle-exploration="
+                    mapStore.setExplorationMode(!mapStore.mapExplorationMode)
+                "
             />
             <div v-else-if="!hexMode" style="width: var(--toolbar-w, 64px); flex-shrink: 0" />
             <div v-else />
@@ -97,6 +102,10 @@
                     :map-grid-rows="mapStore.mapGridRows"
                     :map-fog-reveal-all="
                         hexMode === 'blank' || mapStore.mapFogRevealAll
+                    "
+                    :exploration-mode="
+                        sessionStore.playMode === 'gm_less' &&
+                        mapStore.mapExplorationMode
                     "
                     :pan-mode="activeTool === 'pan'"
                     :move-mode="moveMode"
