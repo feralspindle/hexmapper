@@ -22,6 +22,13 @@ export const useVaultStore = defineStore('vault', () => {
   const containers = ref([])
   const ledger     = ref([])
 
+  // Realtime can hand us a loot row after it was already deleted here: the
+  // INSERT echo of a row this client just claimed, or a refresh snapshot
+  // fetched before the delete committed. Deleted ids are tombstoned so those
+  // late arrivals can't resurrect the card. Rows are hard-deleted and ids are
+  // never reused, so tombstones only need to live until cleanup().
+  const _deletedLootIds = new Set()
+
   let lootChannel       = null
   let itemsChannel      = null
   let containersChannel = null
@@ -61,6 +68,7 @@ export const useVaultStore = defineStore('vault', () => {
     items.value      = []
     containers.value = []
     ledger.value     = []
+    _deletedLootIds.clear()
   }
 
   async function _loadLoot(sessionId) {
@@ -69,7 +77,7 @@ export const useVaultStore = defineStore('vault', () => {
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data && _sessionId === sessionId) loot.value = data
+    if (data && _sessionId === sessionId) loot.value = data.filter(l => !_deletedLootIds.has(l.id))
   }
 
   async function _loadItems(sessionId) {
@@ -110,8 +118,10 @@ export const useVaultStore = defineStore('vault', () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_loot', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
+          if (_deletedLootIds.has(e.new.id)) return
           if (!loot.value.find(l => l.id === e.new.id)) loot.value.push(e.new)
         } else if (e.eventType === 'DELETE') {
+          _deletedLootIds.add(e.old.id)
           loot.value = loot.value.filter(l => l.id !== e.old.id)
         }
       })
@@ -240,10 +250,12 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   async function _removeLoot(id) {
+    _deletedLootIds.add(id)
     loot.value = loot.value.filter(l => l.id !== id)
     try {
       await apiClient.delete(`/vault-loot/${id}`)
     } catch (error) {
+      _deletedLootIds.delete(id)
       console.error('_removeLoot:', error instanceof ApiError ? error.message : error)
     }
   }

@@ -654,6 +654,7 @@ import { useVaultStore } from '@/stores/vaultStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
+import { createPatchDebouncer } from '@/composables/usePatchDebounce.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
 import { playDiceSound } from '@/lib/diceSound.js'
@@ -687,6 +688,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  questSaver.flush()
+  noteSaver.flush()
   window.removeEventListener('mousemove', onDragMove)
   window.removeEventListener('mouseup', onDragUp)
   window.removeEventListener('mousemove', onResizeMove)
@@ -748,12 +751,11 @@ function completedGoals(quest) {
   return (quest.goals ?? []).filter(g => g.completed).length
 }
 
-const _questTimers = new Map()
+const questSaver = createPatchDebouncer((id, patch) => notebookStore.updateQuest(id, patch))
 function debounceSaveQuest(id, patch) {
   const quest = notebookStore.quests.find(q => q.id === id)
   if (quest) Object.assign(quest, patch)
-  clearTimeout(_questTimers.get(id))
-  _questTimers.set(id, setTimeout(() => notebookStore.updateQuest(id, patch), 600))
+  questSaver.push(id, patch)
 }
 
 async function newQuest() {
@@ -809,11 +811,7 @@ function toggleGoal(quest, goalId) {
 
 function updateGoalText(quest, goalId, text) {
   const goals = (quest.goals ?? []).map(g => g.id === goalId ? { ...g, text } : g)
-  clearTimeout(_questTimers.get(quest.id + ':goals'))
-  _questTimers.set(quest.id + ':goals', setTimeout(() =>
-    notebookStore.updateQuest(quest.id, { goals }), 600))
-  const q = notebookStore.quests.find(q => q.id === quest.id)
-  if (q) q.goals = goals
+  debounceSaveQuest(quest.id, { goals })
 }
 
 function addGoal(quest) {
@@ -871,12 +869,11 @@ const activeChars = computed(() => {
 })
 
 
-const _noteTimers = new Map()
+const noteSaver = createPatchDebouncer((id, patch) => notebookStore.updateNote(id, patch))
 function debounceSaveNote(id, patch) {
   const note = notebookStore.notes.find(n => n.id === id)
   if (note) Object.assign(note, patch)
-  clearTimeout(_noteTimers.get(id))
-  _noteTimers.set(id, setTimeout(() => notebookStore.updateNote(id, patch), 600))
+  noteSaver.push(id, patch)
 }
 
 async function newNote() {

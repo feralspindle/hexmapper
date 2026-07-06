@@ -41,15 +41,12 @@ test.describe.serial('party notebook, calendar, and photos', () => {
       await openNotebook(room.gm.page, 'notes')
       await room.gm.page.getByTestId('note-new').click()
       await expect(room.gm.page.getByTestId('note-card')).toHaveCount(1)
-
-      // The debounced note save keeps only the latest pending patch, so wait
-      // for each field to reach the other client before editing the next one.
-      await openNotebook(room.player1.page, 'notes')
       await room.gm.page.getByTestId('note-title').fill('Session 12')
+      await room.gm.page.getByTestId('note-content').fill('The party reached the sunken chapel.')
+
+      await openNotebook(room.player1.page, 'notes')
       await expect(room.player1.page.getByTestId('note-card')).toHaveCount(1)
       await expect(room.player1.page.getByTestId('note-title')).toHaveValue('Session 12')
-
-      await room.gm.page.getByTestId('note-content').fill('The party reached the sunken chapel.')
       await expect(room.player1.page.getByTestId('note-content')).toHaveValue(
         'The party reached the sunken chapel.',
       )
