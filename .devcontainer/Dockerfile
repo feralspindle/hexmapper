@@ -13,7 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         less ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY init-firewall.sh post-create-root.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/init-firewall.sh /usr/local/bin/post-create-root.sh \
@@ -22,6 +27,11 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh /usr/local/bin/post-create-root.sh
 
 USER node
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
-ENV PATH=/home/node/.cargo/bin:$PATH
+
+# Agent CLIs live in a node-user-owned npm prefix so their auto-updaters can
+# write; a root-owned /usr/local install breaks self-update for the sandbox user.
+ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
+ENV PATH=/home/node/.npm-global/bin:/home/node/.cargo/bin:$PATH
+RUN npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 
 WORKDIR /workspaces
