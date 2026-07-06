@@ -39,7 +39,7 @@ const sessionStore   = useSessionStore()
 const activeTab      = ref(0)
 const inspectorRef   = ref(null)
 const diceSectionRef = ref(null)
-const showOracle     = computed(() => sessionStore.playMode === 'gm_less')
+const showOracle     = computed(() => sessionStore.isGM || sessionStore.playMode === 'gm_less')
 
 watch(showOracle, (visible) => {
   if (!visible && activeTab.value === 1) activeTab.value = 0
