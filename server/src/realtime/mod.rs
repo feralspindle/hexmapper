@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::auth::jwt;
 use crate::authz;
+use crate::domains::hex::visibility as hex_visibility;
 use crate::state::AppState;
 
 const AUTH_TIMEOUT: Duration = Duration::from_secs(5);
@@ -954,13 +955,15 @@ impl RealtimeHub {
 }
 
 fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
-    if row.aggregate_type != "hex_cell" || is_gm {
+    if row.aggregate_type != "hex_cell" {
         return Some((row.event_type.clone(), with_event_fields(row)));
     }
 
-    let mut payload = with_event_fields(row);
-    let revealed = payload.get("revealed").and_then(Value::as_bool) == Some(true);
+    let payload = with_event_fields(row);
     if row.event_type == "hex_cell.deleted" {
+        if is_gm {
+            return Some(("hex_cell.deleted".into(), payload));
+        }
         let mut removal = serde_json::Map::new();
         for key in ["id", "session_id", "map_id", "q", "r"] {
             if let Some(value) = payload.get(key) {
@@ -969,20 +972,11 @@ fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
         }
         return Some(("hex_cell.deleted".into(), Value::Object(removal)));
     }
-    if !revealed {
-        let mut sentinel = serde_json::Map::new();
-        for key in ["session_id", "map_id", "q", "r"] {
-            if let Some(value) = payload.get(key) {
-                sentinel.insert(key.to_string(), value.clone());
-            }
-        }
-        sentinel.insert("revealed".into(), json!(false));
-        return Some((row.event_type.clone(), Value::Object(sentinel)));
-    }
-    if let Value::Object(object) = &mut payload {
-        object.remove("gm_markers");
-        object.remove("source_client");
-    }
+
+    let payload = match hex_visibility::visible_hex_row(payload, is_gm) {
+        hex_visibility::VisibleHexRow::Full(payload) => payload,
+        hex_visibility::VisibleHexRow::Sentinel(sentinel) => sentinel,
+    };
     Some((row.event_type.clone(), payload))
 }
 
@@ -1185,6 +1179,31 @@ mod tests {
         assert_eq!(payload.get("revealed"), Some(&json!(false)));
         assert!(payload.get("gm_markers").is_none());
         assert!(payload.get("id").is_none());
+    }
+
+    #[test]
+    fn unexplored_hex_is_a_sentinel_for_gm_and_players() {
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "hex_cell".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "hex_cell.upserted".into(),
+            payload: json!({
+                "revealed": false, "explored": false, "map_id": Uuid::new_v4(),
+                "q": 3, "r": 4, "terrain_type": "swamp", "label": "Witch's hut"
+            }),
+            metadata: json!({}),
+            created_at: chrono::Utc::now(),
+        };
+        for is_gm in [true, false] {
+            let (event, payload) = visible_event(&row, is_gm).unwrap();
+            assert_eq!(event, "hex_cell.upserted");
+            assert_eq!(payload.get("explored"), Some(&json!(false)));
+            assert_eq!(payload.get("revealed"), Some(&json!(false)));
+            assert!(payload.get("terrain_type").is_none());
+            assert!(payload.get("label").is_none());
+        }
     }
 
     #[test]

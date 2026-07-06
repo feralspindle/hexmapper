@@ -6,6 +6,7 @@
     :data-q="q"
     :data-r="r"
     :data-revealed="isRevealed ? 'true' : 'false'"
+    :data-explored="isUnexplored ? 'false' : 'true'"
     :data-visible-to-player="visibleToPlayer ? 'true' : 'false'"
     :data-terrain="cell?.terrain_type ?? ''"
     :data-marker-count="markerCount"
@@ -177,6 +178,20 @@
       class="pointer-events-none"
     />
 
+    <g v-if="isUnexplored" class="pointer-events-none">
+      <polygon
+        :points="polygonPoints"
+        fill="rgba(8, 12, 22, 0.6)"
+      />
+      <text
+        text-anchor="middle"
+        dominant-baseline="central"
+        :font-size="size * 0.5"
+        fill="rgba(200, 168, 107, 0.28)"
+        style="font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600;"
+      >?</text>
+    </g>
+
     <polygon
       v-if="isGM && fogMode"
       :points="polygonPoints"
@@ -252,6 +267,7 @@ const props = defineProps({
   mapFogRevealAll: { type: Boolean, default: false },
   isParty:         { type: Boolean, default: false },
   hasChildMap:     { type: Boolean, default: false },
+  explorationMode: { type: Boolean, default: false },
   size: { type: Number, default: HEX_SIZE },
   hexH: { type: Number, default: null },
 })
@@ -272,7 +288,13 @@ const isRevealed = computed(() => {
   return props.mapFogRevealAll
 })
 
-const visibleToPlayer = computed(() => props.isGM || isRevealed.value)
+const isUnexplored = computed(() =>
+  props.cell ? props.cell.explored === false : props.explorationMode
+)
+
+const visibleToPlayer = computed(() =>
+  (props.isGM || isRevealed.value) && !isUnexplored.value
+)
 
 const terrainColor = computed(() => {
   if (props.cell?.color) return props.cell.color
@@ -284,6 +306,7 @@ const terrainColor = computed(() => {
 })
 
 const hexFill = computed(() => {
+  if (isUnexplored.value) return props.imageMode ? '#0a0f1a' : '#111827'
   if (props.imageMode) {
     return !visibleToPlayer.value ? '#0a0f1a' : 'transparent'
   }

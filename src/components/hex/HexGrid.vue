@@ -69,6 +69,7 @@
                         :image-mode="imageMode"
                         :settings-open="settingsOpen"
                         :map-fog-reveal-all="mapFogRevealAll"
+                        :exploration-mode="explorationMode"
                         :size="hexSize"
                         :hex-h="hexHProp"
                         @click="
@@ -161,6 +162,7 @@ const props = defineProps({
     moveMode: { type: String, default: "none" },
     panMode: { type: Boolean, default: false },
     mapFogRevealAll: { type: Boolean, default: false },
+    explorationMode: { type: Boolean, default: false },
     settingsOpen: { type: Boolean, default: false },
 });
 

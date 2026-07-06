@@ -19,11 +19,18 @@ const SCHEMA: &str = r#"
 drop table if exists events;
 drop table if exists hex_cells;
 drop table if exists maps;
+drop table if exists sessions;
+
+create table sessions (
+    id        uuid primary key,
+    play_mode text not null default 'gm'
+);
 
 create table maps (
-    id             uuid primary key,
-    session_id     uuid not null,
-    fog_reveal_all boolean not null default false
+    id               uuid primary key,
+    session_id       uuid not null,
+    fog_reveal_all   boolean not null default false,
+    exploration_mode boolean not null default false
 );
 
 create table hex_cells (
@@ -44,6 +51,7 @@ create table hex_cells (
     marker_color  text,
     marker_label  text,
     gm_markers    text,
+    explored      boolean not null default true,
     unique (map_id, q, r)
 );
 
@@ -95,6 +103,11 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     let session_id = Uuid::new_v4();
     let map_id = Uuid::new_v4();
 
+    sqlx::query("insert into sessions (id, play_mode) values ($1, 'gm_less')")
+        .bind(session_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("insert into maps (id, session_id, fog_reveal_all) values ($1, $2, false)")
         .bind(map_id)
         .bind(session_id)
@@ -177,13 +190,109 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert!(!projection::is_revealed(&pool, map_id, 1, 0).await.unwrap());
     assert!(projection::is_revealed(&pool, map_id, 9, 9).await.unwrap());
 
-    // Each upsert recorded an event.
+    // Unexplored cells are fogged for everyone, GM included: both views get a
+    // minimal sentinel, and the cell is never player-editable.
+    let _unexplored = upsert(
+        &pool,
+        session_id,
+        json!({
+            "map_id": map_id, "q": 2, "r": 0,
+            "terrain_type": "swamp", "label": "Witch's hut",
+            "revealed": false, "explored": false
+        }),
+    )
+    .await;
+    for include_gm_data in [true, false] {
+        let view = projection::list(&pool, session_id, Some(map_id), include_gm_data)
+            .await
+            .unwrap();
+        let sentinel = view
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["q"] == 2)
+            .expect("unexplored sentinel")
+            .clone();
+        assert_eq!(sentinel["explored"], false);
+        assert_eq!(sentinel["revealed"], false);
+        assert!(sentinel.get("terrain_type").is_none());
+        assert!(sentinel.get("label").is_none());
+    }
+    assert!(!projection::is_revealed(&pool, map_id, 2, 0).await.unwrap());
+
+    // Exploration mode removes the reveal-all default for missing cells: they
+    // are unexplored, not blank-but-editable. That only applies in gm_less
+    // play — a stale exploration flag in a GM-led session is inert, so a
+    // play-mode switch can't lock members out of editing.
+    sqlx::query("update maps set exploration_mode = true where id = $1")
+        .bind(map_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!projection::is_revealed(&pool, map_id, 9, 9).await.unwrap());
+    sqlx::query("update sessions set play_mode = 'gm' where id = $1")
+        .bind(session_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(projection::is_revealed(&pool, map_id, 9, 9).await.unwrap());
+    sqlx::query("update sessions set play_mode = 'gm_less' where id = $1")
+        .bind(session_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("update maps set exploration_mode = false where id = $1")
+        .bind(map_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // revealAll clears exploration fog so the escape hatch works in solo play.
+    let mut tx = pool.begin().await.unwrap();
+    projection::set_revealed(&mut tx, map_id, true, &json!({}))
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let cleared: bool =
+        sqlx::query_scalar("select explored from hex_cells where map_id = $1 and q = 2 and r = 0")
+            .bind(map_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(cleared);
+    let mut tx = pool.begin().await.unwrap();
+    projection::set_revealed(&mut tx, map_id, false, &json!({}))
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    projection::upsert(
+        &mut tx,
+        session_id,
+        &json!({ "map_id": map_id, "q": 0, "r": 0, "revealed": true }),
+        &json!({}),
+    )
+    .await
+    .unwrap();
+    projection::upsert(
+        &mut tx,
+        session_id,
+        &json!({ "map_id": map_id, "q": 2, "r": 0, "revealed": false, "explored": false }),
+        &json!({}),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    // Exactly one hex_cell.upserted event per write: 5 direct upserts
+    // (q0, q1, q2, then the q0/q2 restores) plus 5 from the two bulk
+    // set_revealed passes (reveal touches q1+q2; hide touches all three).
     let event_count: i64 =
         sqlx::query_scalar("select count(*) from events where event_type = 'hex_cell.upserted'")
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(event_count, 2);
+    assert_eq!(event_count, 10);
 
     // Replaying the event log into a shadow table reconstructs the read model.
     let mut tx = pool.begin().await.unwrap();
@@ -204,6 +313,15 @@ async fn projection_redacts_for_players_and_replays_from_events() {
         .await
         .unwrap();
     assert_eq!(replayed, live);
-    assert_eq!(replayed, 2);
+    assert_eq!(replayed, 3);
+    let replayed_unexplored: bool =
+        sqlx::query_scalar("select explored from shadow_hex where q = 2 and r = 0")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    assert!(
+        !replayed_unexplored,
+        "explored=false must survive event replay"
+    );
     tx.commit().await.unwrap();
 }

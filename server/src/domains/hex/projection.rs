@@ -10,6 +10,7 @@ use serde_json::Value;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
+use crate::domains::hex::visibility;
 use crate::error::AppError;
 
 fn snapshot_columns(s: &str) -> String {
@@ -31,12 +32,13 @@ fn snapshot_columns(s: &str) -> String {
         ({s}->>'map_id')::uuid,
         {s}->>'marker_color',
         {s}->>'marker_label',
-        {s}->>'gm_markers'
+        {s}->>'gm_markers',
+        coalesce(({s}->>'explored')::boolean, true)
         "#
     )
 }
 
-const COLS: &str = "id, session_id, q, r, label, notes, terrain_type, color, has_dungeon, source_client, created_at, updated_at, revealed, map_id, marker_color, marker_label, gm_markers";
+const COLS: &str = "id, session_id, q, r, label, notes, terrain_type, color, has_dungeon, source_client, created_at, updated_at, revealed, map_id, marker_color, marker_label, gm_markers, explored";
 
 /// Returns hex cells for a session, optionally scoped to one map. GM callers get
 /// complete rows; player callers get revealed rows with server-only fields
@@ -49,20 +51,15 @@ pub async fn list(
     map_id: Option<Uuid>,
     include_gm_data: bool,
 ) -> Result<Value, AppError> {
-    let rows: Value = sqlx::query_scalar(
+    let sql = format!(
         r#"
         select coalesce(
             jsonb_agg(
                 case
+                    when h.explored = false then {unexplored_sentinel}
                     when $3 then to_jsonb(h)
-                    when h.revealed = true then to_jsonb(h) - 'gm_markers' - 'source_client'
-                    else jsonb_build_object(
-                        'session_id', h.session_id,
-                        'map_id', h.map_id,
-                        'q', h.q,
-                        'r', h.r,
-                        'revealed', false
-                    )
+                    when h.revealed = true then to_jsonb(h){strip_gm_fields}
+                    else {hidden_sentinel}
                 end
                 order by h.map_id, h.q, h.r
             ),
@@ -74,28 +71,39 @@ pub async fn list(
           and ($2::uuid is null or h.map_id = $2)
           and (
             $3
+            or h.explored = false
             or h.revealed = true
             or (m.fog_reveal_all = true and h.revealed = false)
           )
         "#,
-    )
-    .bind(session_id)
-    .bind(map_id)
-    .bind(include_gm_data)
-    .fetch_one(pool)
-    .await?;
+        unexplored_sentinel = visibility::sentinel_sql(false),
+        hidden_sentinel = visibility::sentinel_sql(true),
+        strip_gm_fields = visibility::strip_gm_fields_sql(),
+    );
+    let rows: Value = sqlx::query_scalar(&sql)
+        .bind(session_id)
+        .bind(map_id)
+        .bind(include_gm_data)
+        .fetch_one(pool)
+        .await?;
 
     Ok(rows)
 }
 
 /// Player edits are limited to cells that are already visible to players. This
 /// also prevents an upsert from being used as a hidden-cell read oracle.
+/// Unexplored cells (explored = false, or absent cells on an exploration-mode
+/// map) are never player-editable. Exploration only exists in gm_less play, so
+/// a stale exploration_mode flag on a map in a GM-led session is inert here —
+/// otherwise a play-mode switch would silently lock members out of editing.
 pub async fn is_revealed(pool: &PgPool, map_id: Uuid, q: i32, r: i32) -> Result<bool, AppError> {
     let revealed: bool = sqlx::query_scalar(
         r#"
         select coalesce(
-            (select revealed from hex_cells where map_id = $1 and q = $2 and r = $3),
-            (select fog_reveal_all from maps where id = $1),
+            (select revealed and explored from hex_cells where map_id = $1 and q = $2 and r = $3),
+            (select m.fog_reveal_all and not (m.exploration_mode and s.play_mode = 'gm_less')
+               from maps m join sessions s on s.id = m.session_id
+               where m.id = $1),
             false
         )
         "#,
@@ -121,7 +129,7 @@ pub async fn upsert(
     let row: Value = sqlx::query_scalar(
         r#"
         with up as (
-            insert into hex_cells (session_id, map_id, q, r, label, notes, terrain_type, color, has_dungeon, revealed, marker_color, marker_label, gm_markers, source_client)
+            insert into hex_cells (session_id, map_id, q, r, label, notes, terrain_type, color, has_dungeon, revealed, marker_color, marker_label, gm_markers, source_client, explored)
             values (
                 $1,
                 ($2->>'map_id')::uuid,
@@ -136,7 +144,8 @@ pub async fn upsert(
                 $2->>'marker_color',
                 $2->>'marker_label',
                 $2->>'gm_markers',
-                $2->>'source_client'
+                $2->>'source_client',
+                coalesce(($2->>'explored')::boolean, true)
             )
             on conflict (map_id, q, r) do update set
                 label         = case when $2 ? 'label' then $2->>'label' else hex_cells.label end,
@@ -148,6 +157,7 @@ pub async fn upsert(
                 marker_color  = case when $2 ? 'marker_color' then $2->>'marker_color' else hex_cells.marker_color end,
                 marker_label  = case when $2 ? 'marker_label' then $2->>'marker_label' else hex_cells.marker_label end,
                 gm_markers    = case when $2 ? 'gm_markers' then $2->>'gm_markers' else hex_cells.gm_markers end,
+                explored      = case when $2 ? 'explored' then ($2->>'explored')::boolean else hex_cells.explored end,
                 source_client = $2->>'source_client',
                 updated_at    = now()
             returning *
@@ -211,8 +221,12 @@ pub async fn set_revealed(
     let count: i64 = sqlx::query_scalar(
         r#"
         with up as (
-            update hex_cells set revealed = $2, source_client = null, updated_at = now()
-            where map_id = $1 and revealed is distinct from $2
+            update hex_cells set
+                revealed = $2,
+                explored = case when $2 then true else explored end,
+                source_client = null,
+                updated_at = now()
+            where map_id = $1 and (revealed is distinct from $2 or ($2 and explored = false))
             returning *
         ),
         evt as (

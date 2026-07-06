@@ -107,6 +107,15 @@
             placeholder="What this table answers"
             @change="oracleStore.updateTable(table.id, { description: $event.target.value })"
           />
+          <input
+            :value="table.tag ?? ''"
+            class="oracle-table-tag"
+            data-testid="oracle-table-tag"
+            maxlength="60"
+            placeholder="Tag (e.g. hex.terrain, hex.encounter.forest)"
+            title="Tagged tables drive exploration-mode hex generation: hex.terrain, hex.poi, hex.encounter, or hex.poi.<terrain> / hex.encounter.<terrain>. hex.terrain results must be terrain ids (plains, forest, mountain, water, desert, swamp, city, dungeon, snow, volcanic)"
+            @change="oracleStore.updateTable(table.id, { tag: $event.target.value })"
+          />
 
           <div class="oracle-rows">
             <div
@@ -377,6 +386,12 @@ function labelize(key) {
 .oracle-table-head > input {
   font-family: var(--font-display, serif);
   color: rgb(231 222 194);
+}
+
+.oracle-table-tag {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: rgb(196 167 107);
 }
 
 .oracle-table-actions {
