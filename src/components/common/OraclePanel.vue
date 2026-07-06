@@ -1,13 +1,14 @@
 <template>
-  <section class="oracle-panel">
-    <header class="oracle-head">
+  <section class="oracle-panel ds-panel-section flex-grow">
+    <header class="oracle-head ds-section-head">
+      <i class="fa-solid fa-wand-sparkles" />
       <div>
-        <h2>Oracle</h2>
-        <p>{{ sessionStore.playMode === 'gm_less' ? 'GM-less mode' : 'Shared solo tools' }}</p>
+        <h3>Oracle</h3>
+        <span class="ds-meta">{{ sessionStore.playMode === 'gm_less' ? 'GM-less mode' : 'Shared solo tools' }}</span>
       </div>
       <button
         type="button"
-        class="oracle-mode"
+        class="oracle-mode ds-btn tiny ghost"
         :class="{ active: sessionStore.playMode === 'gm_less' }"
         :disabled="!sessionStore.isGM"
         title="Only the campaign owner can change play mode"
@@ -19,11 +20,11 @@
       </button>
     </header>
 
-    <div class="oracle-scroll">
+    <div class="oracle-scroll ds-section-body">
       <section class="oracle-section">
         <div class="oracle-section-title">
-          <h3>Yes / No</h3>
-          <select v-model="odds" data-testid="oracle-odds">
+          <span class="ds-field-label">Yes / No</span>
+          <select v-model="odds" class="ds-input oracle-select" data-testid="oracle-odds">
             <option v-for="option in YES_NO_ODDS" :key="option.value" :value="option.value">
               {{ option.label }}
             </option>
@@ -33,12 +34,14 @@
           v-model="question"
           data-testid="oracle-question"
           type="text"
+          class="ds-input"
           maxlength="500"
           placeholder="Ask a closed question..."
           @keydown.enter.prevent="rollYesNo"
         />
         <button
           type="button"
+          class="ds-btn"
           data-testid="oracle-roll-yes-no"
           :disabled="oracleStore.rolling"
           @click="rollYesNo"
@@ -50,10 +53,11 @@
 
       <section class="oracle-section">
         <div class="oracle-section-title">
-          <h3>Event Prompt</h3>
+          <span class="ds-field-label">Event Prompt</span>
         </div>
         <button
           type="button"
+          class="ds-btn"
           data-testid="oracle-roll-event"
           :disabled="oracleStore.rolling"
           @click="oracleStore.rollEventPrompt({ question: question.trim() || null })"
@@ -65,8 +69,8 @@
 
       <section class="oracle-section">
         <div class="oracle-section-title">
-          <h3>Random Tables</h3>
-          <button type="button" data-testid="oracle-table-new" @click="createTable">
+          <span class="ds-field-label">Random Tables</span>
+          <button type="button" class="hm-card-icon-btn" data-testid="oracle-table-new" @click="createTable">
             <i class="fa-solid fa-plus" />
           </button>
         </div>
@@ -84,24 +88,26 @@
           <div class="oracle-table-head">
             <input
               :value="table.name"
+              class="ds-input oracle-table-name"
               data-testid="oracle-table-name"
               maxlength="120"
               @change="oracleStore.updateTable(table.id, { name: $event.target.value })"
             />
             <div class="oracle-table-actions">
-              <button type="button" title="Roll table" data-testid="oracle-roll-table" @click="oracleStore.rollTable(table.id, question.trim() || null)">
+              <button type="button" class="hm-card-icon-btn" title="Roll table" data-testid="oracle-roll-table" @click="oracleStore.rollTable(table.id, question.trim() || null)">
                 <i class="fa-solid fa-dice" />
               </button>
-              <button type="button" title="Add row" data-testid="oracle-row-new" @click="addRow(table)">
+              <button type="button" class="hm-card-icon-btn" title="Add row" data-testid="oracle-row-new" @click="addRow(table)">
                 <i class="fa-solid fa-list-ul" />
               </button>
-              <button type="button" title="Delete table" @click="oracleStore.deleteTable(table.id)">
+              <button type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Delete table" @click="oracleStore.deleteTable(table.id)">
                 <i class="fa-solid fa-trash" />
               </button>
             </div>
           </div>
           <textarea
             :value="table.description"
+            class="ds-input oracle-table-description"
             maxlength="500"
             rows="2"
             placeholder="What this table answers"
@@ -109,7 +115,7 @@
           />
           <input
             :value="table.tag ?? ''"
-            class="oracle-table-tag"
+            class="ds-input oracle-table-tag"
             data-testid="oracle-table-tag"
             maxlength="60"
             placeholder="Tag (e.g. hex.terrain, hex.encounter.forest)"
@@ -126,6 +132,7 @@
             >
               <input
                 :value="row.weight"
+                class="ds-input oracle-row-weight"
                 type="number"
                 min="1"
                 title="Weight"
@@ -133,11 +140,12 @@
               />
               <input
                 :value="row.result"
+                class="ds-input"
                 maxlength="500"
                 data-testid="oracle-row-result"
                 @change="oracleStore.updateRow(row.id, { result: $event.target.value })"
               />
-              <button type="button" title="Delete row" @click="oracleStore.deleteRow(row.id)">
+              <button type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Delete row" @click="oracleStore.deleteRow(row.id)">
                 <i class="fa-solid fa-xmark" />
               </button>
             </div>
@@ -147,7 +155,7 @@
 
       <section class="oracle-section oracle-history">
         <div class="oracle-section-title">
-          <h3>History</h3>
+          <span class="ds-field-label">History</span>
         </div>
 
         <div v-if="!oracleStore.rolls.length" class="oracle-empty">
@@ -254,80 +262,46 @@ function labelize(key) {
 
 <style scoped>
 .oracle-panel {
-  display: flex;
-  min-height: 0;
   height: 100%;
-  flex-direction: column;
-  color: oklch(0.92 0.018 82);
 }
 
 .oracle-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border-bottom: 1px solid rgb(41 37 36);
-  background: rgb(28 25 23);
+  flex-shrink: 0;
 }
 
-.oracle-head h2,
-.oracle-section-title h3 {
-  margin: 0;
-  font-family: var(--font-display, serif);
-  color: rgb(231 222 194);
+.oracle-head > div {
+  flex: 1;
+  min-width: 0;
 }
 
-.oracle-head p {
-  margin: 0.125rem 0 0;
-  font-size: 0.75rem;
-  color: rgb(120 113 108);
+.oracle-head h3 {
+  margin-bottom: 2px;
 }
 
-.oracle-mode,
-.oracle-section button,
-.oracle-table-actions button,
-.oracle-row button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-height: 2rem;
-  border: 1px solid rgb(68 64 60);
-  border-radius: 0.375rem;
-  background: rgb(41 37 36);
-  color: rgb(214 211 209);
-  font-size: 0.8rem;
-  transition: border-color 120ms ease-out, background-color 120ms ease-out, color 120ms ease-out;
+.oracle-head .ds-meta {
+  display: block;
 }
 
 .oracle-mode {
-  padding: 0 0.55rem;
+  flex: 0 0 auto;
 }
 
 .oracle-mode.active {
-  border-color: rgb(217 180 111);
-  color: rgb(250 240 205);
+  color: var(--accent);
 }
 
 .oracle-mode:disabled {
-  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .oracle-scroll {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
 }
 
 .oracle-section {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 8px;
 }
 
 .oracle-section-title,
@@ -339,59 +313,40 @@ function labelize(key) {
   gap: 0.5rem;
 }
 
-.oracle-section-title select,
-.oracle-section input,
-.oracle-section textarea {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid rgb(87 83 78);
-  border-radius: 0.375rem;
-  background: rgb(41 37 36);
-  color: rgb(245 245 244);
-  font-size: 0.875rem;
+.oracle-section-title .ds-field-label {
+  margin-bottom: 0;
 }
 
-.oracle-section-title select {
+.oracle-select {
   width: auto;
-  padding: 0.35rem 0.45rem;
-}
-
-.oracle-section input {
-  padding: 0.45rem 0.55rem;
-}
-
-.oracle-section textarea {
-  resize: vertical;
-  padding: 0.45rem 0.55rem;
-}
-
-.oracle-section > button {
-  padding: 0.45rem 0.65rem;
-  background: rgb(216 180 111);
-  border-color: rgb(216 180 111);
-  color: rgb(28 25 23);
-  font-family: var(--font-display, serif);
+  min-width: 124px;
+  flex: 0 0 auto;
 }
 
 .oracle-table {
-  border: 1px solid rgb(68 64 60);
-  border-radius: 0.5rem;
-  padding: 0.55rem;
+  border: 1px solid var(--rule-strong);
+  border-left: 3px solid var(--accent-2);
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  background: rgb(28 25 23);
+  gap: 6px;
+  background: var(--paper);
 }
 
-.oracle-table-head > input {
-  font-family: var(--font-display, serif);
-  color: rgb(231 222 194);
+.oracle-table-name {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 13px;
 }
 
 .oracle-table-tag {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  color: rgb(196 167 107);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.oracle-table-description {
+  min-height: 48px;
 }
 
 .oracle-table-actions {
@@ -400,61 +355,75 @@ function labelize(key) {
 }
 
 .oracle-table-actions button,
-.oracle-row button,
 .oracle-section-title button {
-  width: 2rem;
-  padding: 0;
+  width: 22px;
+  height: 22px;
 }
 
 .oracle-rows {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 4px;
 }
 
 .oracle-row {
   display: grid;
-  grid-template-columns: 3.25rem minmax(0, 1fr) 2rem;
-  gap: 0.35rem;
+  grid-template-columns: 48px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 4px;
+}
+
+.oracle-row .ds-input {
+  padding: 3px 6px;
+  font-size: 13px;
+}
+
+.oracle-row-weight {
+  font-family: var(--font-mono);
+  font-style: normal;
+  text-align: center;
 }
 
 .oracle-roll {
-  border-top: 1px solid rgb(68 64 60);
-  padding-top: 0.55rem;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent-2);
+  padding: 8px 10px;
+  background: var(--paper);
 }
 
 .oracle-roll-meta {
-  color: rgb(168 162 158);
-  font-size: 0.72rem;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .oracle-roll-question,
 .oracle-roll-result,
 .oracle-roll-twist,
 .oracle-roll-notes {
-  margin: 0.25rem 0 0;
+  margin: 4px 0 0;
   overflow-wrap: anywhere;
 }
 
 .oracle-roll-question {
-  color: rgb(168 162 158);
+  color: var(--ink-mute);
   font-style: italic;
 }
 
 .oracle-roll-result {
-  color: rgb(245 245 244);
-  font-family: var(--font-display, serif);
-  font-size: 1.02rem;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 15px;
 }
 
 .oracle-roll-twist {
-  color: rgb(252 211 77);
+  color: var(--accent-2);
 }
 
 .oracle-roll-notes {
-  color: rgb(168 162 158);
+  color: var(--ink-soft);
 }
 
 .oracle-prompt {
@@ -471,25 +440,27 @@ function labelize(key) {
 }
 
 .oracle-prompt dt {
-  color: rgb(120 113 108);
+  color: var(--ink-mute);
   text-transform: capitalize;
 }
 
 .oracle-prompt dd {
   margin: 0;
-  color: rgb(245 245 244);
+  color: var(--ink);
 }
 
 .oracle-empty,
 .oracle-error {
-  color: rgb(120 113 108);
-  font-size: 0.875rem;
+  color: var(--ink-mute);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-style: italic;
   line-height: 1.4;
 }
 
 .oracle-error {
   padding: 0.5rem 0.75rem;
-  border-top: 1px solid rgb(68 64 60);
-  color: rgb(248 113 113);
+  border-top: 1px solid var(--rule);
+  color: var(--accent);
 }
 </style>
