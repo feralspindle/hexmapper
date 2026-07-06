@@ -106,8 +106,21 @@ describe('OraclePanel', () => {
   test('toggles solo/co-op play mode for the owner', async () => {
     const wrapper = mount(OraclePanel)
 
+    expect(wrapper.get('[data-testid="oracle-mode-toggle"]').text()).toContain('Switch to Solo / Co-op')
+
     await wrapper.get('[data-testid="oracle-mode-toggle"]').trigger('click')
 
     expect(mocks.sessionStore.setPlayMode).toHaveBeenCalledWith('gm_less')
+  })
+
+  test('toggles back to gm-led mode from solo/co-op', async () => {
+    mocks.sessionStore.playMode = 'gm_less'
+    const wrapper = mount(OraclePanel)
+
+    expect(wrapper.get('[data-testid="oracle-mode-toggle"]').text()).toContain('Switch to GM-led')
+
+    await wrapper.get('[data-testid="oracle-mode-toggle"]').trigger('click')
+
+    expect(mocks.sessionStore.setPlayMode).toHaveBeenCalledWith('gm')
   })
 })

@@ -16,7 +16,7 @@
         @click="togglePlayMode"
       >
         <i class="fa-solid fa-users" />
-        <span>{{ sessionStore.playMode === 'gm_less' ? 'Co-op' : 'GM' }}</span>
+        <span>{{ sessionStore.playMode === 'gm_less' ? 'Switch to GM-led' : 'Switch to Solo / Co-op' }}</span>
       </button>
     </header>
 
