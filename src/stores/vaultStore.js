@@ -6,13 +6,12 @@ import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useLootToast } from '@/composables/useLootToast.js'
+import { isGemItem } from '@/lib/gearSlots.js'
 
 const CLIENT_ID = crypto.randomUUID()
-const GEM_NAMES = ['emerald', 'pearl', 'ruby', 'sapphire', 'diamond']
 
 function _calcStashSlots(lootItem) {
-  const name = (lootItem.name ?? '').toLowerCase()
-  if (GEM_NAMES.some(g => name.includes(g))) return Math.ceil((lootItem.quantity ?? 1) / 10)
+  if (isGemItem(lootItem)) return Math.ceil((lootItem.quantity ?? 1) / 10)
   if (lootItem.loot_type === 'coins' || lootItem.currency) return Math.ceil((lootItem.quantity ?? 1) / 100)
   return lootItem.quantity ?? 1
 }
@@ -251,25 +250,24 @@ export const useVaultStore = defineStore('vault', () => {
 
   async function claimLoot(lootItem) {
     const characterStore = useCharacterStore()
-    if (characterStore.character) {
-      const authStore = useAuthStore()
-      const userId = authStore.user?.id
-      const member = characterStore.memberSelections.find(m => m.user_id === userId)
-      const charName = member?.display_name || authStore.displayName || 'Adventurer'
-      const currency = lootItem.currency
-        ?? (['gold', 'silver', 'copper'].find(c => (lootItem.name ?? '').toLowerCase().includes(c)) ?? null)
-      if (lootItem.loot_type === 'coins' && currency) {
-        characterStore.adjustMoney(currency, lootItem.quantity)
-        broadcastLootToast({ type: 'coins', charName, currency, amount: lootItem.quantity })
-      } else {
-        characterStore.addGearItem({
-          name:     lootItem.name,
-          slots:    0,
-          quantity: lootItem.quantity,
-          type:     'sundry',
-        })
-        broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty: lootItem.quantity })
-      }
+    if (!characterStore.character) return
+    const authStore = useAuthStore()
+    const userId = authStore.user?.id
+    const member = characterStore.memberSelections.find(m => m.user_id === userId)
+    const charName = member?.display_name || authStore.displayName || 'Adventurer'
+    const currency = lootItem.currency
+      ?? (['gold', 'silver', 'copper'].find(c => (lootItem.name ?? '').toLowerCase().includes(c)) ?? null)
+    if (lootItem.loot_type === 'coins' && currency) {
+      characterStore.adjustMoney(currency, lootItem.quantity)
+      broadcastLootToast({ type: 'coins', charName, currency, amount: lootItem.quantity })
+    } else {
+      characterStore.addGearItem({
+        name:     lootItem.name,
+        slots:    1,
+        quantity: lootItem.quantity,
+        type:     'sundry',
+      })
+      broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty: lootItem.quantity })
     }
     await _removeLoot(lootItem.id)
   }
@@ -353,7 +351,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function assignLoot(lootItem, assignments) {
     const characterStore = useCharacterStore()
     for (const { char, qty } of assignments) {
-      characterStore.addGearItemToChar(char.id, { name: lootItem.name, slots: 0, quantity: qty, type: 'sundry' })
+      characterStore.addGearItemToChar(char.id, { name: lootItem.name, slots: 1, quantity: qty, type: 'sundry' })
     }
     const totalAssigned = assignments.reduce((s, a) => s + a.qty, 0)
     if (totalAssigned < lootItem.quantity) {

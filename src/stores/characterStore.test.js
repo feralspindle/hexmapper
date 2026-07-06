@@ -297,6 +297,34 @@ describe('characterStore', () => {
     expect(store.character.renownLog[0].reason).toBe('b')
   })
 
+  test('deleting weapon gear removes its linked attack but keeps others', async () => {
+    const store = await loadedStore()
+
+    store.addGearItem({ name: 'Longsword', slots: 1, quantity: 1, type: 'weapon', damageDie: '1d8' })
+    store.addAttack('Bite: +2 to hit')
+    const weapon = store.character.gear.find(g => g.name === 'Longsword')
+    expect(store.character.attacks).toHaveLength(2)
+
+    store.deleteGearItem(weapon.instanceId)
+
+    expect(store.character.gear).toHaveLength(0)
+    expect(store.character.attacks).toHaveLength(1)
+    expect(store.character.attacks[0].raw).toBe('Bite: +2 to hit')
+  })
+
+  test('disabling weapon gear disables its linked attack and re-enabling restores it', async () => {
+    const store = await loadedStore()
+
+    store.addGearItem({ name: 'Longsword', slots: 1, quantity: 1, type: 'weapon', damageDie: '1d8' })
+    const weapon = store.character.gear.find(g => g.name === 'Longsword')
+
+    store.updateGearItem(weapon.instanceId, { disabled: true })
+    expect(store.character.attacks[0].disabled).toBe(true)
+
+    store.updateGearItem(weapon.instanceId, { disabled: false })
+    expect(store.character.attacks[0].disabled).toBe(false)
+  })
+
   test('adjustMaxHp drags currentHp down when the max drops below it', async () => {
     const store = await loadedStore()
 

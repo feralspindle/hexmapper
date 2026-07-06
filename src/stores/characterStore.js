@@ -5,6 +5,7 @@ import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playLuckSound } from '@/lib/diceSound.js'
+import { calcGearItemSlots } from '@/lib/gearSlots.js'
 
 export function statMod(value) {
   return Math.floor((value - 10) / 2)
@@ -31,7 +32,7 @@ export function parseAttack(str) {
 
 const CLIENT_ID = crypto.randomUUID()
 
-const SHEET_LOG_EXCLUDED_FIELDS = new Set(['gear', 'attacks', 'renown', 'renownLog'])
+const SHEET_LOG_EXCLUDED_FIELDS = new Set(['gear', 'attacks', 'renown', 'renownLog', 'ledger'])
 const RENOWN_LOG_MAX = 50
 
 export const useCharacterStore = defineStore('character', () => {
@@ -208,7 +209,7 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   function _gearSlots(gear) {
-    return (gear ?? []).filter(i => !i.disabled).reduce((sum, i) => sum + (i.slots ?? 0) * (i.quantity ?? 1), 0)
+    return (gear ?? []).filter(i => !i.disabled).reduce((sum, i) => sum + calcGearItemSlots(i), 0)
   }
 
   function _logSheet(what) {
@@ -387,6 +388,11 @@ export const useCharacterStore = defineStore('character', () => {
     const slotsBefore = _gearSlots(character.value.gear)
     const updatedGear = character.value.gear.map(i => i.instanceId === instanceId ? { ...i, ...patch } : i)
     updateField('gear', updatedGear)
+    if ('disabled' in patch && (character.value.attacks ?? []).some(a => a?.gearInstanceId === instanceId)) {
+      updateField('attacks', character.value.attacks.map(a =>
+        a?.gearInstanceId === instanceId ? { ...a, disabled: patch.disabled } : a
+      ))
+    }
     if (item) {
       const action = 'disabled' in patch ? (patch.disabled ? 'disabled' : 'enabled') : 'edited'
       const slotsAfter = _gearSlots(updatedGear)
@@ -405,6 +411,9 @@ export const useCharacterStore = defineStore('character', () => {
     const slotsBefore = _gearSlots(character.value.gear)
     const remainingGear = character.value.gear.filter(i => i.instanceId !== instanceId)
     updateField('gear', remainingGear)
+    if ((character.value.attacks ?? []).some(a => a?.gearInstanceId === instanceId)) {
+      updateField('attacks', character.value.attacks.filter(a => a?.gearInstanceId !== instanceId))
+    }
     if (item) {
       const slotsAfter = _gearSlots(remainingGear)
       const delta = slotsAfter - slotsBefore

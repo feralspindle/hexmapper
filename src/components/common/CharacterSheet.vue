@@ -1349,7 +1349,7 @@
                                             </div>
                                             <div class="cs-list-sub">
                                                 <template v-if="isGemItem(item)">
-                                                    {{ calcCharGearItemSlots(item) }} slot{{ calcCharGearItemSlots(item) !== 1 ? 's' : '' }} total · ×{{ item.quantity }} (10/slot)
+                                                    {{ calcGearItemSlots(item) }} slot{{ calcGearItemSlots(item) !== 1 ? 's' : '' }} total · ×{{ item.quantity }} (10/slot)
                                                 </template>
                                                 <template v-else>
                                                     {{ item.slots }} slot{{
@@ -2070,6 +2070,7 @@ import { useAuthStore } from "@/stores/authStore.js";
 import { useVaultStore } from "@/stores/vaultStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
+import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
 import { supabase } from "@/lib/supabase";
 
 const characterStore = useCharacterStore();
@@ -2157,18 +2158,6 @@ function atkEffectiveBonus(atk) {
     return atk.bonus;
 }
 
-const GEM_NAMES = ['emerald', 'pearl', 'ruby', 'sapphire', 'diamond']
-
-function isGemItem(item) {
-    const n = (item.name ?? '').toLowerCase()
-    return GEM_NAMES.some(g => n.includes(g))
-}
-
-function calcCharGearItemSlots(item) {
-    if (isGemItem(item)) return Math.ceil((item.quantity ?? 1) / 10)
-    return (item.slots ?? 0) * (item.quantity ?? 1)
-}
-
 const rationSlots = computed(() => {
     const count = char.value?.rations ?? 0;
     return count > 0 ? Math.ceil(count / 3) : 0;
@@ -2176,9 +2165,8 @@ const rationSlots = computed(() => {
 
 const coinGearSlots = computed(() => {
     if (!char.value) return 0
-    return ['gold', 'silver', 'copper']
-        .map(c => Math.max(0, Math.ceil(((char.value[c] ?? 0) - 100) / 100)))
-        .reduce((s, n) => s + n, 0)
+    const total = (char.value.gold ?? 0) + (char.value.silver ?? 0) + (char.value.copper ?? 0)
+    return Math.max(0, Math.ceil((total - 100) / 100))
 })
 
 const coinSlotBreakdown = computed(() => {
@@ -2195,7 +2183,7 @@ const effectiveGearSlotsUsed = computed(() => {
         ? (char.value?.gearSlotsUsed ?? 0)
         : char.value.gear
               .filter((item) => !item.disabled)
-              .reduce((sum, item) => sum + calcCharGearItemSlots(item), 0)
+              .reduce((sum, item) => sum + calcGearItemSlots(item), 0)
     return gearSlots + rationSlots.value + coinGearSlots.value
 });
 
@@ -2502,11 +2490,15 @@ function startGearEdit(item) {
     };
 }
 function saveGearEdit(instanceId) {
-    characterStore.updateGearItem(instanceId, {
+    const patch = {
         ...editGearDraft.value,
         slots: Math.round(Math.max(0, Number(editGearDraft.value.slots) || 0)),
         quantity: Number(editGearDraft.value.quantity) || 1,
-    });
+    };
+    const name = (patch.name ?? "").trim();
+    if (name) patch.name = name;
+    else delete patch.name;
+    characterStore.updateGearItem(instanceId, patch);
     editingGearId.value = null;
 }
 
