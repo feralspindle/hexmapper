@@ -53,6 +53,10 @@ input. Specs that need a wide viewport for the crowded topbar override the
 device viewport explicitly but keep the rest of the mobile profile (touch,
 user agent, scale factor).
 
+The firefox project sets `media.volume_scale: 0` because Playwright mutes
+Chromium by default but not Firefox — without it a local run plays every
+dice and chat sound through the machine's speakers.
+
 ## Current Coverage
 
 - GM -> players: reveal one hex, hide one hex.
@@ -80,6 +84,9 @@ user agent, scale factor).
   dismiss it independently.
 - Reconnect: a player who drops offline sees the disconnect banner, misses a GM
   reveal, then converges after reconnect with no hex-grid teardown/remount.
+- Cross-session isolation: a client in one session receives no dice rolls,
+  chat messages, or sounds (instrumented WebAudio probe) from another session
+  its account is a member of.
 
 ## Next High-Value Specs
 

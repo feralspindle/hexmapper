@@ -52,7 +52,13 @@ export default defineConfig({
       ? [
           {
             name: 'firefox-multiplayer',
-            use: { ...devices['Desktop Firefox'] },
+            // Playwright mutes Chromium (--mute-audio) but not Firefox, so
+            // without this pref local runs play every dice/chat sound through
+            // the machine's speakers.
+            use: {
+              ...devices['Desktop Firefox'],
+              launchOptions: { firefoxUserPrefs: { 'media.volume_scale': '0.0' } },
+            },
           },
           {
             name: 'mobile-chromium',
