@@ -214,6 +214,50 @@
                                 :style="{ width: hpPct() + '%' }"
                             />
                         </div>
+
+                        <div
+                            v-if="canEdit || (char.tempHp ?? 0) > 0"
+                            class="cs-temp-hp"
+                        >
+                            <span class="cs-temp-hp-label">Temp</span>
+                            <button
+                                v-if="canEdit"
+                                class="cs-adj-btn cs-adj-btn-sm"
+                                title="−1 Temp HP"
+                                @click="characterStore.adjustTempHp(-1)"
+                            >
+                                −
+                            </button>
+                            <input
+                                v-if="editingTempHp && canEdit"
+                                ref="tempHpInputRef"
+                                v-model.number="tempHpDraft"
+                                type="number"
+                                min="0"
+                                class="cs-input cs-temp-hp-input"
+                                @keyup.enter="saveTempHp"
+                                @keyup.escape="editingTempHp = false"
+                                @blur="saveTempHp"
+                            />
+                            <button
+                                v-else-if="canEdit"
+                                class="cs-temp-hp-val"
+                                @click="startEditTempHp"
+                            >
+                                {{ char.tempHp ?? 0 }}
+                            </button>
+                            <span v-else class="cs-temp-hp-val cs-temp-hp-static">{{
+                                char.tempHp ?? 0
+                            }}</span>
+                            <button
+                                v-if="canEdit"
+                                class="cs-adj-btn cs-adj-btn-sm"
+                                title="+1 Temp HP"
+                                @click="characterStore.adjustTempHp(1)"
+                            >
+                                +
+                            </button>
+                        </div>
                     </div>
 
                     <div class="cs-big-stat">
@@ -2118,6 +2162,21 @@ const editingXP = ref(false);
 const xpDraft = ref(0);
 const xpInputRef = ref(null);
 
+const editingTempHp = ref(false);
+const tempHpDraft = ref(0);
+const tempHpInputRef = ref(null);
+
+function startEditTempHp() {
+    tempHpDraft.value = char.value.tempHp ?? 0;
+    editingTempHp.value = true;
+    nextTick(() => tempHpInputRef.value?.focus());
+}
+function saveTempHp() {
+    if (!editingTempHp.value) return;
+    characterStore.setTempHp(tempHpDraft.value);
+    editingTempHp.value = false;
+}
+
 function startEditMaxHp() {
     maxHpDraft.value = char.value.maxHitPoints ?? 0;
     editingMaxHp.value = true;
@@ -2658,6 +2717,48 @@ button.cs-big-val:hover .cs-tip {
     background: linear-gradient(90deg, #6b3a2a, var(--accent, #c8a86b));
     display: block;
     transition: width 0.3s ease;
+}
+
+.cs-temp-hp {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+}
+.cs-temp-hp-label {
+    font-family: var(--font-zine, "Special Elite", serif);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #3f6b8a;
+}
+.cs-adj-btn-sm {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+}
+.cs-temp-hp-val {
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 13px;
+    font-weight: 700;
+    color: #3f6b8a;
+    min-width: 14px;
+    text-align: center;
+}
+button.cs-temp-hp-val {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+button.cs-temp-hp-val:hover {
+    color: var(--accent-2, #b8541c);
+}
+.cs-temp-hp-input {
+    width: 44px;
+    text-align: center;
+    padding: 2px 4px;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-weight: 700;
 }
 
 .cs-stats-grid {

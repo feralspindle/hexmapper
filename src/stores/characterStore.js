@@ -71,6 +71,7 @@ export const useCharacterStore = defineStore('character', () => {
     return {
       ...data,
       currentHp:   data.currentHp ?? data.maxHitPoints ?? 0,
+      tempHp:      data.tempHp ?? 0,
       luckTokens:  data.luckTokens ?? { current: 1, max: 3 },
     }
   }
@@ -231,8 +232,27 @@ export const useCharacterStore = defineStore('character', () => {
   function adjustHp(delta) {
     if (!character.value) return
     const max = character.value.maxHitPoints ?? 0
-    const next = Math.max(0, Math.min(max, (character.value.currentHp ?? 0) + delta))
-    updateField('currentHp', next)
+    if (delta < 0) {
+      const temp = character.value.tempHp ?? 0
+      const absorbed = Math.min(temp, -delta)
+      if (absorbed > 0) updateField('tempHp', temp - absorbed)
+      const remaining = -delta - absorbed
+      if (remaining > 0) {
+        updateField('currentHp', Math.max(0, (character.value.currentHp ?? 0) - remaining))
+      }
+    } else {
+      updateField('currentHp', Math.min(max, (character.value.currentHp ?? 0) + delta))
+    }
+  }
+
+  function adjustTempHp(delta) {
+    if (!character.value) return
+    updateField('tempHp', Math.max(0, (character.value.tempHp ?? 0) + delta))
+  }
+
+  function setTempHp(value) {
+    if (!character.value) return
+    updateField('tempHp', Math.max(0, Math.floor(Number(value) || 0)))
   }
 
   function adjustStat(key, delta) {
@@ -627,7 +647,7 @@ export const useCharacterStore = defineStore('character', () => {
     luckEvents,
     gmInitiative,
     loadAll, refresh, setActive, importCharacter, deleteCharacter,
-    updateField, updateFieldForChar, adjustHp, adjustMoney, adjustStat, adjustMaxHp,
+    updateField, updateFieldForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative, setGmInitiative,
     cleanup,

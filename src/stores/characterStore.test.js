@@ -152,6 +152,39 @@ describe('characterStore', () => {
     expect(store.character.currentHp).toBe(10)
   })
 
+  test('adjustHp spends temp HP before real HP on damage', async () => {
+    const store = await loadedStore([char('c1', { data: { maxHitPoints: 10, currentHp: 10, tempHp: 5 } })])
+
+    store.adjustHp(-3)
+    expect(store.character.tempHp).toBe(2)
+    expect(store.character.currentHp).toBe(10)
+
+    store.adjustHp(-4)
+    expect(store.character.tempHp).toBe(0)
+    expect(store.character.currentHp).toBe(8)
+  })
+
+  test('adjustHp healing never restores temp HP and clamps to max', async () => {
+    const store = await loadedStore([char('c1', { data: { maxHitPoints: 10, currentHp: 4, tempHp: 3 } })])
+
+    store.adjustHp(99)
+    expect(store.character.currentHp).toBe(10)
+    expect(store.character.tempHp).toBe(3)
+  })
+
+  test('adjustTempHp and setTempHp never go below zero', async () => {
+    const store = await loadedStore([char('c1', { data: { maxHitPoints: 10, currentHp: 10, tempHp: 2 } })])
+
+    store.adjustTempHp(-5)
+    expect(store.character.tempHp).toBe(0)
+
+    store.setTempHp(8)
+    expect(store.character.tempHp).toBe(8)
+
+    store.setTempHp(-4)
+    expect(store.character.tempHp).toBe(0)
+  })
+
   test('adjustMaxHp drags currentHp down when the max drops below it', async () => {
     const store = await loadedStore()
 
