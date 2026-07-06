@@ -49,21 +49,19 @@ describe('DungeonRightPanel', () => {
     mocks.sessionStore.isGM = true
   })
 
-  test('keeps oracle available for the gm in gm-led mode', () => {
+  test('shows the oracle tab in solo/co-op mode', () => {
+    mocks.sessionStore.playMode = 'gm_less'
     const wrapper = mountPanel()
 
     expect(wrapper.text()).toContain('Oracle')
   })
 
-  test('hides oracle from players until solo/co-op mode is active', () => {
+  test('hides the oracle tab in gm-led mode for gm and players alike', () => {
+    const gmWrapper = mountPanel()
+    expect(gmWrapper.text()).not.toContain('Oracle')
+
     mocks.sessionStore.isGM = false
-    const gmLedWrapper = mountPanel()
-
-    expect(gmLedWrapper.text()).not.toContain('Oracle')
-
-    mocks.sessionStore.playMode = 'gm_less'
-    const coopWrapper = mountPanel()
-
-    expect(coopWrapper.text()).toContain('Oracle')
+    const playerWrapper = mountPanel()
+    expect(playerWrapper.text()).not.toContain('Oracle')
   })
 })
