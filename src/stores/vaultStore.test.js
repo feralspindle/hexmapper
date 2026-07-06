@@ -112,11 +112,11 @@ describe('vaultStore', () => {
 
     await store.claimLoot(store.loot[0])
 
-    expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Longsword', slots: 0, quantity: 2, type: 'sundry' })
+    expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Longsword', slots: 1, quantity: 2, type: 'sundry' })
     expect(kit.character.adjustMoney).not.toHaveBeenCalled()
   })
 
-  test('claiming without an active character still removes the loot', async () => {
+  test('claiming without an active character is a no-op that preserves the loot', async () => {
     kit.character.character = null
     const store = useVaultStore()
     await store.init('s1')
@@ -124,8 +124,9 @@ describe('vaultStore', () => {
 
     await store.claimLoot(store.loot[0])
 
-    expect(store.loot).toEqual([])
+    expect(store.loot).toHaveLength(1)
     expect(kit.character.addGearItem).not.toHaveBeenCalled()
+    expect(kit.apiClient.delete).not.toHaveBeenCalled()
   })
 
   describe('stash slot calculation', () => {

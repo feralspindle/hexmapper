@@ -5,6 +5,7 @@ import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playLuckSound } from '@/lib/diceSound.js'
+import { calcGearItemSlots } from '@/lib/gearSlots.js'
 
 export function statMod(value) {
   return Math.floor((value - 10) / 2)
@@ -30,6 +31,9 @@ export function parseAttack(str) {
 }
 
 const CLIENT_ID = crypto.randomUUID()
+
+const SHEET_LOG_EXCLUDED_FIELDS = new Set(['gear', 'attacks', 'renown', 'renownLog', 'ledger'])
+const RENOWN_LOG_MAX = 50
 
 export const useCharacterStore = defineStore('character', () => {
   const _saveTimers = new Map()
@@ -72,6 +76,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...data,
       currentHp:   data.currentHp ?? data.maxHitPoints ?? 0,
       tempHp:      data.tempHp ?? 0,
+      renownLog:   data.renownLog ?? [],
       luckTokens:  data.luckTokens ?? { current: 1, max: 3 },
     }
   }
@@ -91,7 +96,7 @@ export const useCharacterStore = defineStore('character', () => {
     loading.value = false
 
     if (charsResult.error) { console.error('characterStore.loadAll:', charsResult.error.message); return }
-    characters.value = charsResult.data ?? []
+    characters.value = (charsResult.data ?? []).map(row => ({ ...row, data: _augment(row.data) }))
 
     _subscribeRealtime(sessionId)
 
@@ -124,7 +129,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!charsResult.error && charsResult.data) {
       const local = new Map(characters.value.map(c => [c.id, c]))
       characters.value = charsResult.data.map(row =>
-        _saveTimers.has(row.id) && local.has(row.id) ? local.get(row.id) : row
+        _saveTimers.has(row.id) && local.has(row.id) ? local.get(row.id) : { ...row, data: _augment(row.data) }
       )
     }
 
@@ -204,7 +209,7 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   function _gearSlots(gear) {
-    return (gear ?? []).filter(i => !i.disabled).reduce((sum, i) => sum + (i.slots ?? 0) * (i.quantity ?? 1), 0)
+    return (gear ?? []).filter(i => !i.disabled).reduce((sum, i) => sum + calcGearItemSlots(i), 0)
   }
 
   function _logSheet(what) {
@@ -224,7 +229,7 @@ export const useCharacterStore = defineStore('character', () => {
     )
     _scheduleSave(activeId.value)
     _scheduleBroadcast(activeId.value)
-    if (field !== 'gear' && field !== 'attacks') {
+    if (!SHEET_LOG_EXCLUDED_FIELDS.has(field)) {
       _logSheet(`${charName} · ${field}: ${_fmt(oldValue)} → ${_fmt(value)}`)
     }
   }
@@ -253,6 +258,53 @@ export const useCharacterStore = defineStore('character', () => {
   function setTempHp(value) {
     if (!character.value) return
     updateField('tempHp', Math.max(0, Math.floor(Number(value) || 0)))
+  }
+
+  function _dexMod() {
+    const dex = character.value?.stats?.DEX
+    return dex !== undefined ? statMod(dex) : 0
+  }
+
+  function renownValue() {
+    if (!character.value) return 0
+    return character.value.renown ?? _dexMod()
+  }
+
+  function _writeRenown(current, next, delta, reason) {
+    const charName = character.value.name ?? 'character'
+    const why = (reason ?? '').trim()
+    const entry = {
+      id: crypto.randomUUID(),
+      delta,
+      reason: why || null,
+      at: new Date().toISOString(),
+    }
+    updateField('renown', next)
+    updateField('renownLog', [...(character.value.renownLog ?? []), entry].slice(-RENOWN_LOG_MAX))
+    _logSheet(`${charName} · renown: ${current} → ${next}${why ? ` (${why})` : ''}`)
+  }
+
+  function adjustRenown(delta, reason = '') {
+    if (!character.value || !delta) return
+    const current = renownValue()
+    _writeRenown(current, current + delta, delta, reason)
+  }
+
+  function setRenown(value, reason = '') {
+    if (!character.value) return
+    const current = renownValue()
+    const next = Math.floor(Number(value) || 0)
+    if (next === current) return
+    _writeRenown(current, next, next - current, reason)
+  }
+
+  function deleteRenownEntry(id) {
+    if (!character.value?.renownLog) return
+    const entry = character.value.renownLog.find(e => e.id === id)
+    if (!entry) return
+    const charName = character.value.name ?? 'character'
+    updateField('renownLog', character.value.renownLog.filter(e => e.id !== id))
+    _logSheet(`${charName} removed renown entry: ${entry.delta > 0 ? '+' : ''}${entry.delta}${entry.reason ? ` (${entry.reason})` : ''}`)
   }
 
   function adjustStat(key, delta) {
@@ -336,6 +388,11 @@ export const useCharacterStore = defineStore('character', () => {
     const slotsBefore = _gearSlots(character.value.gear)
     const updatedGear = character.value.gear.map(i => i.instanceId === instanceId ? { ...i, ...patch } : i)
     updateField('gear', updatedGear)
+    if ('disabled' in patch && (character.value.attacks ?? []).some(a => a?.gearInstanceId === instanceId)) {
+      updateField('attacks', character.value.attacks.map(a =>
+        a?.gearInstanceId === instanceId ? { ...a, disabled: patch.disabled } : a
+      ))
+    }
     if (item) {
       const action = 'disabled' in patch ? (patch.disabled ? 'disabled' : 'enabled') : 'edited'
       const slotsAfter = _gearSlots(updatedGear)
@@ -354,6 +411,9 @@ export const useCharacterStore = defineStore('character', () => {
     const slotsBefore = _gearSlots(character.value.gear)
     const remainingGear = character.value.gear.filter(i => i.instanceId !== instanceId)
     updateField('gear', remainingGear)
+    if ((character.value.attacks ?? []).some(a => a?.gearInstanceId === instanceId)) {
+      updateField('attacks', character.value.attacks.filter(a => a?.gearInstanceId !== instanceId))
+    }
     if (item) {
       const slotsAfter = _gearSlots(remainingGear)
       const delta = slotsAfter - slotsBefore
@@ -472,7 +532,10 @@ export const useCharacterStore = defineStore('character', () => {
     const { data } = await supabase.from('characters').select('*').in('id', missing)
     if (data?.length) {
       const existing = new Set(characters.value.map(c => c.id))
-      characters.value = [...characters.value, ...data.filter(c => !existing.has(c.id))]
+      characters.value = [
+        ...characters.value,
+        ...data.filter(c => !existing.has(c.id)).map(row => ({ ...row, data: _augment(row.data) })),
+      ]
     }
   }
 
@@ -488,7 +551,7 @@ export const useCharacterStore = defineStore('character', () => {
         filter: `session_id=eq.${sessionId}`,
       }, ({ new: row }) => {
         if (!characters.value.find(c => c.id === row.id)) {
-          characters.value = [...characters.value, row]
+          characters.value = [...characters.value, { ...row, data: _augment(row.data) }]
         }
       })
       .on('postgres_changes', {
@@ -648,6 +711,7 @@ export const useCharacterStore = defineStore('character', () => {
     gmInitiative,
     loadAll, refresh, setActive, importCharacter, deleteCharacter,
     updateField, updateFieldForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
+    renownValue, adjustRenown, setRenown, deleteRenownEntry,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative, setGmInitiative,
     cleanup,
