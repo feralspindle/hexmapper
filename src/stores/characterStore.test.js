@@ -185,6 +185,118 @@ describe('characterStore', () => {
     expect(store.character.tempHp).toBe(0)
   })
 
+  test('renown defaults to the DEX modifier until it is set', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 16 } } })])
+
+    expect(store.renownValue()).toBe(3)
+    expect(store.character.renown).toBeUndefined()
+  })
+
+  test('adjustRenown seeds from the DEX modifier, then increments and logs', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 14 } } })])
+
+    store.adjustRenown(1, 'carousing')
+    expect(store.character.renown).toBe(3)
+    expect(store.renownValue()).toBe(3)
+
+    store.adjustRenown(-1, 'fighting in public')
+    expect(store.character.renown).toBe(2)
+
+    expect(store.character.renownLog).toHaveLength(2)
+    expect(store.character.renownLog[0]).toMatchObject({ delta: 1, reason: 'carousing' })
+    expect(store.character.renownLog[1]).toMatchObject({ delta: -1, reason: 'fighting in public' })
+    expect(store.character.renownLog[0].at).toBeTruthy()
+  })
+
+  test('adjustRenown ignores a zero delta and stores an empty reason as null', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 10 }, renown: 4 } })])
+
+    store.adjustRenown(0, 'nothing happens')
+    expect(store.character.renown).toBe(4)
+    expect(store.character.renownLog ?? []).toHaveLength(0)
+
+    store.adjustRenown(2, '   ')
+    expect(store.character.renown).toBe(6)
+    expect(store.character.renownLog[0].reason).toBeNull()
+  })
+
+  test('setRenown logs only the net delta from the current value', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 12 }, renown: 5 } })])
+
+    store.setRenown(8, 'legendary deed')
+    expect(store.character.renown).toBe(8)
+    expect(store.character.renownLog[0]).toMatchObject({ delta: 3, reason: 'legendary deed' })
+
+    store.setRenown(8)
+    expect(store.character.renownLog).toHaveLength(1)
+  })
+
+  test('setRenown with an unchanged value writes and logs nothing', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 14 } } })])
+    kit.apiClient.post.mockClear()
+
+    store.setRenown(2)
+
+    expect(store.character.renown).toBeUndefined()
+    expect(store.character.renownLog).toHaveLength(0)
+    expect(kit.apiClient.post).not.toHaveBeenCalled()
+  })
+
+  test('renown changes put the reason in the session sheet log', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 10 }, renown: 2 } })])
+
+    store.adjustRenown(1, 'carousing')
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith(
+      '/character-sheet-log',
+      expect.objectContaining({ what: expect.stringContaining('renown: 2 → 3 (carousing)') }),
+      'log_sheet_change',
+    )
+  })
+
+  test('renownLog is capped at 50 entries', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 10 }, renown: 0 } })])
+
+    for (let i = 0; i < 55; i++) store.adjustRenown(1, `event ${i}`)
+
+    expect(store.character.renown).toBe(55)
+    expect(store.character.renownLog).toHaveLength(50)
+    expect(store.character.renownLog[0].reason).toBe('event 5')
+    expect(store.character.renownLog[49].reason).toBe('event 54')
+  })
+
+  test('deleteRenownEntry records the removal in the session sheet log', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 10 } } })])
+
+    store.adjustRenown(-1, 'fighting in public')
+    store.deleteRenownEntry(store.character.renownLog[0].id)
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith(
+      '/character-sheet-log',
+      expect.objectContaining({ what: expect.stringContaining('removed renown entry: -1 (fighting in public)') }),
+      'log_sheet_change',
+    )
+  })
+
+  test('loadAll augments rows so renownLog is always an array', async () => {
+    const store = await loadedStore([char('c1', { data: { maxHitPoints: 10 } })])
+
+    expect(store.character.renownLog).toEqual([])
+    expect(store.character.tempHp).toBe(0)
+  })
+
+  test('deleteRenownEntry removes a single log entry by id', async () => {
+    const store = await loadedStore([char('c1', { data: { stats: { DEX: 10 } } })])
+
+    store.adjustRenown(1, 'a')
+    store.adjustRenown(1, 'b')
+    const targetId = store.character.renownLog[0].id
+    store.deleteRenownEntry(targetId)
+
+    expect(store.character.renownLog).toHaveLength(1)
+    expect(store.character.renownLog[0].reason).toBe('b')
+  })
+
   test('adjustMaxHp drags currentHp down when the max drops below it', async () => {
     const store = await loadedStore()
 
