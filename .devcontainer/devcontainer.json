@@ -1,0 +1,38 @@
+{
+  "name": "hex-map agent sandbox",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "remoteUser": "node",
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--memory=8g",
+    "--cpus=4",
+    "--pids-limit=2048",
+    "--add-host=host.docker.internal:host-gateway"
+  ],
+  "mounts": [
+    "source=hexmap-${localWorkspaceFolderBasename}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=hexmap-${localWorkspaceFolderBasename}-rust-target,target=${containerWorkspaceFolder}/server/target,type=volume",
+    "source=hexmap-cargo-registry,target=/home/node/.cargo/registry,type=volume"
+  ],
+  "containerEnv": {
+    "HEXMAP_PG_HOST": "host.docker.internal",
+    "HEXMAP_PG_PORT": "54322"
+  },
+  "remoteEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:CLAUDE_SANDBOX_API_KEY}",
+    "OPENAI_API_KEY": "${localEnv:CODEX_SANDBOX_API_KEY}",
+    "OPENROUTER_API_KEY": "${localEnv:OPENROUTER_SANDBOX_API_KEY}"
+  },
+  "forwardPorts": [5173],
+  "postCreateCommand": "sudo /usr/local/bin/post-create-root.sh && npm ci",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": ["Vue.volar", "rust-lang.rust-analyzer"]
+    }
+  }
+}
