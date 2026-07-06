@@ -7,6 +7,7 @@
         :key="tool.mode"
         class="ds-tool"
         :aria-pressed="dungeonStore.drawMode === tool.mode ? 'true' : 'false'"
+        :data-testid="`dungeon-tool-${tool.mode}`"
         @click="dungeonStore.drawMode = tool.mode"
       >
         <component :is="tool.icon" :size="20" />
@@ -22,6 +23,7 @@
         :key="tool.mode"
         class="ds-tool"
         :aria-pressed="dungeonStore.drawMode === tool.mode ? 'true' : 'false'"
+        :data-testid="`dungeon-tool-${tool.mode}`"
         @click="dungeonStore.drawMode = tool.mode"
       >
         <component :is="tool.icon" :size="20" />
@@ -77,6 +79,7 @@
       <button
         class="ds-tool"
         :aria-pressed="vaultVisible ? 'true' : 'false'"
+        data-testid="dungeon-vault-toggle"
         @click="toggleVault()"
       >
         <component :is="VaultIcon" :size="18" />
@@ -88,6 +91,7 @@
       <button
         class="ds-tool"
         :aria-pressed="mapSettingsOpen ? 'true' : 'false'"
+        data-testid="dungeon-map-settings"
         @click="emit('map-settings')"
       >
         <component :is="MapImageIcon" :size="18" />
@@ -97,6 +101,7 @@
         v-if="dungeonStore.fogMode"
         class="ds-tool"
         :aria-pressed="dungeonStore.drawMode === 'fog' ? 'true' : 'false'"
+        data-testid="dungeon-tool-fog"
         @click="dungeonStore.drawMode = dungeonStore.drawMode === 'fog' ? 'select' : 'fog'"
       >
         <component :is="FogBrushIcon" :size="18" />

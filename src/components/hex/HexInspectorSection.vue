@@ -547,6 +547,7 @@
                                     flex-shrink: 0;
                                     white-space: nowrap;
                                 "
+                                data-testid="dungeon-enter"
                                 @click="hexStore.navigateToDungeon(d.id)"
                             >
                                 Enter →
@@ -567,10 +568,11 @@
                         placeholder="Dungeon name…"
                         class="ds-input"
                         style="flex: 1; font-size: 13px"
+                        data-testid="dungeon-name-input"
                         @keyup.enter="confirmNewDungeon"
                         @keyup.escape="addingDungeon = false"
                     />
-                    <button class="ds-btn" @click="confirmNewDungeon">
+                    <button class="ds-btn" data-testid="dungeon-confirm" @click="confirmNewDungeon">
                         Add
                     </button>
                 </div>
@@ -578,6 +580,7 @@
                     v-else
                     class="hm-dashed-btn"
                     style="margin-top: 6px"
+                    data-testid="add-dungeon"
                     @click="startAddDungeon"
                 >
                     + Add Dungeon
@@ -599,6 +602,7 @@
                         v-for="m in childMapsForSelectedHex"
                         :key="m.id"
                         class="hm-content-card"
+                        data-testid="child-map-card"
                     >
                         <div class="hm-content-card-head">
                             <div class="hm-stamp">
@@ -615,34 +619,74 @@
                                     <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />
                                 </svg>
                             </div>
-                            <span
-                                style="
-                                    font-family: var(--font-body);
-                                    font-size: 13px;
-                                    color: var(--ink-2);
-                                    flex: 1;
-                                    overflow: hidden;
-                                    text-overflow: ellipsis;
-                                    white-space: nowrap;
-                                "
-                            >{{ m.name }}</span>
-                            <button
-                                v-if="sessionStore.isGM"
-                                style="
-                                    font-family: var(--font-mono);
-                                    font-size: 10px;
-                                    letter-spacing: 0.06em;
-                                    color: var(--accent-2);
-                                    background: none;
-                                    border: none;
-                                    cursor: pointer;
-                                    flex-shrink: 0;
-                                    white-space: nowrap;
-                                "
-                                @click="mapStore.setActiveMap(m.id)"
-                            >
-                                Enter →
-                            </button>
+                            <template v-if="renamingMapId === m.id">
+                                <input
+                                    ref="renameMapInputEl"
+                                    v-model="renameMapDraft"
+                                    type="text"
+                                    class="ds-input"
+                                    style="flex: 1; font-size: 13px"
+                                    data-testid="child-map-rename-input"
+                                    @keyup.enter="confirmRenameMap(m.id)"
+                                    @keyup.escape="renamingMapId = null"
+                                />
+                                <button
+                                    class="ds-btn"
+                                    data-testid="child-map-rename-confirm"
+                                    @click="confirmRenameMap(m.id)"
+                                >
+                                    Save
+                                </button>
+                            </template>
+                            <template v-else>
+                                <span
+                                    style="
+                                        font-family: var(--font-body);
+                                        font-size: 13px;
+                                        color: var(--ink-2);
+                                        flex: 1;
+                                        overflow: hidden;
+                                        text-overflow: ellipsis;
+                                        white-space: nowrap;
+                                    "
+                                >{{ m.name }}</span>
+                                <button
+                                    v-if="sessionStore.isGM"
+                                    class="hm-card-icon-btn"
+                                    title="Rename map"
+                                    data-testid="child-map-rename"
+                                    @click="startRenameMap(m)"
+                                >
+                                    ✎
+                                </button>
+                                <button
+                                    v-if="sessionStore.isGM"
+                                    class="hm-card-icon-btn hm-card-icon-btn--danger"
+                                    title="Delete map"
+                                    data-testid="child-map-delete"
+                                    @click="confirmDeleteMap(m)"
+                                >
+                                    ×
+                                </button>
+                                <button
+                                    v-if="sessionStore.isGM"
+                                    style="
+                                        font-family: var(--font-mono);
+                                        font-size: 10px;
+                                        letter-spacing: 0.06em;
+                                        color: var(--accent-2);
+                                        background: none;
+                                        border: none;
+                                        cursor: pointer;
+                                        flex-shrink: 0;
+                                        white-space: nowrap;
+                                    "
+                                    data-testid="child-map-enter"
+                                    @click="mapStore.setActiveMap(m.id)"
+                                >
+                                    Enter →
+                                </button>
+                            </template>
                         </div>
                     </div>
                 </div>
@@ -937,6 +981,30 @@ async function confirmNewChildMap() {
     if (!cellId) return;
 
     await mapStore.createChildMap(cellId, name);
+}
+
+const renamingMapId = ref(null);
+const renameMapDraft = ref("");
+const renameMapInputEl = ref(null);
+
+async function startRenameMap(map) {
+    renamingMapId.value = map.id;
+    renameMapDraft.value = map.name;
+    await nextTick();
+    renameMapInputEl.value?.focus();
+}
+
+async function confirmRenameMap(mapId) {
+    const name = renameMapDraft.value.trim();
+    renamingMapId.value = null;
+    if (!name) return;
+    await mapStore.renameMap(mapId, name);
+}
+
+function confirmDeleteMap(map) {
+    confirm(`Delete the map "${map.name}"? This cannot be undone.`, () => {
+        mapStore.deleteMap(map.id);
+    });
 }
 
 onUnmounted(() => notesStore.cleanup());

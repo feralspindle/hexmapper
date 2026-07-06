@@ -1,5 +1,13 @@
 <template>
-  <div ref="containerEl" class="relative w-full h-full overflow-hidden">
+  <div
+    ref="containerEl"
+    class="relative w-full h-full overflow-hidden"
+    data-testid="dungeon-canvas"
+    :data-room-count="dungeonStore.rooms.size"
+    :data-corridor-count="dungeonStore.corridors.size"
+    :data-fog-revealed="dungeonStore.fogCells.size"
+    :data-fog-mode="dungeonStore.fogMode ? 'true' : 'false'"
+  >
 
     <canvas
       ref="canvasEl"
@@ -52,7 +60,7 @@
           />
         </clipPath>
       </defs>
-      <g v-for="[id, room] in dungeonStore.rooms" :key="id">
+      <g v-for="[id, room] in dungeonStore.rooms" :key="id" data-testid="dungeon-room">
         <template v-if="true" v-bind="{}">
           <template v-for="r in [resizeGhost && id === resizeRoomId ? resizeGhost : moveGhost && id === moveRoomId ? moveGhost : room]" :key="'r'">
             <text
@@ -122,7 +130,7 @@
         style="filter:drop-shadow(0 1px 3px rgba(0,0,0,.9))"
       >{{ draw.ghost.value.w * 5 }} × {{ draw.ghost.value.h * 5 }} ft</text>
 
-      <g v-for="[id, corridor] in dungeonStore.corridors" :key="id">
+      <g v-for="[id, corridor] in dungeonStore.corridors" :key="id" data-testid="dungeon-corridor">
         <text
           v-if="corridor.label"
           :x="corridorMidpoint(corridor).x * cellPx - viewport.offsetX"

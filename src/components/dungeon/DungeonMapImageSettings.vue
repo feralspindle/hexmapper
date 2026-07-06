@@ -3,7 +3,7 @@
 
     <div class="dms-header">
       <span class="dms-title">Map Settings</span>
-      <button class="dms-close" @click="emit('close')">
+      <button class="dms-close" data-testid="dungeon-settings-close" @click="emit('close')">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M1 1l10 10M11 1L1 11"/>
         </svg>
@@ -98,7 +98,7 @@
     <div class="dms-section">
       <div class="dms-label">Fog of war</div>
       <div class="dms-fog-row">
-        <button :class="['dms-fog-btn', dungeonStore.fogMode ? 'active' : '']" @click="toggleFogMode">
+        <button :class="['dms-fog-btn', dungeonStore.fogMode ? 'active' : '']" data-testid="dungeon-fog-toggle" @click="toggleFogMode">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 15.25M8 16h.01M12 19h.01M16 16h.01"/>
           </svg>

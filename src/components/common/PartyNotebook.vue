@@ -21,16 +21,16 @@
     </div>
 
     <div class="pn-tabs">
-      <button class="pn-tab" :class="{ active: activeTab === 'quests' }" @click="activeTab = 'quests'">
+      <button class="pn-tab" :class="{ active: activeTab === 'quests' }" data-testid="notebook-tab-quests" @click="activeTab = 'quests'">
         Quests<span v-if="activeQuestCount" class="pn-badge">{{ activeQuestCount }}</span>
       </button>
-      <button class="pn-tab" :class="{ active: activeTab === 'notes' }" @click="activeTab = 'notes'">
+      <button class="pn-tab" :class="{ active: activeTab === 'notes' }" data-testid="notebook-tab-notes" @click="activeTab = 'notes'">
         Notes<span v-if="notebookStore.notes.length" class="pn-badge">{{ notebookStore.notes.length }}</span>
       </button>
-      <button class="pn-tab" :class="{ active: activeTab === 'vault' }" @click="activeTab = 'vault'">
+      <button class="pn-tab" :class="{ active: activeTab === 'vault' }" data-testid="notebook-tab-vault" @click="activeTab = 'vault'">
         Vault<span v-if="vaultStore.loot.length" class="pn-badge">{{ vaultStore.loot.length }}</span>
       </button>
-      <button class="pn-tab" :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'">
+      <button class="pn-tab" :class="{ active: activeTab === 'calendar' }" data-testid="notebook-tab-calendar" @click="activeTab = 'calendar'">
         Calendar
       </button>
     </div>
@@ -41,13 +41,14 @@
       <template v-if="activeTab === 'quests'">
         <div class="pn-section-bar">
           <span class="pn-count">Active {{ activeQuestCount }}</span>
-          <button class="pn-add-btn" @click="newQuest">+ New Quest</button>
+          <button class="pn-add-btn" data-testid="quest-new" @click="newQuest">+ New Quest</button>
         </div>
         <div v-if="!activeQuests.length" class="pn-empty">No active quests</div>
-        <div v-for="quest in activeQuests" :key="quest.id" class="pn-quest-card">
+        <div v-for="quest in activeQuests" :key="quest.id" class="pn-quest-card" data-testid="quest-card">
           <div class="pn-quest-title-row">
             <input
               class="pn-quest-title"
+              data-testid="quest-title"
               :value="quest.title"
               placeholder="Quest title…"
               @focus="onItemFocus('quest', quest.id)"
@@ -152,7 +153,7 @@
             <button v-else class="pn-add-reward-btn" @click="openAddReward(quest.id)">+ Add reward</button>
           </div>
           <div class="pn-quest-footer">
-            <button class="pn-complete-btn" @click="completeQuest(quest.id)">Mark complete</button>
+            <button class="pn-complete-btn" data-testid="quest-complete" @click="completeQuest(quest.id)">Mark complete</button>
             <button class="pn-del-btn" title="Delete quest" @click="deleteQuest(quest.id)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
@@ -232,13 +233,14 @@
       <template v-if="activeTab === 'notes'">
         <div class="pn-section-bar">
           <span class="pn-count">Entries {{ notebookStore.notes.length }}</span>
-          <button class="pn-add-btn" @click="newNote">+ New Entry</button>
+          <button class="pn-add-btn" data-testid="note-new" @click="newNote">+ New Entry</button>
         </div>
         <div v-if="!notebookStore.notes.length" class="pn-empty">No session notes yet</div>
-        <div v-for="note in notebookStore.notes" :key="note.id" class="pn-note-card">
+        <div v-for="note in notebookStore.notes" :key="note.id" class="pn-note-card" data-testid="note-card">
           <div class="pn-note-header">
             <input
               class="pn-note-title"
+              data-testid="note-title"
               :value="note.title"
               placeholder="Entry title…"
               :readonly="!canEditNote(note)"
@@ -262,6 +264,7 @@
           </div>
           <textarea
             class="pn-note-content"
+            data-testid="note-content"
             :value="note.content"
             placeholder="Write something…"
             :readonly="!canEditNote(note)"
@@ -283,7 +286,7 @@
             <span class="pv-section-title">Pending Loot</span>
             <span v-if="vaultStore.loot.length" class="pv-badge">{{ vaultStore.loot.length }}</span>
           </button>
-          <button class="pv-add-btn" @click="toggleAddLoot">+ Add</button>
+          <button class="pv-add-btn" data-testid="vault-add-loot" @click="toggleAddLoot">+ Add</button>
         </div>
 
         <template v-if="lootOpen">
@@ -294,29 +297,30 @@
               v-model="newLootName"
               class="pv-input"
               placeholder="Item name…"
+              data-testid="vault-loot-name"
               @keydown.enter="submitNewLoot"
               @keydown.escape="cancelAddLoot"
             />
-            <select v-else v-model="newLootCurrency" class="pv-input pv-currency-select">
+            <select v-else v-model="newLootCurrency" class="pv-input pv-currency-select" data-testid="vault-loot-currency">
               <option value="gold">Gold</option>
               <option value="silver">Silver</option>
               <option value="copper">Copper</option>
             </select>
             <div class="pv-form-row">
               <label class="pv-form-label">Qty</label>
-              <input v-model.number="newLootQty" type="number" min="1" class="pv-input pv-input--qty" @keydown.enter="submitNewLoot" />
-              <button class="pv-submit-btn" @click="submitNewLoot">Add</button>
+              <input v-model.number="newLootQty" type="number" min="1" class="pv-input pv-input--qty" data-testid="vault-loot-qty" @keydown.enter="submitNewLoot" />
+              <button class="pv-submit-btn" data-testid="vault-loot-submit" @click="submitNewLoot">Add</button>
               <button class="pv-cancel-btn" @click="cancelAddLoot">✕</button>
             </div>
             <div class="pv-type-row">
-              <button class="pv-type-btn" :class="{ active: newLootType === 'item' }" @click="newLootType = 'item'">Item</button>
-              <button class="pv-type-btn" :class="{ active: newLootType === 'coins' }" @click="newLootType = 'coins'">Coins</button>
+              <button class="pv-type-btn" :class="{ active: newLootType === 'item' }" data-testid="vault-loot-type-item" @click="newLootType = 'item'">Item</button>
+              <button class="pv-type-btn" :class="{ active: newLootType === 'coins' }" data-testid="vault-loot-type-coins" @click="newLootType = 'coins'">Coins</button>
             </div>
           </div>
 
           <div v-if="!vaultStore.loot.length && !addLootOpen" class="pv-empty">No pending loot</div>
 
-          <div v-for="item in vaultStore.loot" :key="item.id" class="pv-loot-card">
+          <div v-for="item in vaultStore.loot" :key="item.id" class="pv-loot-card" data-testid="vault-loot-card">
             <div class="pv-loot-main">
               <span v-if="item.quantity > 1" class="pv-loot-qty" :class="{ 'pv-loot-qty--coins': (item.loot_type ?? 'item') === 'coins' }">×{{ item.quantity }}</span>
               <span class="pv-loot-name">{{ item.name }}</span>
@@ -332,6 +336,7 @@
                 <button
                   class="pv-split-confirm"
                   :disabled="splitQtyPer(item) < 1"
+                  data-testid="vault-split-confirm"
                   @click="confirmSplit(item)"
                 >Deal out</button>
               </template>
@@ -347,11 +352,12 @@
                   class="pv-assign-char"
                   :class="{ active: assignCount(c.id) > 0 }"
                   :disabled="assignCount(c.id) === 0 && totalAssigned >= item.quantity"
+                  data-testid="vault-assign-char"
                   @click="cycleAssign(c, item)"
                 >{{ (c.data?.name || 'Player').split(' ')[0] }}<span v-if="assignCount(c.id) > 0" class="pv-assign-n"> ×{{ assignCount(c.id) }}</span></button>
               </div>
               <span class="pv-split-info">{{ totalAssigned }}/{{ item.quantity }}</span>
-              <button class="pv-split-confirm" :disabled="totalAssigned === 0" @click="confirmAssign(item)">Deal out</button>
+              <button class="pv-split-confirm" :disabled="totalAssigned === 0" data-testid="vault-assign-confirm" @click="confirmAssign(item)">Deal out</button>
               <button class="pv-split-cancel" @click="assigningId = null">✕</button>
             </div>
 
@@ -371,9 +377,10 @@
                 class="pv-action"
                 :disabled="!characterStore.character"
                 :title="characterStore.character ? 'Add to my inventory' : 'Select a character first'"
+                data-testid="vault-claim"
                 @click="doClaimLoot(item)"
               >Claim</button>
-              <button v-if="(item.loot_type ?? 'item') === 'coins'" class="pv-action" title="Move to party bank" @click="vaultStore.depositLoot(item)">Deposit</button>
+              <button v-if="(item.loot_type ?? 'item') === 'coins'" class="pv-action" title="Move to party bank" data-testid="vault-deposit" @click="vaultStore.depositLoot(item)">Deposit</button>
               <button
                 class="pv-action"
                 :class="{ active: stashingId === item.id }"
@@ -387,6 +394,7 @@
                   :class="{ active: splittingId === item.id }"
                   :disabled="activeChars.length < 2"
                   :title="activeChars.length < 2 ? 'Need 2+ active characters' : 'Split among active players'"
+                  data-testid="vault-split"
                   @click="toggleSplit(item)"
                 >Split</button>
               </template>
@@ -396,6 +404,7 @@
                   :class="{ active: assigningId === item.id }"
                   :disabled="activeChars.length < 1"
                   :title="activeChars.length < 1 ? 'No active characters' : 'Assign to players'"
+                  data-testid="vault-assign"
                   @click="toggleAssign(item)"
                 >Assign</button>
               </template>
@@ -450,7 +459,7 @@
           <div class="pv-bank-coins-grid">
             <div v-for="coin in BANK_COINS" :key="coin.key" class="pv-bank-coin">
               <div class="pv-coin-icon" :style="{ background: coin.bg, color: coin.fg }">{{ coin.symbol }}</div>
-              <div class="pv-coin-amount">{{ bankTotal(coin.key) }}</div>
+              <div class="pv-coin-amount" :data-testid="`vault-bank-${coin.key}`">{{ bankTotal(coin.key) }}</div>
               <div class="pv-coin-label">{{ coin.label }}</div>
             </div>
           </div>

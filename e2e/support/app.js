@@ -1,4 +1,17 @@
-import { expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+
+// browser.newContext() does not inherit project `use` options, so multi-context
+// helpers must copy the device profile (mobile viewport, touch, UA) themselves.
+// Explicit per-spec contextOptions still win, e.g. tests that need a wide
+// viewport for the crowded topbar.
+export function deviceContextOptions() {
+  const use = test.info().project.use ?? {}
+  const options = {}
+  for (const key of ['viewport', 'userAgent', 'deviceScaleFactor', 'isMobile', 'hasTouch']) {
+    if (use[key] !== undefined) options[key] = use[key]
+  }
+  return options
+}
 
 export function hexCell(page, q, r) {
   return page.locator(`[data-testid="hex-cell"][data-q="${q}"][data-r="${r}"]`).first()
@@ -161,14 +174,64 @@ export async function joinCampaign(page, account, sessionId) {
   await prepareHexInteractions(page)
 }
 
+export async function openNotebook(page, tab) {
+  if ((await page.locator('.pn-panel').count()) === 0) {
+    const hexToggle = page.getByTestId('hex-vault-toggle')
+    if (await hexToggle.count()) {
+      await hexToggle.click()
+    } else {
+      await page.getByTestId('dungeon-vault-toggle').click()
+    }
+    await page.locator('.pn-panel').waitFor()
+  }
+  await page.getByTestId(`notebook-tab-${tab}`).click()
+}
+
+export async function openCharacterSheet(page) {
+  const sheet = page.getByTestId('char-sheet')
+  if (await sheet.isVisible().catch(() => false)) return
+  await page.getByTestId('char-sheet-toggle').click()
+  await expect(sheet).toBeVisible()
+}
+
+export async function openCharacterSheetTab(page, tab) {
+  await openCharacterSheet(page)
+  await page.getByTestId(`char-tab-${tab}`).click()
+}
+
+export async function createCharacter(page, name) {
+  await page.getByTestId('char-picker-toggle').click()
+  await page.getByTestId('char-picker-new').click()
+  await page.getByTestId('new-char-name').fill(name)
+  await page.getByTestId('new-char-create').click()
+  await expect(page.getByTestId('new-char-name')).toHaveCount(0)
+  await expect(page.getByTestId('char-picker-toggle')).toContainText(name)
+}
+
+export async function importCharacterJson(page, json, expectedName) {
+  await page.getByTestId('char-picker-toggle').click()
+  await page.getByTestId('char-picker-import').click()
+  await page.getByTestId('char-import-json').fill(json)
+  await page.getByTestId('char-import-submit').click()
+  await expect(page.getByTestId('char-picker-toggle')).toContainText(expectedName)
+}
+
+export async function selectHexAndOpenInspector(page, q, r) {
+  await prepareHexInteractions(page)
+  const selectTool = page.getByTestId('hex-tool-select')
+  if (await selectTool.count()) await selectTool.click()
+  await hexCell(page, q, r).click()
+}
+
 export async function openRolePage(browser, account, contextOptions = {}) {
-  const context = await browser.newContext(contextOptions)
+  const context = await browser.newContext({ ...deviceContextOptions(), ...contextOptions })
   const page = await context.newPage()
   await loginByEmail(page, account)
   return { context, page }
 }
 
 export async function createThreeRoleCampaign(browser, accounts, { mode, name, contextOptions = {} }) {
+  const mergedOptions = { ...deviceContextOptions(), ...contextOptions }
   const gm = await openRolePage(browser, accounts.gm, contextOptions)
   const sessionId = await createCampaign(gm.page, name, { playMode: mode === 'gm_less' ? 'gm_less' : 'gm' })
   if (mode === 'blank' || mode === 'gm_less') {
@@ -178,13 +241,13 @@ export async function createThreeRoleCampaign(browser, accounts, { mode, name, c
   }
 
   const player1 = {
-    context: await browser.newContext(contextOptions),
+    context: await browser.newContext(mergedOptions),
   }
   player1.page = await player1.context.newPage()
   await joinCampaign(player1.page, accounts.player1, sessionId)
 
   const player2 = {
-    context: await browser.newContext(contextOptions),
+    context: await browser.newContext(mergedOptions),
   }
   player2.page = await player2.context.newPage()
   await joinCampaign(player2.page, accounts.player2, sessionId)

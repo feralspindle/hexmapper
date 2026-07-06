@@ -180,6 +180,7 @@
             class="ds-tb-btn"
             :class="{ active: charOpen }"
             title="Character sheet"
+            data-testid="char-sheet-toggle"
             @click="$emit('toggle-char')"
         >
             <svg

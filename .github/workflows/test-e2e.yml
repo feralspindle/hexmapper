@@ -6,7 +6,12 @@ name: E2E
 
 on:
   workflow_call: {}
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      all_browsers:
+        description: 'Also run the firefox and mobile-chromium projects'
+        type: boolean
+        default: false
   schedule:
     - cron: '17 10 * * *'
 
@@ -19,6 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     env:
+      # The nightly cron covers the full browser matrix; deploy-triggered runs
+      # (workflow_call) stay chromium-only so post-deploy checks finish fast.
+      E2E_ALL_BROWSERS: ${{ (github.event_name == 'schedule' || inputs.all_browsers == true) && '1' || '' }}
       E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
       E2E_GM_EMAIL: ${{ secrets.E2E_GM_EMAIL }}
       E2E_GM_PASSWORD: ${{ secrets.E2E_GM_PASSWORD }}
@@ -54,7 +62,7 @@ jobs:
       - run: npm ci
         if: steps.e2e-config.outputs.ready == 'true'
 
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium ${{ env.E2E_ALL_BROWSERS && 'firefox' || '' }}
         if: steps.e2e-config.outputs.ready == 'true'
 
       - run: npm run test:e2e
