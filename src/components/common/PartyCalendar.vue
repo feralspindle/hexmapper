@@ -30,7 +30,7 @@
       <div class="pc-grid-wrap">
         <div class="pc-grid" :style="{ gridTemplateColumns: `repeat(${numWeekdays}, 1fr)` }">
           <div v-for="wd in s.weekday_names" :key="wd" class="pc-wd">{{ wd }}</div>
-          <div v-for="_ in leadingBlanks" class="pc-cell pc-cell--blank" />
+          <div v-for="blank in leadingBlanks" :key="blank" class="pc-cell pc-cell--blank" />
           <button
             v-for="d in daysInViewMonth"
             :key="d"

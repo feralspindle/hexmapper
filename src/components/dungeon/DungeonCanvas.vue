@@ -16,6 +16,7 @@
       @mousedown="onMouseDown"
       @mousedown.middle.prevent
       @mousemove="onMouseMove"
+      @mouseleave="broadcastCursorHidden"
       @mouseup="onMouseUp"
       @click="onClick"
       @wheel.prevent="onWheel"
@@ -61,8 +62,8 @@
         </clipPath>
       </defs>
       <g v-for="[id, room] in dungeonStore.rooms" :key="id" data-testid="dungeon-room">
-        <template v-if="true" v-bind="{}">
-          <template v-for="r in [resizeGhost && id === resizeRoomId ? resizeGhost : moveGhost && id === moveRoomId ? moveGhost : room]" :key="'r'">
+        <template v-if="true">
+          <template v-for="(r, ri) in [resizeGhost && id === resizeRoomId ? resizeGhost : moveGhost && id === moveRoomId ? moveGhost : room]" :key="ri">
             <text
               v-if="room.label"
               :x="r.origin_x * cellPx - viewport.offsetX + (r.width * cellPx) / 2"
@@ -191,7 +192,7 @@
       </g>
 
       <g v-for="[roomId, editors] in editingViewers" :key="`editors-${roomId}`">
-        <template v-for="r in [dungeonStore.rooms.get(roomId)]" :key="'eg'">
+        <template v-for="(r, ri) in [dungeonStore.rooms.get(roomId)]" :key="ri">
           <template v-if="r">
 
             <rect
@@ -343,10 +344,6 @@ import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 
-const FLOOR = '#ffffff'
-const WALL  = '#000000'
-const ROCK  = '#000000'
-
 const prefs = useUserPrefsStore()
 const sessionStore = useSessionStore()
 const mapStyle = computed(() => prefs.mapStyle ?? 'classic')
@@ -444,11 +441,22 @@ function initCursorChannel(dungeonId) {
     .subscribe()
 
   _stopCursorWatch = watch(() => prefs.showCursors, (visible) => {
-    if (!visible && cursorChannel && authStore.user?.id) {
-      cursorChannel.send({ type: 'broadcast', event: 'cursor', payload: { userId: authStore.user.id, hidden: true } })
-    }
+    if (!visible) broadcastCursorHidden()
   })
 }
+
+function broadcastCursorHidden() {
+  pendingCursor = null
+  if (!cursorChannel || !authStore.user?.id) return
+  cursorChannel.send({ type: 'broadcast', event: 'cursor', payload: { userId: authStore.user.id, hidden: true } })
+}
+
+watch(() => dungeonStore.viewers, (viewers) => {
+  if (!remoteCursors.value.size) return
+  const present = new Set(viewers.map(v => v.user_id).filter(Boolean))
+  const next = new Map([...remoteCursors.value].filter(([userId]) => present.has(userId)))
+  if (next.size !== remoteCursors.value.size) remoteCursors.value = next
+})
 
 function broadcastCursor(canvasX, canvasY) {
   if (!cursorChannel || !authStore.user?.id) return
@@ -556,28 +564,6 @@ function cursorTip(cursor) {
 
 function cursorLabelWidth(name) {
   return (name ?? '').length * 6.5 + 14
-}
-
-function roomTopRight(room) {
-  const cs = cellPx.value
-  if (room.shape === 'circle') {
-    return {
-      x: (room.origin_x + room.width) * cs - viewport.value.offsetX,
-      y: room.origin_y * cs - viewport.value.offsetY,
-    }
-  }
-  if (room.shape === 'polygon' && room.points?.length) {
-
-    let best = room.points[0]
-    for (const p of room.points) {
-      if (p.x > best.x || (p.x === best.x && p.y < best.y)) best = p
-    }
-    return { x: best.x * cs - viewport.value.offsetX, y: best.y * cs - viewport.value.offsetY }
-  }
-  return {
-    x: (room.origin_x + room.width) * cs - viewport.value.offsetX,
-    y: room.origin_y * cs - viewport.value.offsetY,
-  }
 }
 
 const containerEl = ref(null)
@@ -2053,6 +2039,7 @@ onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
   resizeObserver.disconnect()
   window.removeEventListener('keydown', onKeyDown)
+  broadcastCursorHidden()
   if (cursorChannel) realtime.removeChannel(cursorChannel)
   if (_stopCursorWatch) _stopCursorWatch()
 })

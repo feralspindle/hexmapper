@@ -153,7 +153,7 @@ function toggleVault() {
   if (vaultVisible.value) { toggleInventory() } else { openNotebook('vault') }
 }
 
-const props = defineProps({
+defineProps({
   mapSettingsOpen: { type: Boolean, default: false },
 })
 const emit = defineEmits(['map-settings'])

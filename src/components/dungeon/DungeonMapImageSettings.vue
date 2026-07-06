@@ -119,16 +119,14 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
-import { useSessionStore } from '@/stores/sessionStore.js'
 import { useRoute } from 'vue-router'
 
-const props = defineProps({
+defineProps({
   moveMode: { type: String, default: 'none' },
 })
 const emit = defineEmits(['update:moveMode', 'close'])
 
 const dungeonStore = useD()
-const sessionStore = useSessionStore()
 const route = useRoute()
 const dungeonId = route.params.dungeonId
 const sessionId = route.params.sessionId

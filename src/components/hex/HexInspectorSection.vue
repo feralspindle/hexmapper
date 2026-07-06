@@ -797,14 +797,6 @@ const addingChildMap = ref(false);
 const newChildMapName = ref("");
 const childMapNameEl = ref(null);
 
-const panelTitle = computed(() => {
-    if (!hexStore.selectedHex) return "Hex Inspector";
-    return (
-        hexLabel.value ||
-        `Hex (${hexStore.selectedHex.q}, ${hexStore.selectedHex.r})`
-    );
-});
-
 const isPartyHex = computed(
     () =>
         hexStore.partyHex?.q === hexStore.selectedHex?.q &&

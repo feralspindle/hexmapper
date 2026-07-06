@@ -2086,7 +2086,6 @@ import { useVaultStore } from "@/stores/vaultStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
-import { supabase } from "@/lib/supabase";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
@@ -2094,16 +2093,7 @@ const sessionStore = useSessionStore();
 const authStore    = useAuthStore();
 const vaultStore   = useVaultStore();
 
-const { setActive, characters, currentSessionId, saving, updateField } = characterStore;
 const { confirm } = useConfirmDialog();
-
-function augmentData(data) {
-    return {
-        ...data,
-        currentHp: data.currentHp ?? data.maxHitPoints ?? 0,
-        luckTokens: data.luckTokens ?? { current: 1, max: 3 },
-    };
-}
 
 const canEdit = computed(() => characterStore.canEditActiveCharacter);
 const char = computed(() => characterStore.character);
@@ -2182,15 +2172,6 @@ const coinGearSlots = computed(() => {
     if (!char.value) return 0
     const total = (char.value.gold ?? 0) + (char.value.silver ?? 0) + (char.value.copper ?? 0)
     return Math.max(0, Math.ceil((total - 100) / 100))
-})
-
-const coinSlotBreakdown = computed(() => {
-    if (!char.value) return ''
-    const parts = []
-    if ((char.value.gold   ?? 0) > 0) parts.push(`${char.value.gold}gp`)
-    if ((char.value.silver ?? 0) > 0) parts.push(`${char.value.silver}sp`)
-    if ((char.value.copper ?? 0) > 0) parts.push(`${char.value.copper}cp`)
-    return parts.join(' · ')
 })
 
 const effectiveGearSlotsUsed = computed(() => {

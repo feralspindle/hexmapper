@@ -293,7 +293,7 @@ import DungeonTweaksPanel from "@/components/dungeon/DungeonTweaksPanel.vue";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
 import { activeNavDropdown } from "@/composables/useNavDropdown.js";
 
-const props = defineProps({
+defineProps({
     dungeonId: String,
     charOpen: { type: Boolean, default: false },
 });

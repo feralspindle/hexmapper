@@ -558,7 +558,7 @@ import { usePartyNotebook } from "@/composables/usePartyNotebook.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 import { soundEnabled, toggleSound } from "@/lib/soundSettings.js";
 
-const props = defineProps({
+defineProps({
     hexMode: { type: String, default: null },
     activeTool: { type: String, default: "select" },
     settingsOpen: { type: Boolean, default: false },

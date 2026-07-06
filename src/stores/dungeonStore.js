@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, toRaw } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
@@ -36,13 +36,29 @@ export const useD = defineStore('dungeon', () => {
   let presenceChannel = null
   let fogChannel = null
   let undoChannel = null
-  let changesChannel = null
   let _stopAuthWatch = null
   let _undoing = false
   let _urlTimer = null
   let _urlRenewal = null
+  let _urlGeneration = 0
   let _dungeonId = null
   let _initGeneration = 0
+
+  const _pendingWrites = new Map()
+  const _pendingDungeonFields = new Map()
+  const _pendingFogOps = new Map()
+
+  function _beginPending(map, keys) {
+    for (const key of keys) map.set(key, (map.get(key) ?? 0) + 1)
+  }
+
+  function _endPending(map, keys) {
+    for (const key of keys) {
+      const count = map.get(key) ?? 0
+      if (count <= 1) map.delete(key)
+      else map.set(key, count - 1)
+    }
+  }
 
   const _logUndoError = (label) => (err) =>
     console.error(`undo ${label}:`, err instanceof ApiError ? err.message : err)
@@ -68,40 +84,40 @@ export const useD = defineStore('dungeon', () => {
         rooms.value.delete(action.roomId)
         if (selectedElement.value?.id === action.roomId) selectedElement.value = null
         await apiClient.delete(`/dungeon-rooms/${action.roomId}`, 'undo_delete_room').catch(_logUndoError('delete_room'))
-        _broadcastChange('room_delete', { roomId: action.roomId })
         break
       }
       case 'insert_room': {
         rooms.value.set(action.data.id, { ...action.data })
         await apiClient.post('/dungeon-rooms', { ...action.data, source_client: CLIENT_ID }, 'undo_insert_room').catch(_logUndoError('insert_room'))
-        _broadcastChange('room_upsert', { room: action.data })
         break
       }
       case 'update_room': {
         const r = rooms.value.get(action.roomId)
         if (r) rooms.value.set(action.roomId, { ...r, ...action.patch })
-        await apiClient.patch(`/dungeon-rooms/${action.roomId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_room').catch(_logUndoError('update_room'))
-        _broadcastChange('room_upsert', { room: rooms.value.get(action.roomId) })
+        _beginPending(_pendingWrites, [`room:${action.roomId}`])
+        await apiClient.patch(`/dungeon-rooms/${action.roomId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_room')
+          .catch(_logUndoError('update_room'))
+          .finally(() => _endPending(_pendingWrites, [`room:${action.roomId}`]))
         break
       }
       case 'delete_corridor': {
         corridors.value.delete(action.corridorId)
         if (selectedElement.value?.id === action.corridorId) selectedElement.value = null
         await apiClient.delete(`/dungeon-corridors/${action.corridorId}`, 'undo_delete_corridor').catch(_logUndoError('delete_corridor'))
-        _broadcastChange('corridor_delete', { corridorId: action.corridorId })
         break
       }
       case 'insert_corridor': {
         corridors.value.set(action.data.id, { ...action.data })
         await apiClient.post('/dungeon-corridors', { ...action.data, source_client: CLIENT_ID }, 'undo_insert_corridor').catch(_logUndoError('insert_corridor'))
-        _broadcastChange('corridor_upsert', { corridor: action.data })
         break
       }
       case 'update_corridor': {
         const c = corridors.value.get(action.corridorId)
         if (c) corridors.value.set(action.corridorId, { ...c, ...action.patch })
-        await apiClient.patch(`/dungeon-corridors/${action.corridorId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_corridor').catch(_logUndoError('update_corridor'))
-        _broadcastChange('corridor_upsert', { corridor: corridors.value.get(action.corridorId) })
+        _beginPending(_pendingWrites, [`corridor:${action.corridorId}`])
+        await apiClient.patch(`/dungeon-corridors/${action.corridorId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_corridor')
+          .catch(_logUndoError('update_corridor'))
+          .finally(() => _endPending(_pendingWrites, [`corridor:${action.corridorId}`]))
         break
       }
     }
@@ -120,50 +136,15 @@ export const useD = defineStore('dungeon', () => {
       .subscribe()
   }
 
-  function _subscribeChangesChannel(sessionId, dungeonId) {
-    if (changesChannel) realtime.removeChannel(changesChannel)
-    changesChannel = realtime
-      .channel(`dungeon:${dungeonId}:changes`, { sessionId })
-      .on('broadcast', { event: 'room_upsert' }, ({ payload }) => {
-        if (payload._src === CLIENT_ID) return
-        const editing = _editingRoom.value
-        if (editing && editing.id === payload.room.id) {
-          const current = rooms.value.get(payload.room.id)
-          const merged = { ...payload.room }
-          if (current) { for (const f of editing.fields) merged[f] = current[f] }
-          rooms.value.set(payload.room.id, merged)
-        } else {
-          rooms.value.set(payload.room.id, payload.room)
-        }
-      })
-      .on('broadcast', { event: 'room_delete' }, ({ payload }) => {
-        if (payload._src === CLIENT_ID) return
-        rooms.value.delete(payload.roomId)
-        if (selectedElement.value?.id === payload.roomId) selectedElement.value = null
-      })
-      .on('broadcast', { event: 'corridor_upsert' }, ({ payload }) => {
-        if (payload._src === CLIENT_ID) return
-        corridors.value.set(payload.corridor.id, payload.corridor)
-      })
-      .on('broadcast', { event: 'corridor_delete' }, ({ payload }) => {
-        if (payload._src === CLIENT_ID) return
-        corridors.value.delete(payload.corridorId)
-        if (selectedElement.value?.id === payload.corridorId) selectedElement.value = null
-      })
-      .subscribe()
-  }
-
-  function _broadcastChange(event, payload) {
-    changesChannel?.send({ type: 'broadcast', event, payload: { ...payload, _src: CLIENT_ID } })
-  }
-
   async function _refreshImageUrl(path) {
+    const urlGeneration = ++_urlGeneration
     if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
     _urlRenewal = null
     if (!path) { dungeonImageUrl.value = null; return }
     const { data, error } = await supabase.storage
       .from('session-maps')
       .createSignedUrl(path, URL_EXPIRY_SECONDS)
+    if (urlGeneration !== _urlGeneration) return
     if (error) {
       if (error.message !== 'Object not found') console.error('dungeonStore refreshImageUrl:', error.message)
       dungeonImageUrl.value = null
@@ -227,9 +208,12 @@ export const useD = defineStore('dungeon', () => {
       }
     }
 
+    const fields = Object.keys(dbPatch)
+    _beginPending(_pendingDungeonFields, fields)
     try {
       await apiClient.patch(`/dungeons/${id}`, dbPatch, 'update_dungeon_config')
     } catch (err) { console.error('updateDungeon:', err instanceof ApiError ? err.message : err); return false }
+    finally { _endPending(_pendingDungeonFields, fields) }
     return true
   }
 
@@ -251,77 +235,118 @@ export const useD = defineStore('dungeon', () => {
     return fogCells.value.has(_fogKey(cellX, cellY))
   }
 
+  function _beginFogOps(keys) {
+    const ops = new Map(keys.map(key => [key, { confirmed: false }]))
+    for (const [key, op] of ops) _pendingFogOps.set(key, op)
+    return ops
+  }
+
+  function _endFogOps(ops) {
+    for (const [key, op] of ops) {
+      if (_pendingFogOps.get(key) === op) _pendingFogOps.delete(key)
+    }
+  }
+
+  function _rollbackFogOps(ops, revealed) {
+    const next = new Set(fogCells.value)
+    for (const [key, op] of ops) {
+      if (op.confirmed) continue
+      if (revealed) next.delete(key)
+      else next.add(key)
+    }
+    fogCells.value = next
+  }
+
   async function revealFogCell(dungeonId, cellX, cellY) {
     const key = _fogKey(cellX, cellY)
     if (fogCells.value.has(key)) return
+    const ops = _beginFogOps([key])
     fogCells.value = new Set(fogCells.value).add(key)
     try {
       await apiClient.post('/dungeon-fog/reveal', { dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY, source_client: CLIENT_ID }, 'reveal_fog')
     } catch (err) {
-      const next = new Set(fogCells.value); next.delete(key); fogCells.value = next
+      _rollbackFogOps(ops, true)
       console.error('revealFogCell:', err instanceof ApiError ? err.message : err)
-    }
+    } finally { _endFogOps(ops) }
   }
 
   async function hideFogCell(dungeonId, cellX, cellY) {
     const key = _fogKey(cellX, cellY)
     if (!fogCells.value.has(key)) return
+    const ops = _beginFogOps([key])
     const next = new Set(fogCells.value); next.delete(key); fogCells.value = next
     try {
       await apiClient.post('/dungeon-fog/hide', { dungeon_id: dungeonId, cell_x: cellX, cell_y: cellY }, 'hide_fog')
     } catch (err) {
-      fogCells.value = new Set(fogCells.value).add(key)
+      _rollbackFogOps(ops, false)
       console.error('hideFogCell:', err instanceof ApiError ? err.message : err)
-    }
+    } finally { _endFogOps(ops) }
   }
 
   async function revealFogCells(dungeonId, cells) {
     if (!cells.length) return
     const newCells = new Set(fogCells.value)
     const rows = []
+    const keys = []
     for (const { cellX, cellY } of cells) {
       const key = _fogKey(cellX, cellY)
-      if (!newCells.has(key)) { newCells.add(key); rows.push({ cell_x: cellX, cell_y: cellY }) }
+      if (!newCells.has(key)) { newCells.add(key); keys.push(key); rows.push({ cell_x: cellX, cell_y: cellY }) }
     }
     if (!rows.length) return
+    const ops = _beginFogOps(keys)
     fogCells.value = newCells
     try {
       await apiClient.post('/dungeon-fog/reveal-bulk', { dungeon_id: dungeonId, source_client: CLIENT_ID, cells: rows }, 'reveal_fog_bulk')
-    } catch (err) { console.error('revealFogCells:', err instanceof ApiError ? err.message : err) }
+    } catch (err) {
+      _rollbackFogOps(ops, true)
+      console.error('revealFogCells:', err instanceof ApiError ? err.message : err)
+    } finally { _endFogOps(ops) }
   }
 
   async function hideFogCells(dungeonId, cells) {
     if (!cells.length) return
     const newCells = new Set(fogCells.value)
     const toDelete = []
+    const keys = []
     for (const { cellX, cellY } of cells) {
       const key = _fogKey(cellX, cellY)
-      if (newCells.has(key)) { newCells.delete(key); toDelete.push({ cell_x: cellX, cell_y: cellY }) }
+      if (newCells.has(key)) { newCells.delete(key); keys.push(key); toDelete.push({ cell_x: cellX, cell_y: cellY }) }
     }
     if (!toDelete.length) return
+    const ops = _beginFogOps(keys)
     fogCells.value = newCells
     try {
       await apiClient.post('/dungeon-fog/hide-bulk', { dungeon_id: dungeonId, cells: toDelete }, 'hide_fog_bulk')
-    } catch (err) { console.error('hideFogCells:', err instanceof ApiError ? err.message : err) }
+    } catch (err) {
+      _rollbackFogOps(ops, false)
+      console.error('hideFogCells:', err instanceof ApiError ? err.message : err)
+    } finally { _endFogOps(ops) }
   }
 
   async function revealAllFog(dungeonId) {
     try {
       await apiClient.post('/dungeon-fog/clear', { dungeon_id: dungeonId }, 'reveal_all_fog')
-    } catch (err) { console.error('revealAllFog:', err instanceof ApiError ? err.message : err) }
-    await updateDungeon({ fogRevealAll: true })
+    } catch (err) {
+      console.error('revealAllFog:', err instanceof ApiError ? err.message : err)
+      return false
+    }
+    return updateDungeon({ fogRevealAll: true })
   }
 
   async function hideAllFog(dungeonId) {
     try {
       await apiClient.post('/dungeon-fog/clear', { dungeon_id: dungeonId }, 'hide_all_fog')
-    } catch (err) { console.error('hideAllFog:', err instanceof ApiError ? err.message : err) }
+    } catch (err) {
+      console.error('hideAllFog:', err instanceof ApiError ? err.message : err)
+      return false
+    }
     fogCells.value = new Set()
-    await updateDungeon({ fogRevealAll: false })
+    return updateDungeon({ fogRevealAll: false })
   }
 
   async function refresh() {
     const dungeonId = _dungeonId
+    const generation = _initGeneration
     if (!dungeonId) return
     try {
       const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }, { data: fogData }] = await Promise.all([
@@ -331,7 +356,7 @@ export const useD = defineStore('dungeon', () => {
         supabase.from('dungeon_fog_cells').select('cell_x, cell_y').eq('dungeon_id', dungeonId),
       ])
       if (e1) throw new Error(e1.message)
-      if (_dungeonId !== dungeonId) return
+      if (_dungeonId !== dungeonId || generation !== _initGeneration) return
 
       dungeon.value = { ...dungeonData, ...(_localOverrides[dungeonData.id] ?? {}) }
 
@@ -354,6 +379,16 @@ export const useD = defineStore('dungeon', () => {
     }
   }
 
+  function _removeChannels() {
+    if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
+    if (dungeonChannel)  { realtime.removeChannel(dungeonChannel); dungeonChannel = null }
+    if (roomChannel)     { realtime.removeChannel(roomChannel); roomChannel = null }
+    if (corridorChannel) { realtime.removeChannel(corridorChannel); corridorChannel = null }
+    if (presenceChannel) { realtime.removeChannel(presenceChannel); presenceChannel = null }
+    if (fogChannel)      { realtime.removeChannel(fogChannel); fogChannel = null }
+    if (undoChannel)     { realtime.removeChannel(undoChannel); undoChannel = null }
+  }
+
   async function init(sessionId, dungeonId) {
     const generation = ++_initGeneration
     _dungeonId = dungeonId
@@ -362,6 +397,7 @@ export const useD = defineStore('dungeon', () => {
     drawMode.value = 'select'
     selectedElement.value = null
     undoStack.value = []
+    _removeChannels()
 
     try {
       const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }] = await Promise.all([
@@ -394,12 +430,7 @@ export const useD = defineStore('dungeon', () => {
     }
     if (generation !== _initGeneration) return
 
-    if (dungeonChannel) realtime.removeChannel(dungeonChannel)
-    if (roomChannel) realtime.removeChannel(roomChannel)
-    if (corridorChannel) realtime.removeChannel(corridorChannel)
-    if (fogChannel) realtime.removeChannel(fogChannel)
     _subscribeUndoChannel(sessionId, dungeonId)
-    _subscribeChangesChannel(sessionId, dungeonId)
 
     let subscribedRefreshed = false
     dungeonChannel = realtime
@@ -409,7 +440,13 @@ export const useD = defineStore('dungeon', () => {
         { event: 'UPDATE', schema: 'public', table: 'dungeons', filter: `id=eq.${dungeonId}` },
         ({ new: row }) => {
           const local = _localOverrides[row.id] ?? {}
-          dungeon.value = { ...row, ...local }
+          const merged = { ...row, ...local }
+          if (dungeon.value?.id === row.id) {
+            for (const field of _pendingDungeonFields.keys()) {
+              if (field in dungeon.value) merged[field] = dungeon.value[field]
+            }
+          }
+          dungeon.value = merged
         },
       )
       .subscribe(status => {
@@ -425,11 +462,17 @@ export const useD = defineStore('dungeon', () => {
         { event: '*', schema: 'public', table: 'dungeon_fog_cells', filter: `dungeon_id=eq.${dungeonId}` },
         ({ eventType, new: row, old }) => {
           if (eventType === 'INSERT') {
+            const key = _fogKey(row.cell_x, row.cell_y)
+            const pending = _pendingFogOps.get(key)
+            if (pending) pending.confirmed = true
             if (row.source_client !== CLIENT_ID)
-              fogCells.value = new Set(fogCells.value).add(_fogKey(row.cell_x, row.cell_y))
+              fogCells.value = new Set(fogCells.value).add(key)
           } else if (eventType === 'DELETE') {
+            const key = _fogKey(old.cell_x, old.cell_y)
+            const pending = _pendingFogOps.get(key)
+            if (pending) pending.confirmed = true
             const next = new Set(fogCells.value)
-            next.delete(_fogKey(old.cell_x, old.cell_y))
+            next.delete(key)
             fogCells.value = next
           }
         },
@@ -443,23 +486,24 @@ export const useD = defineStore('dungeon', () => {
         { event: '*', schema: 'public', table: 'dungeon_rooms', filter: `dungeon_id=eq.${dungeonId}` },
         ({ eventType, new: row, old }) => {
           if (eventType === 'INSERT' || eventType === 'UPDATE') {
-            if (row.source_client !== CLIENT_ID) {
-              const editing = _editingRoom.value
-              if (editing && editing.id === row.id) {
-                const current = rooms.value.get(row.id)
-                const merged = { ...row }
-                if (current) {
-                  for (const field of editing.fields) {
-                    merged[field] = current[field]
-                  }
+            if (row.source_client === CLIENT_ID &&
+                (eventType === 'INSERT' || _pendingWrites.has(`room:${row.id}`))) return
+            const editing = _editingRoom.value
+            if (editing && editing.id === row.id) {
+              const current = rooms.value.get(row.id)
+              const merged = { ...row }
+              if (current) {
+                for (const field of editing.fields) {
+                  merged[field] = current[field]
                 }
-                rooms.value.set(row.id, merged)
-              } else {
-                rooms.value.set(row.id, row)
               }
+              rooms.value.set(row.id, merged)
+            } else {
+              rooms.value.set(row.id, row)
             }
           } else if (eventType === 'DELETE') {
             rooms.value.delete(old.id)
+            if (selectedElement.value?.id === old.id) selectedElement.value = null
           }
         },
       )
@@ -472,16 +516,17 @@ export const useD = defineStore('dungeon', () => {
         { event: '*', schema: 'public', table: 'dungeon_corridors', filter: `dungeon_id=eq.${dungeonId}` },
         ({ eventType, new: row, old }) => {
           if (eventType === 'INSERT' || eventType === 'UPDATE') {
-            if (row.source_client !== CLIENT_ID) corridors.value.set(row.id, row)
+            if (row.source_client === CLIENT_ID &&
+                (eventType === 'INSERT' || _pendingWrites.has(`corridor:${row.id}`))) return
+            corridors.value.set(row.id, row)
           } else if (eventType === 'DELETE') {
             corridors.value.delete(old.id)
+            if (selectedElement.value?.id === old.id) selectedElement.value = null
           }
         },
       )
       .subscribe()
 
-    if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
-    if (presenceChannel) realtime.removeChannel(presenceChannel)
     const authStore = useAuthStore()
 
     const syncViewers = () => {
@@ -543,25 +588,27 @@ export const useD = defineStore('dungeon', () => {
     }
 
     rooms.value.delete(tempId)
-    rooms.value.set(data.id, data)
+    if (!rooms.value.has(data.id)) rooms.value.set(data.id, data)
     useActivityStore().record('added room', data.name ?? 'Unnamed Room')
     pushUndo({ type: 'delete_room', roomId: data.id })
-    _broadcastChange('room_upsert', { room: data })
   }
 
   async function updateRoom(id, patch) {
     const existing = rooms.value.get(id)
     if (!existing) return
-    rooms.value.set(id, { ...existing, ...patch })
+    const optimistic = { ...existing, ...patch }
+    rooms.value.set(id, optimistic)
 
+    _beginPending(_pendingWrites, [`room:${id}`])
     try {
       await apiClient.patch(`/dungeon-rooms/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_room')
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
       pushUndo({ type: 'update_room', roomId: id, patch: revert })
-      _broadcastChange('room_upsert', { room: rooms.value.get(id) })
     } catch (error) {
-      rooms.value.set(id, existing)
+      if (toRaw(rooms.value.get(id)) === optimistic) rooms.value.set(id, existing)
       console.error('updateRoom error:', error instanceof ApiError ? error.message : error)
+    } finally {
+      _endPending(_pendingWrites, [`room:${id}`])
     }
   }
 
@@ -574,9 +621,8 @@ export const useD = defineStore('dungeon', () => {
       await apiClient.delete(`/dungeon-rooms/${id}`, 'delete_room')
       useActivityStore().record('deleted room', backup?.name ?? 'Unnamed Room')
       pushUndo({ type: 'insert_room', data: backup })
-      _broadcastChange('room_delete', { roomId: id })
     } catch (error) {
-      if (backup) rooms.value.set(id, backup)
+      if (backup && !rooms.value.has(id)) rooms.value.set(id, backup)
       console.error('deleteRoom error:', error instanceof ApiError ? error.message : error)
     }
   }
@@ -596,25 +642,27 @@ export const useD = defineStore('dungeon', () => {
     }
 
     corridors.value.delete(tempId)
-    corridors.value.set(data.id, data)
+    if (!corridors.value.has(data.id)) corridors.value.set(data.id, data)
     useActivityStore().record('added corridor', '')
     pushUndo({ type: 'delete_corridor', corridorId: data.id })
-    _broadcastChange('corridor_upsert', { corridor: data })
   }
 
   async function updateCorridor(id, patch) {
     const existing = corridors.value.get(id)
     if (!existing) return
-    corridors.value.set(id, { ...existing, ...patch })
+    const optimistic = { ...existing, ...patch }
+    corridors.value.set(id, optimistic)
 
+    _beginPending(_pendingWrites, [`corridor:${id}`])
     try {
       await apiClient.patch(`/dungeon-corridors/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_corridor')
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
       pushUndo({ type: 'update_corridor', corridorId: id, patch: revert })
-      _broadcastChange('corridor_upsert', { corridor: corridors.value.get(id) })
     } catch (error) {
-      corridors.value.set(id, existing)
+      if (toRaw(corridors.value.get(id)) === optimistic) corridors.value.set(id, existing)
       console.error('updateCorridor error:', error instanceof ApiError ? error.message : error)
+    } finally {
+      _endPending(_pendingWrites, [`corridor:${id}`])
     }
   }
 
@@ -627,9 +675,8 @@ export const useD = defineStore('dungeon', () => {
       await apiClient.delete(`/dungeon-corridors/${id}`, 'delete_corridor')
       useActivityStore().record('deleted corridor', '')
       pushUndo({ type: 'insert_corridor', data: backup })
-      _broadcastChange('corridor_delete', { corridorId: id })
     } catch (error) {
-      if (backup) corridors.value.set(id, backup)
+      if (backup && !corridors.value.has(id)) corridors.value.set(id, backup)
       console.error('deleteCorridor error:', error instanceof ApiError ? error.message : error)
     }
   }
@@ -720,14 +767,17 @@ export const useD = defineStore('dungeon', () => {
   async function updateTorch(patch) {
     if (!dungeon.value?.id) return
     dungeon.value = { ...dungeon.value, ...patch }
+    const fields = Object.keys(patch)
+    _beginPending(_pendingDungeonFields, fields)
     try {
       await apiClient.patch(`/dungeons/${dungeon.value.id}`, patch, 'update_torch')
     } catch (err) { console.error('updateTorch error:', err instanceof ApiError ? err.message : err) }
+    finally { _endPending(_pendingDungeonFields, fields) }
   }
 
   async function torchStart() {
     if (!dungeon.value?.id) return
-    dungeon.value = { ...dungeon.value, torch_running: true }
+    dungeon.value = { ...dungeon.value, torch_running: true, torch_started_at: new Date().toISOString() }
     try {
       await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'start' }, 'torch_start')
     } catch (err) { console.error('torchStart error:', err instanceof ApiError ? err.message : err) }
@@ -754,24 +804,14 @@ export const useD = defineStore('dungeon', () => {
 
   function cleanup() {
     _initGeneration += 1
-    if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
-    if (dungeonChannel)  realtime.removeChannel(dungeonChannel)
-    if (roomChannel)     realtime.removeChannel(roomChannel)
-    if (corridorChannel) realtime.removeChannel(corridorChannel)
-    if (presenceChannel) realtime.removeChannel(presenceChannel)
-    if (fogChannel)      realtime.removeChannel(fogChannel)
-    if (undoChannel)     realtime.removeChannel(undoChannel)
-    if (changesChannel)  realtime.removeChannel(changesChannel)
-    if (_urlTimer)       { clearTimeout(_urlTimer); _urlTimer = null }
-    _urlRenewal     = null
-    _dungeonId      = null
-    dungeonChannel  = null
-    roomChannel     = null
-    corridorChannel = null
-    presenceChannel = null
-    fogChannel      = null
-    undoChannel     = null
-    changesChannel  = null
+    _urlGeneration += 1
+    _removeChannels()
+    if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
+    _urlRenewal = null
+    _dungeonId  = null
+    _pendingWrites.clear()
+    _pendingDungeonFields.clear()
+    _pendingFogOps.clear()
     dungeon.value = null
     rooms.value = new Map()
     corridors.value = new Map()

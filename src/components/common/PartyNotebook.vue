@@ -110,7 +110,7 @@
               <div v-for="r in (quest.rewards ?? [])" :key="r.id" class="pn-reward-item">
                 <span class="pn-reward-chip" :class="{ 'pn-reward-chip--coins': r.type === 'coins' }">
                   <template v-if="r.type === 'coins'">{{ r.qty }} {{ r.currency }}</template>
-                  <template v-else>{{ r.qty > 1 ? '×' + r.qty + ' ' : '' }}{{ r.name }}</template>
+                  <template v-else>{{ r.qty > 1 ? '×' + r.qty + '\u2009' : '' }}{{ r.name }}</template>
                 </span>
                 <button class="pn-reward-remove" @click="removeReward(quest.id, r.id)">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -921,7 +921,6 @@ function formatTs(ts) {
 const lootOpen    = ref(true)
 const bankOpen    = ref(true)
 const storageOpen = ref(true)
-const ledgerOpen  = ref(true)
 
 
 const splittingId = ref(null)
