@@ -353,6 +353,7 @@
                         v-for="k in GM_MARKER_KINDS"
                         :key="k.id"
                         class="hm-marker-chip"
+                        :data-testid="`gm-marker-add-${k.id}`"
                         :title="`Add ${k.label}`"
                         @click="doAddGmMarker(k.id)"
                     >
