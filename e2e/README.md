@@ -43,6 +43,20 @@ If the account variables are missing, the multiplayer specs skip with a clear
 message. This prevents accidental failures in development while still allowing
 CI to run the real flow when secrets are configured.
 
+## Browser matrix
+
+`chromium-multiplayer` (Desktop Chrome) runs on every invocation. Setting
+`E2E_ALL_BROWSERS=1` adds the `firefox-multiplayer` (Desktop Firefox) and
+`mobile-chromium` (Pixel 7) projects; the nightly cron in `test-e2e.yml` sets
+this automatically, and `workflow_dispatch` exposes it as the `all_browsers`
+input. Specs that need a wide viewport for the crowded topbar override the
+device viewport explicitly but keep the rest of the mobile profile (touch,
+user agent, scale factor).
+
+The firefox project sets `media.volume_scale: 0` because Playwright mutes
+Chromium by default but not Firefox — without it a local run plays every
+dice and chat sound through the machine's speakers.
+
 ## Current Coverage
 
 - GM -> players: reveal one hex, hide one hex.
@@ -53,15 +67,30 @@ CI to run the real flow when secrets are configured.
 - Dice: player and GM rolls appear exactly once in every tab (echo suppression).
 - Chat: messages reach every tab exactly once, in both directions.
 - Map follow: GM switches to a child map and back; all players follow.
+- Map lifecycle: GM creates, renames, and deletes a child map; every client
+  converges on the same active map (guards the duplicate-World-Map incident).
+- Dungeon editing: room/corridor creation propagates GM -> players,
+  player -> GM, and player -> player; fog mode toggle and fog reveals reach
+  every client.
+- Character sheet: JSON import, HP / temp HP / renown adjustments, and gear
+  additions show up on the GM's view of the character.
+- Vault: coin deposit updates the party bank on all clients; split pays every
+  active character; assign delivers gear to the chosen player; claim moves an
+  item into the claimant's inventory.
+- Party notebook: quests and notes sync between players and GM, including
+  completion.
+- Calendar: GM advances the day; every player sees the new date.
+- Photos: GM uploads and broadcasts a reference photo; players view and
+  dismiss it independently.
 - Reconnect: a player who drops offline sees the disconnect banner, misses a GM
   reveal, then converges after reconnect with no hex-grid teardown/remount.
+- Cross-session isolation: a client in one session receives no dice rolls,
+  chat messages, or sounds (instrumented WebAudio probe) from another session
+  its account is a member of.
 
 ## Next High-Value Specs
 
 - Dice: GM annotation on a roll appears for players.
-- Party notebook: player adds a note/quest, GM edits/completes it, all players update.
-- Vault: loot claim/split/store flows across GM and players.
-- Dungeon: GM creates rooms/corridors/fog, players receive allowed view only.
-- Characters: player creates/selects character, GM sees it, other players see active-character presence.
-- Photos: GM broadcasts a reference photo, both players receive and can dismiss it.
-- Responsive smoke: run core navigation on a mobile viewport.
+- Dungeon: players receive the allowed fog view only (visibility, not just counts).
+- Characters: other players see active-character presence.
+- Vault: group storage containers (store/withdraw) across clients.

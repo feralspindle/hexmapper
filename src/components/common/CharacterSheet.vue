@@ -1,5 +1,5 @@
 <template>
-    <div class="cs-root">
+    <div class="cs-root" data-testid="char-sheet">
         <template v-if="!characterStore.character">
             <div class="cs-empty-state">
                 <svg
@@ -56,7 +56,7 @@
                         "
                     >
                         <div style="min-width: 0">
-                            <div class="cs-char-name">{{ char.name }}</div>
+                            <div class="cs-char-name" data-testid="char-name">{{ char.name }}</div>
                             <div class="cs-char-role">
                                 {{ char.ancestry }} {{ char.class }} · Lvl
                                 {{ char.level
@@ -152,6 +152,7 @@
                     :key="t.id"
                     class="cs-tab"
                     :class="{ active: subTab === t.id }"
+                    :data-testid="`char-tab-${t.id}`"
                     @click="subTab = t.id"
                 >
                     {{ t.label }}
@@ -169,15 +170,17 @@
                                 v-if="canEdit"
                                 class="cs-adj-btn"
                                 title="−1 HP"
+                                data-testid="hp-minus"
                                 @click="characterStore.adjustHp(-1)"
                             >
                                 −
                             </button>
-                            <span class="cs-big-val">{{ char.currentHp }}</span>
+                            <span class="cs-big-val" data-testid="hp-value">{{ char.currentHp }}</span>
                             <button
                                 v-if="canEdit"
                                 class="cs-adj-btn"
                                 title="+1 HP"
+                                data-testid="hp-plus"
                                 @click="characterStore.adjustHp(1)"
                             >
                                 +
@@ -224,6 +227,7 @@
                                 v-if="canEdit"
                                 class="cs-adj-btn cs-adj-btn-sm"
                                 title="−1 Temp HP"
+                                data-testid="temp-hp-minus"
                                 @click="characterStore.adjustTempHp(-1)"
                             >
                                 −
@@ -242,17 +246,19 @@
                             <button
                                 v-else-if="canEdit"
                                 class="cs-temp-hp-val"
+                                data-testid="temp-hp-value"
                                 @click="startEditTempHp"
                             >
                                 {{ char.tempHp ?? 0 }}
                             </button>
-                            <span v-else class="cs-temp-hp-val cs-temp-hp-static">{{
+                            <span v-else class="cs-temp-hp-val cs-temp-hp-static" data-testid="temp-hp-value">{{
                                 char.tempHp ?? 0
                             }}</span>
                             <button
                                 v-if="canEdit"
                                 class="cs-adj-btn cs-adj-btn-sm"
                                 title="+1 Temp HP"
+                                data-testid="temp-hp-plus"
                                 @click="characterStore.adjustTempHp(1)"
                             >
                                 +
@@ -488,11 +494,12 @@
                             v-else-if="canEdit"
                             class="cs-renown-value"
                             title="Set renown"
+                            data-testid="renown-value"
                             @click="startEditRenown"
                         >
                             {{ renownValue }}
                         </button>
-                        <span v-else class="cs-renown-value cs-renown-static">{{
+                        <span v-else class="cs-renown-value cs-renown-static" data-testid="renown-value">{{
                             renownValue
                         }}</span>
                     </div>
@@ -501,6 +508,7 @@
                         <button
                             class="cs-adj-btn cs-adj-btn-sm"
                             title="−1 Renown"
+                            data-testid="renown-minus"
                             @click="bumpRenown(-1)"
                         >
                             −
@@ -516,6 +524,7 @@
                         <button
                             class="cs-adj-btn cs-adj-btn-sm"
                             title="+1 Renown"
+                            data-testid="renown-plus"
                             @click="bumpRenown(1)"
                         >
                             +
@@ -1266,6 +1275,7 @@
                             :key="item.instanceId"
                             class="cs-list-item"
                             :class="{ disabled: item.disabled }"
+                            data-testid="gear-item"
                         >
                             <template v-if="editingGearId !== item.instanceId">
                                 <div
@@ -1540,6 +1550,7 @@
                         v-if="canEdit"
                         class="cs-add-btn"
                         style="margin-top: 8px"
+                        data-testid="gear-add"
                         @click="showAddGear = !showAddGear"
                     >
                         + Add Gear
@@ -1550,6 +1561,7 @@
                                 v-model="newGearDraft.name"
                                 placeholder="Item name"
                                 class="cs-input"
+                                data-testid="gear-name-input"
                                 @keyup.enter="submitAddGear"
                             />
                             <div style="display: flex; gap: 6px">
@@ -1619,6 +1631,7 @@
                             <div class="cs-form-actions">
                                 <button
                                     class="cs-btn primary"
+                                    data-testid="gear-submit"
                                     @click="submitAddGear"
                                 >
                                     Add
@@ -1835,6 +1848,7 @@
                                     class="cs-big-val cs-clickable"
                                     style="font-size: 20px"
                                     v-tooltip.bottom="'Click to edit'"
+                                    :data-testid="`coin-${coin.key}`"
                                     @click="startEditCoin(coin.key)"
                                 >
                                     {{ char[coin.key] ?? 0 }}
@@ -1850,6 +1864,7 @@
                                         color: var(--ink);
                                         line-height: 1.2;
                                     "
+                                    :data-testid="`coin-${coin.key}`"
                                 >
                                     {{ char[coin.key] ?? 0 }}
                                 </div>
@@ -2071,7 +2086,6 @@ import { useVaultStore } from "@/stores/vaultStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
-import { supabase } from "@/lib/supabase";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
@@ -2079,16 +2093,7 @@ const sessionStore = useSessionStore();
 const authStore    = useAuthStore();
 const vaultStore   = useVaultStore();
 
-const { setActive, characters, currentSessionId, saving, updateField } = characterStore;
 const { confirm } = useConfirmDialog();
-
-function augmentData(data) {
-    return {
-        ...data,
-        currentHp: data.currentHp ?? data.maxHitPoints ?? 0,
-        luckTokens: data.luckTokens ?? { current: 1, max: 3 },
-    };
-}
 
 const canEdit = computed(() => characterStore.canEditActiveCharacter);
 const char = computed(() => characterStore.character);
@@ -2167,15 +2172,6 @@ const coinGearSlots = computed(() => {
     if (!char.value) return 0
     const total = (char.value.gold ?? 0) + (char.value.silver ?? 0) + (char.value.copper ?? 0)
     return Math.max(0, Math.ceil((total - 100) / 100))
-})
-
-const coinSlotBreakdown = computed(() => {
-    if (!char.value) return ''
-    const parts = []
-    if ((char.value.gold   ?? 0) > 0) parts.push(`${char.value.gold}gp`)
-    if ((char.value.silver ?? 0) > 0) parts.push(`${char.value.silver}sp`)
-    if ((char.value.copper ?? 0) > 0) parts.push(`${char.value.copper}cp`)
-    return parts.join(' · ')
 })
 
 const effectiveGearSlotsUsed = computed(() => {

@@ -40,8 +40,12 @@ insert into storage.objects (id, bucket_id, name, owner) values
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
+-- Scoped to this test's session path: the bucket is public, so on a local dev
+-- DB anon also sees real reference photos uploaded outside this test.
 select is(
-  (select count(*) from storage.objects where bucket_id = 'reference-photos'),
+  (select count(*) from storage.objects
+    where bucket_id = 'reference-photos'
+      and name like '12000000-0000-0000-0000-000000000001/%'),
   1::bigint,
   'anonymous users can read the intentionally public reference-photo bucket'
 );

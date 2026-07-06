@@ -13,7 +13,6 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRoute } from 'vue-router'
 
 const props = defineProps({ sessionId: String })
 const copied = ref(false)

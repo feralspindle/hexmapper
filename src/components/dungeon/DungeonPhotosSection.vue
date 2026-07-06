@@ -24,6 +24,7 @@
             v-model="pendingName"
             class="dps-name-input"
             placeholder="e.g. Ancient Ring"
+            data-testid="photo-name-input"
             @keyup.enter="confirmUpload"
             @keyup.escape="cancelUpload"
           />
@@ -33,6 +34,7 @@
               class="ds-btn tiny"
               style="flex:1"
               :disabled="photoStore.uploading"
+              data-testid="photo-upload-confirm"
               @click="confirmUpload"
             >
               <i v-if="photoStore.uploading" class="fa-solid fa-spinner fa-spin" style="margin-right:4px" />
@@ -55,6 +57,7 @@
             accept="image/jpeg,image/png,image/webp,image/gif"
             style="display:none"
             :disabled="photoStore.uploading"
+            data-testid="photo-file-input"
             @change="handleUpload"
           />
         </label>
@@ -72,7 +75,7 @@
           >
             <img :src="photo.url" :alt="photo.name" class="dps-thumb" @click="enlarged = { url: photo.url, name: photo.name }" />
             <div class="dps-card-overlay">
-              <button class="ds-btn tiny" @click.stop="broadcast(photo)">
+              <button class="ds-btn tiny" data-testid="photo-reveal" @click.stop="broadcast(photo)">
                 <i class="fa-solid fa-tower-broadcast" style="margin-right:4px;font-size:10px" />Reveal
               </button>
               <button class="dps-del-btn" @click.stop="remove(photo)">

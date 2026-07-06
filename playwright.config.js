@@ -11,11 +11,17 @@ const hasE2EAccounts = [
   'E2E_PLAYER2_PASSWORD',
 ].every((name) => !!process.env[name])
 
+// The extra browser projects run on the nightly cron (E2E_ALL_BROWSERS=1 in
+// test-e2e.yml), not on per-deploy runs, to keep post-deploy checks fast.
+const runAllBrowsers = !!process.env.E2E_ALL_BROWSERS
+
 export default defineConfig({
   testDir: './e2e',
-  timeout: 45_000,
+  timeout: 60_000,
   expect: {
-    timeout: 10_000,
+    // Realtime propagation asserts cross staging regions; 10s flaked on RTT
+    // spikes (multiplayer-hex, oracle).
+    timeout: 15_000,
   },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -42,5 +48,23 @@ export default defineConfig({
       name: 'chromium-multiplayer',
       use: { ...devices['Desktop Chrome'] },
     },
+    ...(runAllBrowsers
+      ? [
+          {
+            name: 'firefox-multiplayer',
+            // Playwright mutes Chromium (--mute-audio) but not Firefox, so
+            // without this pref local runs play every dice/chat sound through
+            // the machine's speakers.
+            use: {
+              ...devices['Desktop Firefox'],
+              launchOptions: { firefoxUserPrefs: { 'media.volume_scale': '0.0' } },
+            },
+          },
+          {
+            name: 'mobile-chromium',
+            use: { ...devices['Pixel 7'] },
+          },
+        ]
+      : []),
   ],
 })

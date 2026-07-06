@@ -107,7 +107,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted, watchEffect } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useMapStore } from '@/stores/mapStore.js'
@@ -115,7 +115,6 @@ import { useDiceStore } from '@/stores/diceStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useOracleStore } from '@/stores/oracleStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
-import { useAuthStore } from '@/stores/authStore.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 import { usePhotoStore } from '@/stores/photoStore.js'
@@ -141,7 +140,6 @@ import ChatToast           from '@/components/common/ChatToast.vue'
 import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
 
 const route     = useRoute()
-const router    = useRouter()
 const sessionId = route.params.sessionId
 const dungeonId = route.params.dungeonId
 
@@ -152,7 +150,6 @@ const diceStore      = useDiceStore()
 const chatStore      = useChatStore()
 const oracleStore    = useOracleStore()
 const characterStore = useCharacterStore()
-const authStore      = useAuthStore()
 const prefs          = useUserPrefsStore()
 const activityStore  = useActivityStore()
 const photoStore     = usePhotoStore()
@@ -236,6 +233,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', measureTopbar)
   window.removeEventListener('keydown', onKeyDown)
   dungeonStore.cleanup()
+  activityStore.cleanup()
   mapStore.cleanup()
   characterStore.cleanup()
   chatStore.cleanup()
@@ -249,7 +247,7 @@ function onGlobalMouseMove(e) {
   if (itemDrag.active) { dragMoved = true; updatePosition(e.clientX, e.clientY) }
 }
 
-function onGlobalMouseUp(e) {
+function onGlobalMouseUp() {
   if (!itemDrag.active) return
   const moved = dragMoved
   const drop = endDrag()

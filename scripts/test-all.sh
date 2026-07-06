@@ -17,6 +17,9 @@ pg() {
   PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -d postgres "$@"
 }
 
+echo "==> frontend lint (eslint)"
+npm run lint
+
 echo "==> frontend unit tests (vitest)"
 npx vitest run
 

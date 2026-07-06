@@ -2,12 +2,12 @@
   <div class="pc-root">
 
     <div class="pc-today-bar">
-      <span class="pc-today-label">
+      <span class="pc-today-label" data-testid="calendar-today-label">
         {{ s.year_prefix }}{{ s.current_year }}{{ s.year_suffix }} ·
         {{ s.month_names[s.current_month - 1] }} {{ s.current_day }}
       </span>
       <button class="pc-jump-btn" @click="jumpToToday">Today</button>
-      <button v-if="isGM" class="pc-advance-btn" @click="advanceDay">Advance Day →</button>
+      <button v-if="isGM" class="pc-advance-btn" data-testid="calendar-advance-day" @click="advanceDay">Advance Day →</button>
     </div>
 
     <template v-if="!settingsOpen">
@@ -30,7 +30,7 @@
       <div class="pc-grid-wrap">
         <div class="pc-grid" :style="{ gridTemplateColumns: `repeat(${numWeekdays}, 1fr)` }">
           <div v-for="wd in s.weekday_names" :key="wd" class="pc-wd">{{ wd }}</div>
-          <div v-for="_ in leadingBlanks" class="pc-cell pc-cell--blank" />
+          <div v-for="blank in leadingBlanks" :key="blank" class="pc-cell pc-cell--blank" />
           <button
             v-for="d in daysInViewMonth"
             :key="d"

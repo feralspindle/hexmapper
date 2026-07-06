@@ -7,7 +7,6 @@ import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playDiceSound } from '@/lib/diceSound.js'
 
-const DICE_ORDER = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
 const HISTORY_LIMIT = 60
 
 export const useDiceStore = defineStore('dice', () => {

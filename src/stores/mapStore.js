@@ -236,6 +236,24 @@ export const useMapStore = defineStore('map', () => {
     await sessionStore.setActiveMapId(mapId)
   }
 
+  async function renameMap(mapId, name) {
+    try {
+      await apiClient.patch(`/maps/${mapId}`, { name }, 'rename_map')
+    } catch (error) { console.error('renameMap:', error instanceof ApiError ? error.message : error); return false }
+    maps.value = maps.value.map(m => (m.id === mapId ? { ...m, name } : m))
+    return true
+  }
+
+  async function deleteMap(mapId) {
+    const sessionStore = useSessionStore()
+    if (mapId === sessionStore.activeMapId) return false
+    try {
+      await apiClient.delete(`/maps/${mapId}`, 'delete_map')
+    } catch (error) { console.error('deleteMap:', error instanceof ApiError ? error.message : error); return false }
+    maps.value = maps.value.filter(m => m.id !== mapId)
+    return true
+  }
+
   function applyLocalPatch(patch) {
     const map = activeMap.value
     if (!map) return
@@ -364,6 +382,8 @@ export const useMapStore = defineStore('map', () => {
     createChildMap,
     applyLocalPatch,
     setActiveMap,
+    renameMap,
+    deleteMap,
     updateActiveMap,
     setFogRevealAll,
     setExplorationMode,

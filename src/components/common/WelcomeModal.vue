@@ -61,12 +61,10 @@
 </template>
 
 <script setup>
-import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 
 const emit = defineEmits(['close'])
 
-const sessionStore = useSessionStore()
 const authStore    = useAuthStore()
 
 const features = [
