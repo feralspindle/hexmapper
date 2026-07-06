@@ -20,11 +20,6 @@ const mocks = vi.hoisted(() => ({
     rollEventPrompt: vi.fn(),
     rollTable: vi.fn(),
   },
-  sessionStore: {
-    playMode: 'gm',
-    isGM: true,
-    setPlayMode: vi.fn(),
-  },
 }))
 
 vi.mock('@/stores/oracleStore.js', () => ({
@@ -38,10 +33,6 @@ vi.mock('@/stores/oracleStore.js', () => ({
   useOracleStore: () => mocks.oracleStore,
 }))
 
-vi.mock('@/stores/sessionStore.js', () => ({
-  useSessionStore: () => mocks.sessionStore,
-}))
-
 describe('OraclePanel', () => {
   beforeEach(() => {
     mocks.oracleStore.tables = []
@@ -49,12 +40,9 @@ describe('OraclePanel', () => {
     mocks.oracleStore.rolls = []
     mocks.oracleStore.error = null
     mocks.oracleStore.rolling = false
-    mocks.sessionStore.playMode = 'gm'
-    mocks.sessionStore.isGM = true
     for (const value of Object.values(mocks.oracleStore)) {
       if (typeof value === 'function' && 'mockClear' in value) value.mockClear()
     }
-    mocks.sessionStore.setPlayMode.mockClear()
   })
 
   test('rolls the yes/no oracle with question and odds', async () => {
@@ -101,26 +89,5 @@ describe('OraclePanel', () => {
     expect(wrapper.get('[data-testid="oracle-table-name"]').element.value).toBe('Encounters')
     expect(wrapper.get('[data-testid="oracle-row-result"]').element.value).toBe('Bandits')
     expect(mocks.oracleStore.rollTable).toHaveBeenCalledWith('table-1', null)
-  })
-
-  test('toggles solo/co-op play mode for the owner', async () => {
-    const wrapper = mount(OraclePanel)
-
-    expect(wrapper.get('[data-testid="oracle-mode-toggle"]').text()).toContain('Switch to Solo / Co-op')
-
-    await wrapper.get('[data-testid="oracle-mode-toggle"]').trigger('click')
-
-    expect(mocks.sessionStore.setPlayMode).toHaveBeenCalledWith('gm_less')
-  })
-
-  test('toggles back to gm-led mode from solo/co-op', async () => {
-    mocks.sessionStore.playMode = 'gm_less'
-    const wrapper = mount(OraclePanel)
-
-    expect(wrapper.get('[data-testid="oracle-mode-toggle"]').text()).toContain('Switch to GM-led')
-
-    await wrapper.get('[data-testid="oracle-mode-toggle"]').trigger('click')
-
-    expect(mocks.sessionStore.setPlayMode).toHaveBeenCalledWith('gm')
   })
 })

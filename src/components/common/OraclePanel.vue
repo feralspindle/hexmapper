@@ -4,20 +4,8 @@
       <i class="fa-solid fa-wand-sparkles" />
       <div>
         <h3>Oracle</h3>
-        <span class="ds-meta">{{ sessionStore.playMode === 'gm_less' ? 'GM-less mode' : 'Shared solo tools' }}</span>
+        <span class="ds-meta">GM-less mode</span>
       </div>
-      <button
-        type="button"
-        class="oracle-mode ds-btn tiny ghost"
-        :class="{ active: sessionStore.playMode === 'gm_less' }"
-        :disabled="!sessionStore.isGM"
-        title="Only the campaign owner can change play mode"
-        data-testid="oracle-mode-toggle"
-        @click="togglePlayMode"
-      >
-        <i class="fa-solid fa-users" />
-        <span>{{ sessionStore.playMode === 'gm_less' ? 'Switch to GM-led' : 'Switch to Solo / Co-op' }}</span>
-      </button>
     </header>
 
     <div class="oracle-scroll ds-section-body">
@@ -193,10 +181,8 @@
 <script setup>
 import { ref } from 'vue'
 import { YES_NO_ODDS, useOracleStore } from '@/stores/oracleStore.js'
-import { useSessionStore } from '@/stores/sessionStore.js'
 
 const oracleStore = useOracleStore()
-const sessionStore = useSessionStore()
 
 const question = ref('')
 const odds = ref('even')
@@ -233,11 +219,6 @@ function addRow(table) {
     notes: '',
     position: count,
   })
-}
-
-function togglePlayMode() {
-  if (!sessionStore.isGM) return
-  sessionStore.setPlayMode(sessionStore.playMode === 'gm_less' ? 'gm' : 'gm_less')
 }
 
 function rollLabel(roll) {
@@ -280,18 +261,6 @@ function labelize(key) {
 
 .oracle-head .ds-meta {
   display: block;
-}
-
-.oracle-mode {
-  flex: 0 0 auto;
-}
-
-.oracle-mode.active {
-  color: var(--accent);
-}
-
-.oracle-mode:disabled {
-  cursor: not-allowed;
 }
 
 .oracle-scroll {
