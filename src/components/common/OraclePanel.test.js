@@ -20,6 +20,13 @@ const mocks = vi.hoisted(() => ({
     rollEventPrompt: vi.fn(),
     rollTable: vi.fn(),
   },
+  journalStore: {
+    pin: vi.fn(),
+  },
+}))
+
+vi.mock('@/stores/journalStore.js', () => ({
+  useJournalStore: () => mocks.journalStore,
 }))
 
 vi.mock('@/stores/oracleStore.js', () => ({
@@ -89,5 +96,25 @@ describe('OraclePanel', () => {
     expect(wrapper.get('[data-testid="oracle-table-name"]').element.value).toBe('Encounters')
     expect(wrapper.get('[data-testid="oracle-row-result"]').element.value).toBe('Bandits')
     expect(mocks.oracleStore.rollTable).toHaveBeenCalledWith('table-1', null)
+  })
+
+  test('pinning a roll snapshots it to the journal', async () => {
+    mocks.oracleStore.rolls = [{
+      id: 'roll-1',
+      display_name: 'Player',
+      kind: 'yes_no',
+      question: 'Is the bridge safe?',
+      result: { label: 'Yes, but...', roll: 43 },
+    }]
+    const wrapper = mount(OraclePanel)
+
+    await wrapper.get('[data-testid="oracle-pin"]').trigger('click')
+
+    expect(mocks.journalStore.pin).toHaveBeenCalledWith({
+      source: 'oracle',
+      label: 'Yes / No',
+      text: 'Yes, but... (43)',
+      detail: 'Is the bridge safe?',
+    })
   })
 })
