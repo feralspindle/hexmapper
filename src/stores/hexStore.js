@@ -6,6 +6,7 @@ import { apiClient, ApiError } from "@/lib/apiClient.js";
 import router from "@/router/index.js";
 import { useMapStore } from "@/stores/mapStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
+import { usePartyFollow } from "@/composables/usePartyFollow.js";
 
 export const MARKER_KINDS = [
   { id: "town", label: "Town" },
@@ -86,6 +87,7 @@ export const useHexStore = defineStore("hex", () => {
   const currentMapId = ref(null);
   let channel = null;
   let partyChannel = null;
+  let partyFollowChannel = null;
   let playerRefreshTimer = null;
   let playerRefreshDebounce = null;
   let playerRefreshInFlight = false;
@@ -267,6 +269,16 @@ export const useHexStore = defineStore("hex", () => {
       .subscribe();
 
     _setupMapPartyChannel(mapId);
+
+    if (partyFollowChannel) realtime.removeChannel(partyFollowChannel);
+    partyFollowChannel = realtime
+      .channel(`session:${sessionId}:party-follow`, { sessionId })
+      .on("broadcast", { event: "dungeon_entered" }, ({ payload }) => {
+        // self-receive is off per connection, but a gm's second tab still hears it
+        if (useSessionStore().isGM) return;
+        usePartyFollow().push(payload);
+      })
+      .subscribe();
   }
 
   async function _loadPartyHexFromDb() {
@@ -630,6 +642,7 @@ export const useHexStore = defineStore("hex", () => {
     }
 
     hexDungeons.value = [...hexDungeons.value, data];
+    _broadcastDungeonEntered(data.id, data.name ?? name);
     router.push({
       name: "dungeon",
       params: { sessionId: currentSessionId.value, dungeonId: data.id },
@@ -693,7 +706,20 @@ export const useHexStore = defineStore("hex", () => {
   function navigateToDungeon(dungeonId) {
     const sessionId =
       currentSessionId.value ?? router.currentRoute.value.params.sessionId;
+    const name = hexDungeons.value.find((d) => d.id === dungeonId)?.name;
+    _broadcastDungeonEntered(dungeonId, name);
+    // entering a dungeon makes any pending invite moot
+    usePartyFollow().dismiss();
     router.push({ name: "dungeon", params: { sessionId, dungeonId } });
+  }
+
+  function _broadcastDungeonEntered(dungeonId, name) {
+    if (!useSessionStore().isGM) return;
+    void partyFollowChannel?.send({
+      type: "broadcast",
+      event: "dungeon_entered",
+      payload: { dungeonId, name: name ?? null },
+    });
   }
 
   async function clearAll() {
@@ -721,6 +747,8 @@ export const useHexStore = defineStore("hex", () => {
     partyChannel = null;
     if (mapPartyChannel) realtime.removeChannel(mapPartyChannel);
     mapPartyChannel = null;
+    if (partyFollowChannel) realtime.removeChannel(partyFollowChannel);
+    partyFollowChannel = null;
     currentMapId.value = null;
     currentSessionId.value = null;
     hexCells.value = new Map();
