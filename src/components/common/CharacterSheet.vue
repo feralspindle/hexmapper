@@ -2337,9 +2337,10 @@ function submitAddCoin() {
 }
 
 const luckCurrent = computed(() => char.value?.luckTokens?.current ?? 1);
-// tokens are uncapped, always show at least the old baseline of 3 gems
+// tokens are uncapped, show at least the old baseline of 3 gems and keep
+// one empty outline past the filled ones as a hint that more can be added
 const luckGemCount = computed(() =>
-    Math.max(char.value?.luckTokens?.max ?? 3, luckCurrent.value),
+    Math.max(char.value?.luckTokens?.max ?? 3, luckCurrent.value + 1),
 );
 
 function handleSpendLuck() {
