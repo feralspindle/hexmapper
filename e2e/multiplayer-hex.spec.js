@@ -156,11 +156,13 @@ test.describe.serial('hex map multiplayer sync', () => {
       await addGmMarker(room.gm.page, 0, 0, 'trap')
       await addGmMarker(room.gm.page, 1, 0, 'secret')
 
-      // reveal-all reveals every cell, so hide (1,0) again afterwards. That leaves
-      // it revealed=false under fog_reveal_all, which is what makes it arrive as a
-      // sentinel rather than being withheld by the row filter - the redaction path
-      // this test is here to exercise.
+      // reveal-all reveals every cell, so hide (1,0) again to get a genuinely
+      // hidden cell delivered as a sentinel under fog_reveal_all - that's the
+      // redaction path this test exercises. wait for the reveal-all to land on
+      // the player before hiding, otherwise the hide races the bulk reveal on the
+      // server and (1,0) can come back revealed.
       await room.gm.page.getByTestId('hex-reveal-all').click()
+      await expect(hexCell(room.player1.page, 1, 0)).toHaveAttribute('data-visible-to-player', 'true')
       await room.gm.page.getByTestId('hex-tool-hide').click()
       await hexCell(room.gm.page, 1, 0).click()
       await expect(hexCell(room.player1.page, 1, 0)).toHaveAttribute('data-visible-to-player', 'false')
