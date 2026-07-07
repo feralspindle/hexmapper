@@ -175,7 +175,18 @@
         >
           <div class="oracle-roll-meta">
             <span>{{ roll.display_name }}</span>
-            <span>{{ rollLabel(roll) }}</span>
+            <span>
+              {{ rollLabel(roll) }}
+              <button
+                type="button"
+                class="hm-card-icon-btn oracle-pin"
+                title="Pin to journal"
+                data-testid="oracle-pin"
+                @click="pinRoll(roll)"
+              >
+                <i class="fa-solid fa-thumbtack" />
+              </button>
+            </span>
           </div>
           <p v-if="roll.question" class="oracle-roll-question">{{ roll.question }}</p>
           <p class="oracle-roll-result">{{ resultText(roll) }}</p>
@@ -204,6 +215,7 @@
 <script setup>
 import { ref } from 'vue'
 import { YES_NO_ODDS, useOracleStore } from '@/stores/oracleStore.js'
+import { useJournalStore } from '@/stores/journalStore.js'
 
 const oracleStore = useOracleStore()
 
@@ -246,6 +258,20 @@ function addRow(table) {
 
 function chainTargets(tableId) {
   return oracleStore.tables.filter(t => t.id !== tableId)
+}
+
+function pinRoll(roll) {
+  const journal = useJournalStore()
+  let text = resultText(roll)
+  if (roll.kind === 'event_prompt') {
+    text = promptKeys.map(key => `${labelize(key)}: ${roll.result?.[key]}`).join(', ')
+  }
+  journal.pin({
+    source: 'oracle',
+    label: rollLabel(roll),
+    text,
+    detail: roll.question ?? null,
+  })
 }
 
 function rollLabel(roll) {
@@ -401,6 +427,11 @@ function labelize(key) {
 .oracle-roll-notes {
   margin: 4px 0 0;
   overflow-wrap: anywhere;
+}
+
+.oracle-pin {
+  margin-left: 4px;
+  font-size: 10px;
 }
 
 .oracle-roll-question {

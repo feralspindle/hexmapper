@@ -20,6 +20,13 @@ const mocks = vi.hoisted(() => ({
     rollEventPrompt: vi.fn(),
     rollTable: vi.fn(),
   },
+  journalStore: {
+    pin: vi.fn(),
+  },
+}))
+
+vi.mock('@/stores/journalStore.js', () => ({
+  useJournalStore: () => mocks.journalStore,
 }))
 
 vi.mock('@/stores/oracleStore.js', () => ({
@@ -136,5 +143,25 @@ describe('OraclePanel', () => {
 
     await select.setValue('')
     expect(mocks.oracleStore.updateRow).toHaveBeenCalledWith('row-1', { subtable_id: null })
+  })
+
+  test('pinning a roll snapshots it to the journal', async () => {
+    mocks.oracleStore.rolls = [{
+      id: 'roll-1',
+      display_name: 'Player',
+      kind: 'yes_no',
+      question: 'Is the bridge safe?',
+      result: { label: 'Yes, but...', roll: 43 },
+    }]
+    const wrapper = mount(OraclePanel)
+
+    await wrapper.get('[data-testid="oracle-pin"]').trigger('click')
+
+    expect(mocks.journalStore.pin).toHaveBeenCalledWith({
+      source: 'oracle',
+      label: 'Yes / No',
+      text: 'Yes, but... (43)',
+      detail: 'Is the bridge safe?',
+    })
   })
 })
