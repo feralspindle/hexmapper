@@ -99,4 +99,51 @@ describe('InitiativeSection', () => {
     const wrapper = mount(InitiativeSection)
     expect(wrapper.get('[data-testid="initiative-advance"]').attributes('disabled')).toBeDefined()
   })
+
+  test('dropping a pc sends d4 + con mod rounds, floored at 1', async () => {
+    mocks.characterStore.characters = [{ id: 'c1', data: { name: 'Brey', stats: { CON: 6 } } }]
+    mocks.sessionStore.initiativeState = {
+      entries: [entry({ id: 'e1', kind: 'pc', character_id: 'c1', name: 'Brey' })],
+      active_id: null,
+      round: 1,
+    }
+    const wrapper = mount(InitiativeSection)
+
+    await wrapper.get('[data-testid="initiative-drop"]').trigger('click')
+
+    const [op, payload] = mocks.sessionStore.initiativeOp.mock.calls[0]
+    expect(op).toBe('death_start')
+    // con 6 -> mod -2, d4 1..4 -> raw -1..2, floored at 1 -> always 1 or 2
+    expect(payload.entry_id).toBe('e1')
+    expect(payload.rounds).toBeGreaterThanOrEqual(1)
+    expect(payload.rounds).toBeLessThanOrEqual(2)
+  })
+
+  test('a dying entry shows the countdown and a stabilize button', async () => {
+    mocks.sessionStore.initiativeState = {
+      entries: [entry({ id: 'e1', kind: 'pc', name: 'Brey', death: { total: 3, left: 2, dead: false } })],
+      active_id: null,
+      round: 1,
+    }
+    const wrapper = mount(InitiativeSection)
+
+    expect(wrapper.get('[data-testid="initiative-dying"]').text()).toContain('2')
+    await wrapper.get('[data-testid="initiative-stabilize"]').trigger('click')
+    expect(mocks.sessionStore.initiativeOp).toHaveBeenCalledWith('death_clear', { entry_id: 'e1' })
+  })
+
+  test('a dead entry reads dead and monsters get no drop button', () => {
+    mocks.sessionStore.initiativeState = {
+      entries: [
+        entry({ id: 'e1', kind: 'pc', name: 'Brey', death: { total: 2, left: 0, dead: true } }),
+        entry({ id: 'e2', kind: 'monster', name: 'Goblin 1' }),
+      ],
+      active_id: null,
+      round: 1,
+    }
+    const wrapper = mount(InitiativeSection)
+
+    expect(wrapper.get('[data-testid="initiative-dead"]').text()).toContain('dead')
+    expect(wrapper.findAll('[data-testid="initiative-drop"]')).toHaveLength(0)
+  })
 })
