@@ -5,6 +5,7 @@ import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
+import { useOracleStore } from '@/stores/oracleStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -591,6 +592,7 @@ export const useD = defineStore('dungeon', () => {
     if (!rooms.value.has(data.id)) rooms.value.set(data.id, data)
     useActivityStore().record('added room', data.name ?? 'Unnamed Room')
     pushUndo({ type: 'delete_room', roomId: data.id })
+    return data
   }
 
   async function updateRoom(id, patch) {
@@ -687,6 +689,42 @@ export const useD = defineStore('dungeon', () => {
     const doors = [...(room.doors ?? []), { id: crypto.randomUUID(), ...doorData }]
     updateRoom(roomId, { doors })
     useActivityStore().record('added door to', room.name ?? 'Unnamed Room')
+  }
+
+  // generator mode (#50): one click rolls the next room - size, placement
+  // flush against an existing room, exits, and contents from the session
+  // table tagged dungeon.stocking (falls back to a built-in list). generated
+  // geometry is ordinary room data, editable like anything hand-drawn, and
+  // syncs to every client through the same element events.
+  async function generateRoom() {
+    const { generateRoomPlan, weightedPick, STOCKING_FALLBACK } = await import('@/lib/dungeonGenerator.js')
+    const plan = generateRoomPlan([...rooms.value.values()])
+    const stocking = await _rollStocking(weightedPick, STOCKING_FALLBACK)
+
+    const created = await addRoom({
+      dungeon_id: dungeon.value?.id,
+      session_id: dungeon.value?.session_id,
+      ...plan.room,
+      label: `Room ${rooms.value.size + 1}`,
+      notes: stocking,
+    })
+    if (!created) return null
+
+    for (const door of plan.roomDoors) addDoor(created.id, door)
+    if (plan.sourceDoor) addDoor(plan.sourceDoor.roomId, plan.sourceDoor.door)
+    useActivityStore().record('explored into', `${created.label ?? 'a room'} - ${stocking}`)
+    return { room: created, stocking }
+  }
+
+  async function _rollStocking(weightedPick, fallback) {
+    const oracle = useOracleStore()
+    const table = oracle.tables.find(t => t.tag === 'dungeon.stocking')
+    if (table) {
+      const roll = await oracle.rollTable(table.id)
+      const text = roll?.result?.result
+      if (text) return text
+    }
+    return weightedPick(fallback, Math.random).result
   }
 
   function moveDoor(fromRoomId, doorId, toRoomId, newDoorData) {
@@ -843,6 +881,7 @@ export const useD = defineStore('dungeon', () => {
     refresh,
     undo,
     addRoom,
+    generateRoom,
     updateRoom,
     deleteRoom,
     addCorridor,
