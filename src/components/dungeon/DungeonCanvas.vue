@@ -1996,6 +1996,9 @@ function onKeyDown(e) {
   if (e.key === 'p' || e.key === 'P') { dungeonStore.drawMode = 'pan'; return }
   if (e.key === 'd' || e.key === 'D') { dungeonStore.drawMode = 'door'; return }
   if (e.key === 'w' || e.key === 'W') { dungeonStore.drawMode = 'polygon'; return }
+  // generateRoom guards itself (store-level generating flag), so key repeat
+  // can't mass-produce rooms
+  if (e.key === 'g' || e.key === 'G') { void dungeonStore.generateRoom(); return }
   if (e.key === '=' || e.key === '+') { zoomIn(); return }
   if (e.key === '-' || e.key === '_') { zoomOut(); return }
   if ((e.key === 'Delete' || e.key === 'Backspace') && dungeonStore.selectedElement) {

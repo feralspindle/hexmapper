@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { generateRoomPlan, weightedPick, STOCKING_FALLBACK } from './dungeonGenerator.js'
+import { generateRoomPlan, weightedPick, overlaps, wallOverlapSpan, STOCKING_FALLBACK } from './dungeonGenerator.js'
 
 // mulberry32 so runs are reproducible
 function seeded(seed) {
@@ -11,15 +11,6 @@ function seeded(seed) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
-}
-
-function overlaps(a, b) {
-  return (
-    a.origin_x < b.origin_x + b.width &&
-    a.origin_x + a.width > b.origin_x &&
-    a.origin_y < b.origin_y + b.height &&
-    a.origin_y + a.height > b.origin_y
-  )
 }
 
 describe('dungeonGenerator', () => {
@@ -69,6 +60,20 @@ describe('dungeonGenerator', () => {
         expect(plan.sourceDoor.door.offset).toBeLessThan(1)
       }
       rooms.push({ id: `r${i}`, shape: 'rect', ...plan.room })
+    }
+  })
+
+  test('a 1-wide hand-drawn source never yields a corner-touching room', () => {
+    // jitter against a 1-cell source used to place rooms sharing only a
+    // corner - doors into solid wall. every accepted plan must share at
+    // least one full wall cell with its source.
+    const source = { id: 'thin', shape: 'rect', origin_x: 10, origin_y: 10, width: 1, height: 1 }
+    const rng = seeded(3)
+    for (let i = 0; i < 200; i += 1) {
+      const plan = generateRoomPlan([source], rng)
+      if (!plan.sourceDoor) continue
+      const wall = plan.sourceDoor.door.wall
+      expect(wallOverlapSpan(source, wall, plan.room)).toBeGreaterThanOrEqual(1)
     }
   })
 

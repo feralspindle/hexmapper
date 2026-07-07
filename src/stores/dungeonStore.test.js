@@ -57,6 +57,7 @@ describe('dungeonStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     resetKit(kit)
+    kit.oracle = null
     kit.activity = { record: vi.fn() }
     kit.responses.dungeons = { data: dungeonRow(), error: null }
   })
@@ -103,28 +104,58 @@ describe('dungeonStore', () => {
     expect(kit.activity.record).toHaveBeenCalledWith('added room', 'Vault')
   })
 
-  test('generateRoom draws a stocked, connected, editable room', async () => {
-    kit.oracle = {
-      tables: [{ id: 't1', tag: 'dungeon.stocking' }],
-      rollTable: vi.fn(() => Promise.resolve({ result: { result: 'Monster - 2 ghouls' } })),
-    }
+  test('generateRoom draws a stocked, connected, editable room in one create', async () => {
+    kit.oracle = { tables: [{ id: 't1', tag: 'dungeon.stocking' }], rollTable: vi.fn() }
+    const stockingRoll = vi.fn(() => ({ result: { result: 'Monster - 2 ghouls' } }))
+    kit.api['post /oracle-rolls'] = stockingRoll
     kit.api['post /dungeon-rooms'] = body => room('gen-room', body)
     const store = await loadedStore()
-    // seed one existing room to connect against
-    kit.api['get placeholder'] = null
+    store.rooms.set('r0', room('r0', { origin_x: 10, origin_y: 10, width: 3, height: 3, shape: 'rect', label: 'Room 7', doors: [] }))
+
+    const result = await store.generateRoom()
+
+    // stocking rolled straight through the api against the tagged table
+    expect(stockingRoll.mock.calls[0][0]).toMatchObject({ kind: 'table', table_id: 't1' })
+    expect(result.stocking).toBe('Monster - 2 ghouls')
+
+    const created = store.rooms.get('gen-room')
+    expect(created).toBeTruthy()
+    expect(created.notes).toBe('Monster - 2 ghouls')
+    // doors ship inside the create payload - no patch race, and at least the
+    // connecting door is always there
+    expect(created.doors.length).toBeGreaterThanOrEqual(1)
+    expect(created.reject_overlapping).toBe(true)
+    // label counts from the highest existing number, not the map size
+    expect(created.label).toBe('Room 8')
+    // one activity line for the whole click
+    expect(kit.activity.record).toHaveBeenCalledTimes(1)
+    expect(kit.activity.record).toHaveBeenCalledWith('explored into', expect.stringContaining('Monster'))
+  })
+
+  test('a 409 from a concurrent generator replans instead of stacking rooms', async () => {
+    const attempts = []
+    kit.api['post /dungeon-rooms'] = body => {
+      attempts.push(body)
+      if (attempts.length === 1) throw new kit.ApiError('conflict', 409)
+      return room('gen-room', body)
+    }
+    const store = await loadedStore()
     store.rooms.set('r0', room('r0', { origin_x: 10, origin_y: 10, width: 3, height: 3, shape: 'rect', doors: [] }))
 
     const result = await store.generateRoom()
 
-    expect(kit.oracle.rollTable).toHaveBeenCalledWith('t1')
-    expect(result.stocking).toBe('Monster - 2 ghouls')
-    const created = store.rooms.get('gen-room')
-    expect(created).toBeTruthy()
-    expect(created.notes).toBe('Monster - 2 ghouls')
-    expect(created.width).toBeGreaterThanOrEqual(2)
-    // a door landed on the new room (the connection back is on r0's patch)
-    expect((created.doors ?? []).length).toBeGreaterThanOrEqual(0)
-    expect(kit.activity.record).toHaveBeenCalledWith('explored into', expect.stringContaining('Monster'))
+    expect(attempts).toHaveLength(2)
+    expect(result).toBeTruthy()
+    expect(store.rooms.get('gen-room')).toBeTruthy()
+    // the failed optimistic room didn't leak into the map
+    expect([...store.rooms.values()].filter(r => r.id !== 'r0' && r.id !== 'gen-room')).toHaveLength(0)
+  })
+
+  test('generateRoom refuses to run before the dungeon record loads', async () => {
+    const store = useD()
+    const result = await store.generateRoom()
+    expect(result).toBeNull()
+    expect(kit.apiClient.post).not.toHaveBeenCalled()
   })
 
   test('addRoom keeps a foreign edit that arrived before the API response', async () => {

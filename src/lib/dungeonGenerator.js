@@ -25,7 +25,7 @@ function intBetween(rng, min, max) {
   return min + Math.floor(rng() * (max - min + 1))
 }
 
-function overlaps(a, b, margin = 0) {
+export function overlaps(a, b, margin = 0) {
   return (
     a.origin_x < b.origin_x + b.width + margin &&
     a.origin_x + a.width + margin > b.origin_x &&
@@ -36,6 +36,18 @@ function overlaps(a, b, margin = 0) {
 
 const WALLS = ['n', 's', 'e', 'w']
 const OPPOSITE = { n: 's', s: 'n', e: 'w', w: 'e' }
+
+// length of the wall segment two flush rooms actually share. jitter against a
+// narrow source can leave rooms touching only at a corner - a zero-length
+// span means the doors would open into solid wall
+export function wallOverlapSpan(source, wall, room) {
+  if (wall === 'n' || wall === 's') {
+    return Math.min(source.origin_x + source.width, room.origin_x + room.width)
+      - Math.max(source.origin_x, room.origin_x)
+  }
+  return Math.min(source.origin_y + source.height, room.origin_y + room.height)
+    - Math.max(source.origin_y, room.origin_y)
+}
 
 // candidate room placed flush against `source` on `wall`, roughly centered on
 // the source's midline with some jitter
@@ -118,6 +130,8 @@ export function generateRoomPlan(existingRooms, rng = Math.random) {
     const wall = WALLS[intBetween(rng, 0, 3)]
     const candidate = candidateAgainst(source, wall, width, height, rng)
     if (existingRooms.some(existing => overlaps(candidate, existing))) continue
+    // corner-touch is not adjacency - the connecting door needs a real wall
+    if (wallOverlapSpan(source, wall, candidate) < 1) continue
 
     const doors = sharedDoors(source, wall, candidate)
     const roomDoors = [doors.room]

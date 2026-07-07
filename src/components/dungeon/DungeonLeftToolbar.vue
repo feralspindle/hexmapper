@@ -69,10 +69,10 @@
     <div class="ds-tool-group">
       <button
         class="ds-tool"
-        :class="{ disabled: generating }"
+        :class="{ disabled: dungeonStore.generating }"
         title="Generate the next room"
         data-testid="dungeon-generate"
-        @click="generate"
+        @click="dungeonStore.generateRoom()"
       >
         <component :is="WandIcon" :size="18" />
         <span class="ds-tool-key">G</span>
@@ -148,7 +148,7 @@
 </template>
 
 <script setup>
-import { h, reactive, ref } from 'vue'
+import { h, reactive } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
@@ -224,20 +224,6 @@ function onHover(e) {
 function onLeave() {
   _lastBtn = null
   tip.show = false
-}
-
-const generating = ref(false)
-
-// one click, one room: geometry + exits + stocking, synced to everyone
-// through ordinary element events
-async function generate() {
-  if (generating.value) return
-  generating.value = true
-  try {
-    await dungeonStore.generateRoom()
-  } finally {
-    generating.value = false
-  }
 }
 
 function deleteSelected() {
