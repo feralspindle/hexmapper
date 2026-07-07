@@ -459,6 +459,15 @@ export const useHexStore = defineStore("hex", () => {
     }
     const key = cellKey(q, r);
     const existing = hexCells.value.get(key);
+    // Visibility is GM-controlled in FOW. In blank mode, and in FOW while
+    // reveal-all is on, cells written without an explicit revealed flag must
+    // be stored as revealed — otherwise the row becomes an explicit hidden
+    // override that fogs itself (issue #107). Cells already hidden keep
+    // their override.
+    const impliedRevealed =
+      !("revealed" in patch) &&
+      (useSessionStore().hexMode === "blank" ||
+        (useMapStore().mapFogRevealAll && existing?.revealed !== false));
     const merged = {
       label: "",
       notes: "",
@@ -468,6 +477,7 @@ export const useHexStore = defineStore("hex", () => {
       revealed: false,
       ...existing,
       ...patch,
+      ...(impliedRevealed ? { revealed: true } : {}),
       session_id: currentSessionId.value,
       map_id: currentMapId.value,
       q,
@@ -476,14 +486,8 @@ export const useHexStore = defineStore("hex", () => {
     };
     hexCells.value.set(key, merged);
 
-    // Visibility is GM-controlled in FOW. In blank mode, player-created cells
-    // must be stored as revealed so they are not mistaken for hidden overrides
-    // on reveal-all maps.
     const body = { ...merged };
-    if (!("revealed" in patch)) {
-      if (useSessionStore().hexMode === "blank") body.revealed = true;
-      else delete body.revealed;
-    }
+    if (!("revealed" in patch) && !impliedRevealed) delete body.revealed;
     if (!("explored" in patch)) delete body.explored;
 
     const intent = "revealed" in patch

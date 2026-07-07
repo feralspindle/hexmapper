@@ -120,6 +120,11 @@ pub async fn is_revealed(pool: &PgPool, map_id: Uuid, q: i32, r: i32) -> Result<
 /// Upserts a hex cell (insert-or-partial-update by map_id,q,r) and records a
 /// `hex_cell.upserted` snapshot. `body` carries the cell fields; session_id is bound
 /// separately. Only columns present in `body` are updated on conflict.
+///
+/// A new row with no explicit `revealed` inherits the map's fog_reveal_all:
+/// under reveal-all a revealed=false row is an explicit hidden override, so
+/// defaulting to false would make a cell created by an ordinary edit fog
+/// itself (issue #107). Existing rows keep their revealed state.
 pub async fn upsert(
     tx: &mut Transaction<'_, Postgres>,
     session_id: Uuid,
@@ -140,7 +145,11 @@ pub async fn upsert(
                 $2->>'terrain_type',
                 $2->>'color',
                 coalesce(($2->>'has_dungeon')::boolean, false),
-                coalesce(($2->>'revealed')::boolean, false),
+                coalesce(
+                    ($2->>'revealed')::boolean,
+                    (select m.fog_reveal_all from maps m where m.id = ($2->>'map_id')::uuid),
+                    false
+                ),
                 $2->>'marker_color',
                 $2->>'marker_label',
                 $2->>'gm_markers',
