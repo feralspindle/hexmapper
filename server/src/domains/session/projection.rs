@@ -26,12 +26,13 @@ fn snapshot_columns(s: &str) -> String {
         ({s}->>'torch_started_at')::timestamptz,
         {s}->>'hex_mode',
         ({s}->>'gm_initiative')::integer,
-        coalesce({s}->>'play_mode', 'gm')
+        coalesce({s}->>'play_mode', 'gm'),
+        coalesce({s}->'travel_state', '{{"enabled": false, "fraction": 0}}'::jsonb)
         "#
     )
 }
 
-const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative, play_mode";
+const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative, play_mode, travel_state";
 
 /// Wraps a `sessions` mutation that exposes `s` (the updated/inserted row) in a
 /// `session.<event>` snapshot event. Returns the row JSON (or None if 0 rows).
@@ -176,6 +177,48 @@ pub async fn torch_reset(
         "session.updated", id, metadata,
     ).await?;
     Ok(())
+}
+
+/// reads the travel blob with a row lock so concurrent moves can't clobber
+/// each other - the caller mutates and writes back in the same tx
+pub async fn travel_state_for_update(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<Option<Value>, AppError> {
+    sqlx::query_scalar("select travel_state from sessions where id = $1 for update")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn set_travel_state(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    state: &Value,
+    metadata: &Value,
+) -> Result<Option<Value>, AppError> {
+    let row: Option<Value> = sqlx::query_scalar(
+        r#"
+        with s as (
+            update sessions set travel_state = $3, updated_at = now() where id = $1 returning *
+        ),
+        evt as (
+            insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
+            select 'session', s.id, s.id,
+                coalesce((select max(sequence) from events e where e.aggregate_type = 'session' and e.aggregate_id = s.id), 0) + 1,
+                'session.updated', to_jsonb(s), $2
+            from s
+        )
+        select to_jsonb(s) from s
+        "#,
+    )
+    .bind(id)
+    .bind(metadata)
+    .bind(state)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row)
 }
 
 pub async fn delete(
