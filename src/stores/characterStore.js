@@ -477,7 +477,8 @@ export const useCharacterStore = defineStore('character', () => {
   function adjustLuck(delta) {
     if (!character.value) return
     const luck = character.value.luckTokens ?? { current: 1, max: 3 }
-    updateField('luckTokens', { ...luck, current: Math.max(0, Math.min(luck.max, luck.current + delta)) })
+    // no upper clamp, luck tokens can pile up past max (issue #58)
+    updateField('luckTokens', { ...luck, current: Math.max(0, luck.current + delta) })
   }
 
   function updateFieldForChar(id, field, value) {
@@ -514,13 +515,6 @@ export const useCharacterStore = defineStore('character', () => {
       event: 'gm_initiative_set',
       payload: { score },
     })
-  }
-
-  function setMaxLuck(max) {
-    if (!character.value) return
-    const luck = character.value.luckTokens ?? { current: 1, max: 3 }
-    const newMax = Math.max(0, max)
-    updateField('luckTokens', { current: Math.min(luck.current, newMax), max: newMax })
   }
 
   function _pushLuckEvent(payload) {
@@ -729,7 +723,7 @@ export const useCharacterStore = defineStore('character', () => {
     updateField, updateFieldForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
     renownValue, adjustRenown, setRenown, deleteRenownEntry,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
-    spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative, setGmInitiative,
+    spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,
     cleanup,
   }
 })
