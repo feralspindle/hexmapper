@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 const SCHEMA: &str = r#"
 drop table if exists events;
+drop table if exists members_replay;
 drop table if exists session_members;
 drop table if exists sessions;
 
