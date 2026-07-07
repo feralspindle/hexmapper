@@ -65,16 +65,17 @@ export async function dismissWelcome(page) {
 }
 
 export async function closeMapSettings(page) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const panel = page.locator('.map-settings-panel')
-    if ((await panel.count()) === 0) return
-
-    const close = page.getByTestId('map-settings-close')
-    if (await close.isVisible().catch(() => false)) {
-      await close.click()
-      await page.waitForTimeout(100)
+  // The GM map-settings panel auto-opens when the first map finishes loading
+  // (HexMapView watches maps.length going 0 -> >0). A single close can land
+  // before that load and then get undone when the panel reopens, so re-close
+  // until it stays shut instead of clicking once and moving on.
+  const panel = page.locator('.map-settings-panel')
+  await expect(async () => {
+    if ((await panel.count()) > 0) {
+      await page.getByTestId('map-settings-close').click({ timeout: 1000 }).catch(() => {})
     }
-  }
+    await expect(panel).toHaveCount(0, { timeout: 1000 })
+  }).toPass({ timeout: 15_000 })
 }
 
 export async function closePartyPanel(page) {
@@ -141,6 +142,14 @@ export async function createCampaign(page, name, { playMode = 'gm' } = {}) {
 
 export async function chooseFogOfWar(page) {
   await expect(page.getByTestId('hex-grid')).toBeVisible()
+  // A fresh fow campaign auto-opens the GM map-settings panel once the first
+  // map loads. Wait for that open before preparing so the close below can't
+  // race the load - otherwise the panel reopens after we've moved on. If the
+  // map was already loaded (no auto-open), fall straight through.
+  await page
+    .locator('.map-settings-panel')
+    .waitFor({ state: 'visible', timeout: 15_000 })
+    .catch(() => {})
   await prepareHexInteractions(page)
 }
 
