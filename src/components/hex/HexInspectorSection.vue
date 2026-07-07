@@ -728,9 +728,13 @@
                 </template>
             </div>
 
-            <div style="padding-top: 4px; border-top: 1px solid var(--rule)">
+            <div
+                v-if="sessionStore.isGM"
+                style="padding-top: 4px; border-top: 1px solid var(--rule)"
+            >
                 <button
                     class="hm-ghost-btn hm-ghost-btn--danger"
+                    data-testid="clear-hex"
                     @click="clearHex"
                 >
                     Clear hex data
