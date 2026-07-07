@@ -216,6 +216,35 @@ describe('sessionStore', () => {
     errorSpy.mockRestore()
   })
 
+  test('advanceCrawlRound is optimistic and reverts on failure', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow({ crawl_round: 4 })
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+    expect(store.crawlRound).toBe(4)
+
+    kit.api['post /sessions/sess-1/crawl-round'] = { session: { crawl_round: 5 }, encounter: null }
+    await store.advanceCrawlRound()
+    expect(store.crawlRound).toBe(5)
+
+    kit.api['post /sessions/sess-1/crawl-round'] = new kit.ApiError('nope', 500)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await store.advanceCrawlRound()
+    expect(store.crawlRound).toBe(5)
+    errorSpy.mockRestore()
+  })
+
+  test('a session UPDATE carries the crawl round to every client', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow()
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+
+    const configChannel = kit.channels.find(c => c.name === 'session:sess-1:config')
+    configChannel.emitPostgres('sessions', 'UPDATE', { crawl_round: 7, crawl_check_every: 4 })
+
+    expect(store.crawlRound).toBe(7)
+    expect(store.crawlCheckEvery).toBe(4)
+  })
+
   describe('presence', () => {
     test('tracks presence once subscribed and lists online users', async () => {
       const store = useSessionStore()
