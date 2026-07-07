@@ -5,6 +5,8 @@ import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
+import { useOracleStore } from '@/stores/oracleStore.js'
+import { generateRoomPlan, weightedPick, STOCKING_FALLBACK } from '@/lib/dungeonGenerator.js'
 
 const CLIENT_ID = crypto.randomUUID()
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -400,7 +402,7 @@ export const useD = defineStore('dungeon', () => {
     _removeChannels()
 
     try {
-      const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }] = await Promise.all([
+      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }] = await Promise.all([
         supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
         supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
@@ -408,6 +410,8 @@ export const useD = defineStore('dungeon', () => {
 
       if (generation !== _initGeneration) return
       if (e1) throw new Error(e1.message)
+      if (e2) throw new Error(e2.message)
+      if (e3) throw new Error(e3.message)
 
       dungeon.value = dungeonData
       rooms.value = new Map((roomData ?? []).map(r => [r.id, r]))
@@ -573,24 +577,33 @@ export const useD = defineStore('dungeon', () => {
     )
   }
 
-  async function addRoom(roomData) {
+  // temp ids of creates still in flight - the generator must not anchor a
+  // plan on a room whose id is about to change
+  const _pendingCreates = new Set()
+
+  async function addRoom(roomData, { silent = false, rethrowConflict = false } = {}) {
     const tempId = crypto.randomUUID()
     const optimistic = { id: tempId, ...roomData, source_client: CLIENT_ID }
     rooms.value.set(tempId, optimistic)
+    _pendingCreates.add(tempId)
 
     let data
     try {
       data = await apiClient.post('/dungeon-rooms', { ...roomData, source_client: CLIENT_ID }, 'create_room')
     } catch (error) {
       rooms.value.delete(tempId)
+      _pendingCreates.delete(tempId)
+      if (rethrowConflict && error instanceof ApiError && error.status === 409) throw error
       console.error('addRoom error:', error instanceof ApiError ? error.message : error)
       return
     }
 
     rooms.value.delete(tempId)
+    _pendingCreates.delete(tempId)
     if (!rooms.value.has(data.id)) rooms.value.set(data.id, data)
-    useActivityStore().record('added room', data.name ?? 'Unnamed Room')
+    if (!silent) useActivityStore().record('added room', data.label ?? data.name ?? 'Unnamed Room')
     pushUndo({ type: 'delete_room', roomId: data.id })
+    return data
   }
 
   async function updateRoom(id, patch) {
@@ -681,12 +694,96 @@ export const useD = defineStore('dungeon', () => {
     }
   }
 
-  function addDoor(roomId, doorData) {
+  function addDoor(roomId, doorData, { silent = false } = {}) {
     const room = rooms.value.get(roomId)
     if (!room) return
     const doors = [...(room.doors ?? []), { id: crypto.randomUUID(), ...doorData }]
-    updateRoom(roomId, { doors })
-    useActivityStore().record('added door to', room.name ?? 'Unnamed Room')
+    const write = updateRoom(roomId, { doors })
+    if (!silent) useActivityStore().record('added door to', room.label ?? room.name ?? 'Unnamed Room')
+    return write
+  }
+
+  // generator mode (#50): one click rolls the next room - size, placement
+  // flush against an existing room, exits in the create payload, contents from
+  // the session table tagged dungeon.stocking (built-in fallback when there's
+  // no table). the server rejects overlapping generated rooms with a 409 under
+  // an advisory lock, so concurrent generators replan instead of stacking
+  // rooms - generation is canonical (#55). generated geometry stays ordinary
+  // room data, editable like anything hand-drawn.
+  const generating = ref(false)
+
+  async function generateRoom() {
+    if (generating.value) return null
+    if (!dungeon.value?.id) return null
+    generating.value = true
+    try {
+      const stocking = await _rollStocking()
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        // fresh snapshot each attempt, excluding creates still in flight so a
+        // plan never anchors on a temp id
+        const snapshot = [...rooms.value.values()].filter(r => !_pendingCreates.has(r.id))
+        const plan = generateRoomPlan(snapshot)
+
+        let created
+        try {
+          created = await addRoom({
+            dungeon_id: dungeon.value.id,
+            session_id: dungeon.value.session_id,
+            ...plan.room,
+            doors: plan.roomDoors.map(door => ({ id: crypto.randomUUID(), ...door })),
+            label: _nextRoomLabel(),
+            notes: stocking,
+            reject_overlapping: true,
+          }, { silent: true, rethrowConflict: true })
+        } catch {
+          // someone generated into the same spot first - replan on fresh state
+          continue
+        }
+        if (!created) return null
+
+        if (plan.sourceDoor && rooms.value.has(plan.sourceDoor.roomId)) {
+          await addDoor(plan.sourceDoor.roomId, plan.sourceDoor.door, { silent: true })
+        }
+        useActivityStore().record('explored into', `${created.label ?? 'a room'} - ${stocking}`)
+        return { room: created, stocking }
+      }
+      console.error('generateRoom: no free placement after 3 attempts')
+      return null
+    } finally {
+      generating.value = false
+    }
+  }
+
+  // highest existing "Room N" + 1, stable across deletions and gaps
+  function _nextRoomLabel() {
+    let highest = 0
+    for (const room of rooms.value.values()) {
+      const match = /^Room (\d+)$/.exec(room.label ?? '')
+      if (match) highest = Math.max(highest, Number(match[1]))
+    }
+    return `Room ${highest + 1}`
+  }
+
+  async function _rollStocking() {
+    const table = useOracleStore().tables.find(t => t.tag === 'dungeon.stocking')
+    if (table) {
+      // straight to the api - no shared rolling-flag coupling with the oracle
+      // panel, and the roll still lands in oracle history
+      try {
+        const roll = await apiClient.post('/oracle-rolls', {
+          session_id: dungeon.value?.session_id,
+          kind: 'table',
+          table_id: table.id,
+        }, 'dungeon_stocking_roll')
+        const text = roll?.result?.result
+        if (text) return text
+        console.error('_rollStocking: empty roll from tagged table, using fallback')
+      } catch (error) {
+        console.error('_rollStocking failed, using fallback:', error instanceof ApiError ? error.message : error)
+      }
+    }
+    return weightedPick(STOCKING_FALLBACK, Math.random).result
   }
 
   function moveDoor(fromRoomId, doorId, toRoomId, newDoorData) {
@@ -843,6 +940,8 @@ export const useD = defineStore('dungeon', () => {
     refresh,
     undo,
     addRoom,
+    generateRoom,
+    generating,
     updateRoom,
     deleteRoom,
     addCorridor,

@@ -154,12 +154,11 @@ const prefs          = useUserPrefsStore()
 const activityStore  = useActivityStore()
 const photoStore     = usePhotoStore()
 
+// the store hydrates in every play mode so tag-driven features (dungeon
+// stocking) see the session's tables - only the oracle panel ui is gm_less
+// gated
 function syncOracleStore() {
-  if (sessionStore.playMode === 'gm_less') {
-    oracleStore.init(sessionId)
-  } else {
-    oracleStore.cleanup()
-  }
+  oracleStore.init(sessionId)
 }
 
 const canvasComp  = ref(null)
