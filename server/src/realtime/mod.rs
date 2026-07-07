@@ -580,6 +580,7 @@ fn allowed_broadcast(event: &str) -> bool {
             | "corridor_upsert"
             | "corridor_delete"
             | "cursor"
+            | "dungeon_entered"
     )
 }
 
@@ -1144,6 +1145,12 @@ async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn broadcast_allowlist_covers_the_party_follow_event() {
+        assert!(allowed_broadcast("dungeon_entered"));
+        assert!(!allowed_broadcast("made_up_event"));
+    }
 
     #[test]
     fn player_hex_payload_never_contains_gm_fields() {
