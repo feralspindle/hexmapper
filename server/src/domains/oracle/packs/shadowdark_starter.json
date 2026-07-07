@@ -183,6 +183,7 @@
       "key": "dungeon-stocking",
       "name": "Dungeon Stocking",
       "description": "What's in the next room.",
+      "tag": "dungeon.stocking",
       "rows": [
         { "weight": 4, "result": "Empty", "chain": "dungeon-dressing" },
         { "weight": 3, "result": "Monster", "chain": "dungeon-monsters" },
@@ -213,6 +214,7 @@
     {
       "key": "dungeon-monsters",
       "name": "Dungeon Monsters",
+      "tag": "crawl.encounter",
       "rows": [
         { "weight": 3, "result": "{2d6} giant rats boiling out of the walls" },
         { "weight": 3, "result": "{1d6} skeletons in rusted mail", "chain": "reaction" },
