@@ -8,9 +8,9 @@
 
     <div v-show="activeTab === 0" class="ds-tab-pane">
       <DungeonDiceSection ref="diceSectionRef" />
+      <InitiativeSection />
       <CrawlTracker />
       <LightsSection />
-      <InitiativeSection />
       <DungeonSessionSection />
     </div>
 
@@ -31,9 +31,9 @@ import { useHexStore }  from '@/stores/hexStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import DungeonDiceSection    from '@/components/dungeon/DungeonDiceSection.vue'
+import InitiativeSection     from '@/components/common/InitiativeSection.vue'
 import CrawlTracker          from '@/components/common/CrawlTracker.vue'
 import LightsSection         from '@/components/common/LightsSection.vue'
-import InitiativeSection     from '@/components/common/InitiativeSection.vue'
 import DungeonPhotosSection  from '@/components/dungeon/DungeonPhotosSection.vue'
 import DungeonSessionSection from '@/components/dungeon/DungeonSessionSection.vue'
 import HexInspectorSection   from './HexInspectorSection.vue'

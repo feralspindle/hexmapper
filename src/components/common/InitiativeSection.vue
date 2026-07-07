@@ -20,9 +20,15 @@
         data-testid="initiative-entry"
       >
         <span class="init-score" data-testid="initiative-score">{{ entry.initiative }}</span>
-        <span class="init-name">
+        <span class="init-name" :class="{ 'init-name--dead': entry.death?.dead }">
           <i :class="entry.kind === 'pc' ? 'fa-solid fa-user' : 'fa-solid fa-skull'" />
           {{ entry.name }}
+        </span>
+        <span v-if="entry.death?.dead" class="init-death init-death--dead" data-testid="initiative-dead" title="Out of time">
+          <i class="fa-solid fa-skull" /> dead
+        </span>
+        <span v-else-if="entry.death" class="init-death" data-testid="initiative-dying" :title="`Dies in ${entry.death.left} rounds unless stabilized`">
+          <i class="fa-solid fa-heart-crack" /> {{ entry.death.left }}
         </span>
         <input
           :value="entry.initiative"
@@ -31,6 +37,26 @@
           title="Set initiative"
           @change="sessionStore.initiativeOp('set', { entry_id: entry.id, initiative: Number($event.target.value) || 0 })"
         />
+        <button
+          v-if="entry.kind === 'pc' && !entry.death"
+          type="button"
+          class="hm-card-icon-btn"
+          title="PC dropped - roll d4 + CON mod death rounds"
+          data-testid="initiative-drop"
+          @click="dropEntry(entry)"
+        >
+          <i class="fa-solid fa-heart-crack" />
+        </button>
+        <button
+          v-else-if="entry.death"
+          type="button"
+          class="hm-card-icon-btn"
+          title="Stabilized"
+          data-testid="initiative-stabilize"
+          @click="sessionStore.initiativeOp('death_clear', { entry_id: entry.id })"
+        >
+          <i class="fa-solid fa-heart-pulse" />
+        </button>
         <button
           type="button"
           class="hm-card-icon-btn hm-card-icon-btn--danger"
@@ -118,6 +144,17 @@ async function addParty() {
   }
 }
 
+// shadowdark: a dropped pc dies in d4 + con mod rounds, minimum 1. the roll
+// happens here because the sheet is client-side; the server clamps 1-20.
+function dropEntry(entry) {
+  const character = characterStore.characters.find(c => c.id === entry.character_id)
+  const con = character?.data?.stats?.CON ?? 10
+  const conMod = Math.floor((con - 10) / 2)
+  const d4 = 1 + Math.floor(Math.random() * 4)
+  const rounds = Math.max(1, d4 + conMod)
+  sessionStore.initiativeOp('death_start', { entry_id: entry.id, rounds })
+}
+
 // "3 goblins" -> add_group of 3, "ogre" -> one entry
 async function addMonsters() {
   const raw = monsterInput.value.trim()
@@ -175,6 +212,22 @@ async function addMonsters() {
   margin-right: 4px;
   color: var(--ink-mute);
   font-size: 11px;
+}
+
+.init-death {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--accent-2);
+}
+
+.init-death--dead {
+  color: var(--ink-mute);
+}
+
+.init-name--dead {
+  text-decoration: line-through;
+  color: var(--ink-mute);
 }
 
 .init-edit {

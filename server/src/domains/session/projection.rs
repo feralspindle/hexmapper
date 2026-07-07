@@ -182,32 +182,6 @@ pub async fn torch_reset(
     Ok(())
 }
 
-/// bump the crawling round and hand back the fresh session row so the handler
-/// can run the encounter check against the new count
-pub async fn crawl_advance(
-    tx: &mut Transaction<'_, Postgres>,
-    id: Uuid,
-    metadata: &Value,
-) -> Result<Option<Value>, AppError> {
-    run_event(
-        tx,
-        "update sessions set crawl_round = crawl_round + 1, updated_at = now() where id = $1 returning *",
-        "session.updated", id, metadata,
-    ).await
-}
-
-pub async fn crawl_reset(
-    tx: &mut Transaction<'_, Postgres>,
-    id: Uuid,
-    metadata: &Value,
-) -> Result<Option<Value>, AppError> {
-    run_event(
-        tx,
-        "update sessions set crawl_round = 0, updated_at = now() where id = $1 returning *",
-        "session.updated", id, metadata,
-    ).await
-}
-
 /// reads the initiative blob with a row lock so concurrent ops can't clobber
 /// each other - the caller mutates and writes back in the same tx
 pub async fn initiative_state_for_update(
@@ -248,6 +222,32 @@ pub async fn set_initiative_state(
     .fetch_optional(&mut **tx)
     .await?;
     Ok(row)
+}
+
+/// bump the crawling round and hand back the fresh session row so the handler
+/// can run the encounter check against the new count
+pub async fn crawl_advance(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<Option<Value>, AppError> {
+    run_event(
+        tx,
+        "update sessions set crawl_round = crawl_round + 1, updated_at = now() where id = $1 returning *",
+        "session.updated", id, metadata,
+    ).await
+}
+
+pub async fn crawl_reset(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<Option<Value>, AppError> {
+    run_event(
+        tx,
+        "update sessions set crawl_round = 0, updated_at = now() where id = $1 returning *",
+        "session.updated", id, metadata,
+    ).await
 }
 
 pub async fn delete(
