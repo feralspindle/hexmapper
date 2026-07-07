@@ -19,7 +19,11 @@ use jsonwebtoken::jwk::JwkSet;
 use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use tokio::sync::Mutex;
 use uuid::Uuid;
+
+// the tests rebuild the same schema, serialize them so setup can't race itself
+static DB_LOCK: Mutex<()> = Mutex::const_new(());
 
 const SCHEMA: &str = r#"
 create schema if not exists auth;
@@ -157,6 +161,7 @@ async fn seed_row(pool: &PgPool, table_id: Uuid, result: &str, subtable_id: Opti
 
 #[tokio::test]
 async fn chained_roll_records_the_whole_chain() {
+    let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping oracle_chain test: DATABASE_URL not set");
         return;
@@ -221,6 +226,7 @@ async fn chained_roll_records_the_whole_chain() {
 
 #[tokio::test]
 async fn cyclic_chain_truncates_instead_of_hanging() {
+    let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping oracle_chain test: DATABASE_URL not set");
         return;
@@ -267,6 +273,7 @@ async fn cyclic_chain_truncates_instead_of_hanging() {
 
 #[tokio::test]
 async fn cross_session_chain_is_rejected_at_write() {
+    let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping oracle_chain test: DATABASE_URL not set");
         return;
