@@ -10,6 +10,7 @@
       <DungeonDiceSection ref="diceSectionRef" />
       <CrawlTracker />
       <LightsSection />
+      <InitiativeSection />
       <DungeonSessionSection />
     </div>
 
@@ -32,6 +33,7 @@ import DungeonPhotosSection  from './DungeonPhotosSection.vue'
 import DungeonSessionSection from './DungeonSessionSection.vue'
 import CrawlTracker          from '@/components/common/CrawlTracker.vue'
 import LightsSection         from '@/components/common/LightsSection.vue'
+import InitiativeSection     from '@/components/common/InitiativeSection.vue'
 import OraclePanel           from '@/components/common/OraclePanel.vue'
 import { useD }              from '@/stores/dungeonStore.js'
 import { useDiceStore }      from '@/stores/diceStore.js'

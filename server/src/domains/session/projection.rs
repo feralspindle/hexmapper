@@ -28,12 +28,13 @@ fn snapshot_columns(s: &str) -> String {
         ({s}->>'gm_initiative')::integer,
         coalesce({s}->>'play_mode', 'gm'),
         coalesce(({s}->>'crawl_round')::integer, 0),
-        coalesce(({s}->>'crawl_check_every')::integer, 3)
+        coalesce(({s}->>'crawl_check_every')::integer, 3),
+        coalesce({s}->'initiative_state', '{{"entries": [], "active_id": null, "round": 1}}'::jsonb)
         "#
     )
 }
 
-const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative, play_mode, crawl_round, crawl_check_every";
+const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative, play_mode, crawl_round, crawl_check_every, initiative_state";
 
 /// Wraps a `sessions` mutation that exposes `s` (the updated/inserted row) in a
 /// `session.<event>` snapshot event. Returns the row JSON (or None if 0 rows).
@@ -205,6 +206,48 @@ pub async fn crawl_reset(
         "update sessions set crawl_round = 0, updated_at = now() where id = $1 returning *",
         "session.updated", id, metadata,
     ).await
+}
+
+/// reads the initiative blob with a row lock so concurrent ops can't clobber
+/// each other - the caller mutates and writes back in the same tx
+pub async fn initiative_state_for_update(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<Option<Value>, AppError> {
+    sqlx::query_scalar("select initiative_state from sessions where id = $1 for update")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn set_initiative_state(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    state: &Value,
+    metadata: &Value,
+) -> Result<Option<Value>, AppError> {
+    let row: Option<Value> = sqlx::query_scalar(
+        r#"
+        with s as (
+            update sessions set initiative_state = $3, updated_at = now() where id = $1 returning *
+        ),
+        evt as (
+            insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
+            select 'session', s.id, s.id,
+                coalesce((select max(sequence) from events e where e.aggregate_type = 'session' and e.aggregate_id = s.id), 0) + 1,
+                'session.updated', to_jsonb(s), $2
+            from s
+        )
+        select to_jsonb(s) from s
+        "#,
+    )
+    .bind(id)
+    .bind(metadata)
+    .bind(state)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row)
 }
 
 pub async fn delete(

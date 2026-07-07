@@ -1,12 +1,10 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
-use serde::Deserialize;
-use serde_json::Value;
-use uuid::Uuid;
-
 use rand::Rng;
-use serde_json::json;
+use serde::Deserialize;
+use serde_json::{json, Value};
+use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::authz;
@@ -397,4 +395,291 @@ async fn crawl_encounter(
     oracle::projection::append_roll(&mut *tx, &event).await?;
 
     Ok(json!({ "result": result, "notes": notes, "table_name": table_name }))
+}
+
+// --- initiative ------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct InitiativeRequest {
+    pub op: String,
+    pub name: Option<String>,
+    pub kind: Option<String>,
+    pub character_id: Option<Uuid>,
+    pub entry_id: Option<Uuid>,
+    pub initiative: Option<i32>,
+    pub count: Option<i32>,
+}
+
+const MAX_INITIATIVE_ENTRIES: usize = 60;
+
+/// shared initiative tracker (#52). the whole order lives in one jsonb blob on
+/// sessions ({entries, active_id, round}); every op reads it with a row lock,
+/// mutates in rust, and writes back in the same tx, so two players adding
+/// monsters at once can't clobber each other. member-gated - combat is shared.
+pub async fn initiative(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<InitiativeRequest>,
+) -> Result<Json<Value>, AppError> {
+    if !authz::is_session_member(state.pool(), auth.user_id, id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let metadata = auth.metadata();
+
+    // d20s pre-rolled outside the tx so a serialization retry can't reroll
+    let rolled: Vec<i32> = {
+        let mut rng = rand::thread_rng();
+        (0..req.count.unwrap_or(1).clamp(1, 20))
+            .map(|_| rng.gen_range(1..=20))
+            .collect()
+    };
+
+    let row = retry_tx!(state.pool(), |tx| {
+        let current = projection::initiative_state_for_update(&mut tx, id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        let next = apply_initiative_op(current, &req, &rolled)?;
+        projection::set_initiative_state(&mut tx, id, &next, &metadata).await
+    })?;
+
+    let row = row.ok_or(AppError::NotFound)?;
+    Ok(Json(row.get("initiative_state").cloned().unwrap_or(Value::Null)))
+}
+
+/// pure blob transition so the op logic is unit-testable without a db
+fn apply_initiative_op(
+    state: Value,
+    req: &InitiativeRequest,
+    rolled: &[i32],
+) -> Result<Value, AppError> {
+    let mut entries: Vec<Value> = state
+        .get("entries")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut active_id = state.get("active_id").cloned().unwrap_or(Value::Null);
+    let mut round = state.get("round").and_then(Value::as_i64).unwrap_or(1);
+
+    match req.op.as_str() {
+        "add" => {
+            if entries.len() >= MAX_INITIATIVE_ENTRIES {
+                return Err(AppError::BadRequest("initiative order is full".to_string()));
+            }
+            let name = clean_entry_name(req.name.as_deref())?;
+            let kind = match req.kind.as_deref().unwrap_or("monster") {
+                k @ ("pc" | "monster") => k,
+                _ => return Err(AppError::BadRequest("invalid entry kind".to_string())),
+            };
+            entries.push(json!({
+                "id": Uuid::new_v4(),
+                "kind": kind,
+                "name": name,
+                "character_id": req.character_id,
+                "initiative": req.initiative.unwrap_or(rolled[0]).clamp(-20, 50),
+            }));
+        }
+        "add_group" => {
+            let name = clean_entry_name(req.name.as_deref())?;
+            let count = req.count.unwrap_or(1).clamp(1, 20) as usize;
+            if entries.len() + count > MAX_INITIATIVE_ENTRIES {
+                return Err(AppError::BadRequest("initiative order is full".to_string()));
+            }
+            for (i, roll) in rolled.iter().enumerate().take(count) {
+                entries.push(json!({
+                    "id": Uuid::new_v4(),
+                    "kind": "monster",
+                    "name": format!("{name} {}", i + 1),
+                    "character_id": Value::Null,
+                    "initiative": roll,
+                }));
+            }
+        }
+        "remove" => {
+            let entry_id = req
+                .entry_id
+                .ok_or_else(|| AppError::BadRequest("entry_id is required".to_string()))?;
+            let target = json!(entry_id);
+            if active_id == target {
+                active_id = Value::Null;
+            }
+            entries.retain(|e| e.get("id") != Some(&target));
+        }
+        "set" => {
+            let entry_id = req
+                .entry_id
+                .ok_or_else(|| AppError::BadRequest("entry_id is required".to_string()))?;
+            let initiative = req
+                .initiative
+                .ok_or_else(|| AppError::BadRequest("initiative is required".to_string()))?
+                .clamp(-20, 50);
+            let target = json!(entry_id);
+            for entry in entries.iter_mut() {
+                if entry.get("id") == Some(&target) {
+                    entry["initiative"] = json!(initiative);
+                }
+            }
+        }
+        "advance" => {
+            if entries.is_empty() {
+                return Err(AppError::BadRequest("initiative order is empty".to_string()));
+            }
+            let order = sorted_ids(&entries);
+            let next_idx = match order.iter().position(|eid| json!(eid) == active_id) {
+                Some(idx) if idx + 1 < order.len() => idx + 1,
+                Some(_) => {
+                    round += 1;
+                    0
+                }
+                // nothing active yet: start of combat, top of the order
+                None => 0,
+            };
+            active_id = json!(order[next_idx]);
+        }
+        "reset" => {
+            round = 1;
+            active_id = Value::Null;
+        }
+        "clear" => {
+            entries.clear();
+            round = 1;
+            active_id = Value::Null;
+        }
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "unknown initiative op: {other}"
+            )))
+        }
+    }
+
+    Ok(json!({ "entries": entries, "active_id": active_id, "round": round }))
+}
+
+/// initiative desc, name asc for ties - the display order and the turn order
+fn sorted_ids(entries: &[Value]) -> Vec<String> {
+    let mut sortable: Vec<(i64, String, String)> = entries
+        .iter()
+        .map(|e| {
+            (
+                e.get("initiative").and_then(Value::as_i64).unwrap_or(0),
+                e.get("name").and_then(Value::as_str).unwrap_or("").to_string(),
+                e.get("id").and_then(Value::as_str).unwrap_or("").to_string(),
+            )
+        })
+        .collect();
+    sortable.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    sortable.into_iter().map(|(_, _, id)| id).collect()
+}
+
+fn clean_entry_name(name: Option<&str>) -> Result<String, AppError> {
+    let name = name.unwrap_or("").trim();
+    if name.is_empty() || name.chars().count() > 60 {
+        return Err(AppError::BadRequest(
+            "entry name must be 1-60 characters".to_string(),
+        ));
+    }
+    Ok(name.to_string())
+}
+
+#[cfg(test)]
+mod initiative_tests {
+    use super::*;
+
+    fn req(op: &str) -> InitiativeRequest {
+        InitiativeRequest {
+            op: op.into(),
+            name: None,
+            kind: None,
+            character_id: None,
+            entry_id: None,
+            initiative: None,
+            count: None,
+        }
+    }
+
+    fn empty_state() -> Value {
+        json!({ "entries": [], "active_id": null, "round": 1 })
+    }
+
+    #[test]
+    fn advance_walks_the_order_and_wraps_into_a_new_round() {
+        let mut state = empty_state();
+        for (name, init) in [("Ranna", 18), ("Goblin 1", 12), ("Brey", 5)] {
+            let mut r = req("add");
+            r.name = Some(name.into());
+            r.initiative = Some(init);
+            state = apply_initiative_op(state, &r, &[10]).unwrap();
+        }
+
+        state = apply_initiative_op(state, &req("advance"), &[]).unwrap();
+        let order = sorted_ids(state["entries"].as_array().unwrap());
+        assert_eq!(state["active_id"], json!(order[0]));
+        assert_eq!(state["round"], 1);
+
+        state = apply_initiative_op(state, &req("advance"), &[]).unwrap();
+        state = apply_initiative_op(state, &req("advance"), &[]).unwrap();
+        assert_eq!(state["active_id"], json!(order[2]));
+
+        // wrap
+        state = apply_initiative_op(state, &req("advance"), &[]).unwrap();
+        assert_eq!(state["active_id"], json!(order[0]));
+        assert_eq!(state["round"], 2);
+    }
+
+    #[test]
+    fn add_group_numbers_the_monsters_and_uses_prerolled_dice() {
+        let mut r = req("add_group");
+        r.name = Some("Goblin".into());
+        r.count = Some(3);
+        let state = apply_initiative_op(empty_state(), &r, &[12, 7, 19]).unwrap();
+
+        let entries = state["entries"].as_array().unwrap();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0]["name"], "Goblin 1");
+        assert_eq!(entries[2]["name"], "Goblin 3");
+        assert_eq!(entries[1]["initiative"], 7);
+    }
+
+    #[test]
+    fn removing_the_active_entry_clears_the_pointer() {
+        let mut r = req("add");
+        r.name = Some("Ogre".into());
+        r.initiative = Some(9);
+        let mut state = apply_initiative_op(empty_state(), &r, &[10]).unwrap();
+        state = apply_initiative_op(state, &req("advance"), &[]).unwrap();
+        let entry_id = state["entries"][0]["id"].as_str().unwrap().to_string();
+
+        let mut rm = req("remove");
+        rm.entry_id = Some(entry_id.parse().unwrap());
+        state = apply_initiative_op(state, &rm, &[]).unwrap();
+
+        assert!(state["entries"].as_array().unwrap().is_empty());
+        assert_eq!(state["active_id"], Value::Null);
+    }
+
+    #[test]
+    fn ties_break_by_name_so_the_order_is_stable() {
+        let mut state = empty_state();
+        for name in ["Brey", "Adder", "Cole"] {
+            let mut r = req("add");
+            r.name = Some(name.into());
+            r.initiative = Some(10);
+            state = apply_initiative_op(state, &r, &[10]).unwrap();
+        }
+        let order = sorted_ids(state["entries"].as_array().unwrap());
+        let names: Vec<&str> = order
+            .iter()
+            .map(|oid| {
+                state["entries"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|e| e["id"].as_str() == Some(oid))
+                    .unwrap()["name"]
+                    .as_str()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(names, vec!["Adder", "Brey", "Cole"]);
+    }
 }

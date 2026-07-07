@@ -20,6 +20,7 @@ export const useSessionStore = defineStore('session', () => {
   const torchStartedAt = ref(null)
   const crawlRound     = ref(0)
   const crawlCheckEvery = ref(3)
+  const initiativeState = ref({ entries: [], active_id: null, round: 1 })
   const loading        = ref(false)
   const error          = ref(null)
 
@@ -53,6 +54,7 @@ export const useSessionStore = defineStore('session', () => {
     torchStartedAt.value = data.torch_started_at ?? null
     crawlRound.value     = data.crawl_round ?? 0
     crawlCheckEvery.value = data.crawl_check_every ?? 3
+    initiativeState.value = data.initiative_state ?? { entries: [], active_id: null, round: 1 }
   }
 
   function _subscribeToSession(id) {
@@ -79,6 +81,7 @@ export const useSessionStore = defineStore('session', () => {
           if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
           if (row.crawl_round !== undefined)      crawlRound.value     = row.crawl_round ?? 0
           if (row.crawl_check_every !== undefined) crawlCheckEvery.value = row.crawl_check_every ?? 3
+          if (row.initiative_state !== undefined) initiativeState.value = row.initiative_state ?? { entries: [], active_id: null, round: 1 }
         },
       )
       .subscribe()
@@ -305,6 +308,19 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // one call per tracker op, the server mutates the blob under a row lock and
+  // the fresh state comes back (and to everyone else via the session UPDATE)
+  async function initiativeOp(op, payload = {}) {
+    try {
+      const next = await apiClient.post(`/sessions/${sessionId.value}/initiative`, { op, ...payload }, `initiative_${op}`)
+      if (next) initiativeState.value = next
+      return next
+    } catch (err) {
+      console.error('initiativeOp:', err instanceof ApiError ? err.message : err)
+      return null
+    }
+  }
+
   async function resetCrawlRound() {
     const previous = crawlRound.value
     crawlRound.value = 0
@@ -370,6 +386,7 @@ export const useSessionStore = defineStore('session', () => {
     torchStartedAt.value = null
     crawlRound.value     = 0
     crawlCheckEvery.value = 3
+    initiativeState.value = { entries: [], active_id: null, round: 1 }
   }
 
   return {
@@ -388,6 +405,8 @@ export const useSessionStore = defineStore('session', () => {
     advanceCrawlRound,
     resetCrawlRound,
     setCrawlCheckEvery,
+    initiativeState,
+    initiativeOp,
     isGM,
     loading,
     error,

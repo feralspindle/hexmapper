@@ -10,6 +10,7 @@
       <DungeonDiceSection ref="diceSectionRef" />
       <CrawlTracker />
       <LightsSection />
+      <InitiativeSection />
       <DungeonSessionSection />
     </div>
 
@@ -32,6 +33,7 @@ import { useSessionStore } from '@/stores/sessionStore.js'
 import DungeonDiceSection    from '@/components/dungeon/DungeonDiceSection.vue'
 import CrawlTracker          from '@/components/common/CrawlTracker.vue'
 import LightsSection         from '@/components/common/LightsSection.vue'
+import InitiativeSection     from '@/components/common/InitiativeSection.vue'
 import DungeonPhotosSection  from '@/components/dungeon/DungeonPhotosSection.vue'
 import DungeonSessionSection from '@/components/dungeon/DungeonSessionSection.vue'
 import HexInspectorSection   from './HexInspectorSection.vue'
