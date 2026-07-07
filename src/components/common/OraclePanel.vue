@@ -131,8 +131,25 @@
                 class="ds-input"
                 maxlength="500"
                 data-testid="oracle-row-result"
+                title="Wrap dice in braces to roll them inline: {2d6} goblins"
                 @change="oracleStore.updateRow(row.id, { result: $event.target.value })"
               />
+              <select
+                :value="row.subtable_id ?? ''"
+                class="ds-input oracle-row-chain"
+                data-testid="oracle-row-chain"
+                title="Roll through another table when this row comes up"
+                @change="oracleStore.updateRow(row.id, { subtable_id: $event.target.value || null })"
+              >
+                <option value="">no chain</option>
+                <option
+                  v-for="target in chainTargets(table.id)"
+                  :key="target.id"
+                  :value="target.id"
+                >
+                  → {{ target.name }}
+                </option>
+              </select>
               <button type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Delete row" @click="oracleStore.deleteRow(row.id)">
                 <i class="fa-solid fa-xmark" />
               </button>
@@ -162,6 +179,12 @@
           </div>
           <p v-if="roll.question" class="oracle-roll-question">{{ roll.question }}</p>
           <p class="oracle-roll-result">{{ resultText(roll) }}</p>
+          <div v-if="roll.result?.chain" class="oracle-roll-chain" data-testid="oracle-roll-chain">
+            <p v-for="step in roll.result.chain.slice(1)" :key="step.row_id" class="oracle-chain-step">
+              <span class="oracle-chain-table">{{ step.table_name }}:</span> {{ step.result }}
+            </p>
+            <p v-if="roll.result.chain_truncated" class="oracle-chain-step oracle-chain-truncated">chain stopped (loop or too deep)</p>
+          </div>
           <p v-if="roll.result?.twist" class="oracle-roll-twist">{{ roll.result.twist }}</p>
           <dl v-if="roll.kind === 'event_prompt'" class="oracle-prompt">
             <div v-for="key in promptKeys" :key="key">
@@ -219,6 +242,10 @@ function addRow(table) {
     notes: '',
     position: count,
   })
+}
+
+function chainTargets(tableId) {
+  return oracleStore.tables.filter(t => t.id !== tableId)
 }
 
 function rollLabel(roll) {
@@ -393,6 +420,30 @@ function labelize(key) {
 
 .oracle-roll-notes {
   color: var(--ink-soft);
+}
+
+.oracle-roll-chain {
+  margin-top: 2px;
+}
+
+.oracle-chain-step {
+  margin: 2px 0 0;
+  padding-left: 10px;
+  overflow-wrap: anywhere;
+}
+
+.oracle-chain-table {
+  color: var(--ink-mute);
+}
+
+.oracle-chain-truncated {
+  color: var(--ink-mute);
+  font-style: italic;
+}
+
+.oracle-row-chain {
+  flex: 0 1 130px;
+  min-width: 90px;
 }
 
 .oracle-prompt {
