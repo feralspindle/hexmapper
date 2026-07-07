@@ -1,0 +1,358 @@
+{
+  "id": "shadowdark-starter",
+  "name": "Shadowdark Starter",
+  "description": "Original solo/co-op table set: terrain, points of interest, weather, per-terrain encounters, dungeon stocking and dressing, NPCs, rumors, treasure, reaction and morale. Tables chain into each other and tagged tables drive hex exploration.",
+  "tables": [
+    {
+      "key": "terrain",
+      "name": "Terrain",
+      "description": "Rolled when exploration generates a hex with no terrain. Results must be terrain ids.",
+      "tag": "hex.terrain",
+      "rows": [
+        { "weight": 4, "result": "plains" },
+        { "weight": 4, "result": "forest" },
+        { "weight": 3, "result": "mountain" },
+        { "weight": 2, "result": "water" },
+        { "weight": 2, "result": "swamp" },
+        { "weight": 2, "result": "desert" },
+        { "weight": 1, "result": "snow" },
+        { "weight": 1, "result": "volcanic" }
+      ]
+    },
+    {
+      "key": "poi",
+      "name": "Points of Interest",
+      "description": "What stands out in a freshly explored hex.",
+      "tag": "hex.poi",
+      "rows": [
+        { "result": "Toppled watchtower, its beacon brazier long cold" },
+        { "result": "Ring of standing stones humming faintly at dusk" },
+        { "result": "Abandoned wagon, cargo picked over, tracks leading away" },
+        { "result": "Shrine to a forgotten god, offerings still fresh", "chain": "rumor" },
+        { "result": "Sinkhole opening into darkness below", "notes": "possible dungeon entrance" },
+        { "result": "Hermit's hut on stilts", "chain": "npc-name" },
+        { "result": "Old battlefield, rusted weapons in the grass", "chain": "treasure" },
+        { "result": "Crumbling bridge over a gorge" },
+        { "result": "Grove of trees grown in an unnaturally perfect spiral" },
+        { "result": "Burned homestead, chimney still standing" },
+        { "result": "Waymarker cairn with a warning scratched in three languages" },
+        { "result": "Hot spring, steam carrying a faint metallic smell" },
+        { "result": "Gibbet cage swinging empty at a crossroads" },
+        { "result": "Half-buried statue of a robed figure, face chiseled off" },
+        { "result": "Traveling peddler camped beside the trail", "chain": "npc-name" },
+        { "result": "Nothing of note, just distance and weather" }
+      ]
+    },
+    {
+      "key": "weather",
+      "name": "Weather",
+      "description": "Daily weather, 2d6. Extremes are rare.",
+      "mode": "range",
+      "tag": "weather",
+      "rows": [
+        { "range": [2, 2], "result": "Storm - travel is hard, checks to navigate", "notes": "half travel pace" },
+        { "range": [3, 4], "result": "Rain or driving snow in cold lands" },
+        { "range": [5, 6], "result": "Overcast, wind from the west" },
+        { "range": [7, 8], "result": "Clear and mild" },
+        { "range": [9, 10], "result": "Bright and hot, or crisp and cold" },
+        { "range": [11, 11], "result": "Fog until midday, then clearing" },
+        { "range": [12, 12], "result": "Strange sky - green light, twin halos, or a dark shape aloft", "chain": "rumor" }
+      ]
+    },
+    {
+      "key": "enc-plains",
+      "name": "Plains Encounters",
+      "tag": "hex.encounter.plains",
+      "rows": [
+        { "weight": 3, "result": "{2d6} goblins on wolfback ranging far from their warren", "chain": "reaction" },
+        { "weight": 2, "result": "Merchant caravan with {1d4} guards", "chain": "npc-name" },
+        { "weight": 2, "result": "{3d6} wild horses, one saddled and riderless" },
+        { "weight": 2, "result": "{1d6} bandits watching the road from a low hill", "chain": "reaction" },
+        { "weight": 2, "result": "Grass fire on the horizon, moving with the wind" },
+        { "weight": 1, "result": "{1d4} ogres arguing over a dead ox", "chain": "reaction" },
+        { "weight": 1, "result": "Pilgrims walking to a shrine", "chain": "npc-name" },
+        { "weight": 1, "result": "A griffon circling high, hunting" }
+      ]
+    },
+    {
+      "key": "enc-forest",
+      "name": "Forest Encounters",
+      "tag": "hex.encounter.forest",
+      "rows": [
+        { "weight": 3, "result": "{2d4} giant spiders dropping silently from the canopy", "chain": "reaction" },
+        { "weight": 2, "result": "{1d6} outlaws at a hidden camp", "chain": "reaction" },
+        { "weight": 2, "result": "Woodcutter who knows these paths", "chain": "npc-name" },
+        { "weight": 2, "result": "{2d6} wolves shadowing the party at a distance", "chain": "reaction" },
+        { "weight": 2, "result": "Deadfall trap across the trail", "notes": "old but still armed" },
+        { "weight": 1, "result": "A stag with antlers of pale silver, watching", "chain": "rumor" },
+        { "weight": 1, "result": "{1d4} owlbears tearing open a hollow log", "chain": "reaction" },
+        { "weight": 1, "result": "Fey lights leading off the path" }
+      ]
+    },
+    {
+      "key": "enc-mountain",
+      "name": "Mountain Encounters",
+      "tag": "hex.encounter.mountain",
+      "rows": [
+        { "weight": 3, "result": "Rockslide blocks the pass, {1d4} hours to clear" },
+        { "weight": 2, "result": "{2d6} kobolds mining a seam above the trail", "chain": "reaction" },
+        { "weight": 2, "result": "Mountain hermit tending goats", "chain": "npc-name" },
+        { "weight": 2, "result": "{1d6} harpies nesting on a ledge", "chain": "reaction" },
+        { "weight": 2, "result": "Narrow ledge crossing, sheer drop below" },
+        { "weight": 1, "result": "A wyvern sunning itself across the only path", "chain": "reaction" },
+        { "weight": 1, "result": "Cave mouth breathing warm air", "notes": "possible dungeon entrance" },
+        { "weight": 1, "result": "Prayer flags strung across the gorge, recently mended" }
+      ]
+    },
+    {
+      "key": "enc-water",
+      "name": "Water Encounters",
+      "tag": "hex.encounter.water",
+      "rows": [
+        { "weight": 3, "result": "Ferryman poling a flat barge", "chain": "npc-name" },
+        { "weight": 2, "result": "{2d4} merfolk surface to trade or warn", "chain": "reaction" },
+        { "weight": 2, "result": "Capsized boat, cargo bobbing", "chain": "treasure" },
+        { "weight": 2, "result": "Sudden squall whips the water white" },
+        { "weight": 2, "result": "{1d6} giant crabs on the shore", "chain": "reaction" },
+        { "weight": 1, "result": "Something big passes under the hull without surfacing" },
+        { "weight": 1, "result": "Fisherfolk hauling in an impossible catch", "chain": "rumor" },
+        { "weight": 1, "result": "A drowned bell tower rising from the shallows", "notes": "possible dungeon entrance" }
+      ]
+    },
+    {
+      "key": "enc-desert",
+      "name": "Desert Encounters",
+      "tag": "hex.encounter.desert",
+      "rows": [
+        { "weight": 3, "result": "{2d6} nomads on camelback", "chain": "reaction" },
+        { "weight": 2, "result": "Sandstorm on the horizon, {1d4} hours to shelter" },
+        { "weight": 2, "result": "Dry well with rope marks worn in the stone" },
+        { "weight": 2, "result": "{1d6} giant scorpions under the hardpan", "chain": "reaction" },
+        { "weight": 2, "result": "Bleached bones of something the size of a house" },
+        { "weight": 1, "result": "Mirage of a city that stays put as you approach", "chain": "rumor" },
+        { "weight": 1, "result": "Lost courier half-mad from thirst", "chain": "npc-name" },
+        { "weight": 1, "result": "A sphinx dozing in the shade of a dune", "chain": "reaction" }
+      ]
+    },
+    {
+      "key": "enc-swamp",
+      "name": "Swamp Encounters",
+      "tag": "hex.encounter.swamp",
+      "rows": [
+        { "weight": 3, "result": "{2d4} giant leeches in the shallows" },
+        { "weight": 2, "result": "{1d6} lizardfolk hunters poling a skiff", "chain": "reaction" },
+        { "weight": 2, "result": "Bog witch's shack on legs of cypress root", "chain": "npc-name" },
+        { "weight": 2, "result": "False path - firm ground gives way to sucking mud" },
+        { "weight": 2, "result": "Corpse lights drifting between the trees" },
+        { "weight": 1, "result": "{1d4} trolls fishing with their bare hands", "chain": "reaction" },
+        { "weight": 1, "result": "Sunken shrine, roof just above the waterline", "notes": "possible dungeon entrance" },
+        { "weight": 1, "result": "A crocodile the length of a longboat, still as a log" }
+      ]
+    },
+    {
+      "key": "enc-snow",
+      "name": "Snow Encounters",
+      "tag": "hex.encounter.snow",
+      "rows": [
+        { "weight": 3, "result": "Whiteout - visibility drops to arm's length" },
+        { "weight": 2, "result": "{2d6} wolves, ribs showing, desperate", "chain": "reaction" },
+        { "weight": 2, "result": "Trapper hauling a sledge of furs", "chain": "npc-name" },
+        { "weight": 2, "result": "Frozen lake crossing, ice groaning underfoot" },
+        { "weight": 2, "result": "{1d4} yetis loping along the ridgeline", "chain": "reaction" },
+        { "weight": 1, "result": "Aurora that forms shapes almost like script", "chain": "rumor" },
+        { "weight": 1, "result": "Steaming crevasse exhaling sulfur", "notes": "possible dungeon entrance" },
+        { "weight": 1, "result": "A frozen traveler, arm outstretched, pointing", "chain": "treasure" }
+      ]
+    },
+    {
+      "key": "enc-volcanic",
+      "name": "Volcanic Encounters",
+      "tag": "hex.encounter.volcanic",
+      "rows": [
+        { "weight": 3, "result": "Ash fall thick as snow, breathing is hard" },
+        { "weight": 2, "result": "{1d6} fire beetles the size of dogs, glowing", "chain": "reaction" },
+        { "weight": 2, "result": "Lava tube entrance, walls glassy smooth", "notes": "possible dungeon entrance" },
+        { "weight": 2, "result": "Ground splits - vent of scalding steam" },
+        { "weight": 2, "result": "{2d4} salamander cultists in obsidian masks", "chain": "reaction" },
+        { "weight": 1, "result": "A basalt colossus, kneeling, head bowed, warm to the touch", "chain": "rumor" },
+        { "weight": 1, "result": "Prospector panning cooled flows for firegems", "chain": "npc-name" },
+        { "weight": 1, "result": "The mountain clears its throat. Everything goes quiet" }
+      ]
+    },
+    {
+      "key": "dungeon-stocking",
+      "name": "Dungeon Stocking",
+      "description": "What's in the next room.",
+      "rows": [
+        { "weight": 4, "result": "Empty", "chain": "dungeon-dressing" },
+        { "weight": 3, "result": "Monster", "chain": "dungeon-monsters" },
+        { "weight": 2, "result": "Trap", "notes": "roll or pick: pit, dart, gas, collapsing ceiling, glyph" },
+        { "weight": 2, "result": "Treasure, guarded or hidden", "chain": "treasure" },
+        { "weight": 1, "result": "Something special", "notes": "shaft to another level, talking statue, portal, prisoner" }
+      ]
+    },
+    {
+      "key": "dungeon-dressing",
+      "name": "Dungeon Dressing",
+      "description": "Texture for an otherwise empty room.",
+      "rows": [
+        { "result": "Scorch marks up one wall, soot shadow of a figure" },
+        { "result": "Shallow standing water, something glints in it" },
+        { "result": "Rows of empty iron sconces, all bent the same direction" },
+        { "result": "Bones swept into a neat pile" },
+        { "result": "Mural defaced with fresh paint" },
+        { "result": "Cold draft from a crack too narrow to follow" },
+        { "result": "Broken furniture stacked as a barricade, long abandoned" },
+        { "result": "Tally marks in the hundreds scratched at knee height" },
+        { "result": "Smell of incense with no source" },
+        { "result": "Dripping ceiling, drops land in perfect rhythm" },
+        { "result": "Door lintel carved with a warning", "chain": "rumor" },
+        { "result": "Rat king's nest of shredded vestments" }
+      ]
+    },
+    {
+      "key": "dungeon-monsters",
+      "name": "Dungeon Monsters",
+      "rows": [
+        { "weight": 3, "result": "{2d6} giant rats boiling out of the walls" },
+        { "weight": 3, "result": "{1d6} skeletons in rusted mail", "chain": "reaction" },
+        { "weight": 2, "result": "{2d4} goblins with a crude alarm system", "chain": "reaction" },
+        { "weight": 2, "result": "{1d4} zombies wedged behind a door" },
+        { "weight": 2, "result": "Gelatinous cube, doorway-clean and patient" },
+        { "weight": 1, "result": "{1d6} ghouls gnawing in the dark", "chain": "reaction" },
+        { "weight": 1, "result": "A rust monster snuffling after metal" },
+        { "weight": 1, "result": "Something worse than this level should hold", "notes": "use the nastiest thing you have stats for" }
+      ]
+    },
+    {
+      "key": "npc-name",
+      "name": "NPC Name",
+      "description": "Chains through motivation and quirk for a full sketch.",
+      "rows": [
+        { "result": "Marrow Kell", "chain": "npc-motivation" },
+        { "result": "Odessa Vane", "chain": "npc-motivation" },
+        { "result": "Brindle Tosk", "chain": "npc-motivation" },
+        { "result": "Ivo the Lesser", "chain": "npc-motivation" },
+        { "result": "Sable Runn", "chain": "npc-motivation" },
+        { "result": "Petch Halloway", "chain": "npc-motivation" },
+        { "result": "Grist Amberlane", "chain": "npc-motivation" },
+        { "result": "Neave Coldwater", "chain": "npc-motivation" },
+        { "result": "Dunstan Pyke", "chain": "npc-motivation" },
+        { "result": "Ryl of the Ford", "chain": "npc-motivation" },
+        { "result": "Hesper Grieve", "chain": "npc-motivation" },
+        { "result": "Cobb Fanshaw", "chain": "npc-motivation" }
+      ]
+    },
+    {
+      "key": "npc-motivation",
+      "name": "NPC Motivation",
+      "rows": [
+        { "result": "Owes a debt that cannot be paid in coin", "chain": "npc-quirk" },
+        { "result": "Searching for a sibling who joined a cult", "chain": "npc-quirk" },
+        { "result": "Fleeing a contract signed in bad faith", "chain": "npc-quirk" },
+        { "result": "Collecting proof that a local hero is a fraud", "chain": "npc-quirk" },
+        { "result": "Trying to buy back a family holding", "chain": "npc-quirk" },
+        { "result": "Sworn to deliver a message, contents unknown", "chain": "npc-quirk" },
+        { "result": "Wants revenge but keeps finding reasons to wait", "chain": "npc-quirk" },
+        { "result": "Smuggling something harmless as if it were deadly", "chain": "npc-quirk" },
+        { "result": "Believes they are under a curse. They might be", "chain": "npc-quirk" },
+        { "result": "Recruiting for an expedition nobody returns from", "chain": "npc-quirk" },
+        { "result": "Hiding from someone who thinks they're dead", "chain": "npc-quirk" },
+        { "result": "Just wants to see the ocean before winter", "chain": "npc-quirk" }
+      ]
+    },
+    {
+      "key": "npc-quirk",
+      "name": "NPC Quirk",
+      "rows": [
+        { "result": "Counts everything in threes under their breath" },
+        { "result": "Wears a fine glove on one hand only" },
+        { "result": "Never says a person's name twice in a day" },
+        { "result": "Keeps a pet that is clearly the smarter of the two" },
+        { "result": "Quotes a holy text that doesn't exist" },
+        { "result": "Laughs at danger, flinches at kindness" },
+        { "result": "Trades only in questions" },
+        { "result": "Writes everything down in a cipher" },
+        { "result": "Smells faintly of a place they deny visiting" },
+        { "result": "Always sits facing the door" },
+        { "result": "Collects teeth. Won't say whose" },
+        { "result": "Speaks to their weapon like an old colleague" }
+      ]
+    },
+    {
+      "key": "rumor",
+      "name": "Rumors & Hooks",
+      "rows": [
+        { "result": "The toll bridge keeper hasn't aged in sixty years" },
+        { "result": "A mine reopened last month. The ore sings" },
+        { "result": "Wolves in the north hills walk on two legs when it rains" },
+        { "result": "The baron's new advisor casts two shadows" },
+        { "result": "A caravan arrived with one more wagon than it left with" },
+        { "result": "Children in the ford village all drew the same door" },
+        { "result": "There's a bounty on a beast nobody can describe twice the same way" },
+        { "result": "The old temple bell rang once. It has no clapper" },
+        { "result": "A dying knight is paying for one last escort east" },
+        { "result": "Grain prices tripled because something is eating the fields at night" },
+        { "result": "A prisoner in the keep insists the year is wrong" },
+        { "result": "Fisherfolk pulled up a locked chest and refuse to open it", "chain": "treasure" }
+      ]
+    },
+    {
+      "key": "treasure",
+      "name": "Treasure",
+      "rows": [
+        { "weight": 4, "result": "{3d6} silver in a rotted pouch" },
+        { "weight": 3, "result": "{2d6} silver and a bundle of trade goods worth as much again" },
+        { "weight": 2, "result": "{1d6} gold sewn into a coat lining" },
+        { "weight": 2, "result": "Silver ring worth {2d6} gold, initials inside" },
+        { "weight": 2, "result": "Map fragment, half a route and an X", "chain": "rumor" },
+        { "weight": 1, "result": "Gemstone the size of a knuckle, worth {2d6} x 10 gold" },
+        { "weight": 1, "result": "A magic item", "chain": "magic-items" },
+        { "weight": 1, "result": "Deed to property in a town you haven't heard of" }
+      ]
+    },
+    {
+      "key": "magic-items",
+      "name": "Magic Items",
+      "rows": [
+        { "result": "Candle that burns underwater. The light is green" },
+        { "result": "Boots that leave someone else's footprints" },
+        { "result": "Dagger that whispers the name of the last thing it cut" },
+        { "result": "Cloak pin that warms when someone lies nearby" },
+        { "result": "One-use scroll: the next door you touch opens, no matter what" },
+        { "result": "Waterskin that refills at dawn with yesterday's weather" },
+        { "result": "Iron key that fits no lock but always turns" },
+        { "result": "Ring that lets you trade dreams with whoever wears its twin" },
+        { "result": "Lantern that shows things as they were a year ago" },
+        { "result": "Chalk that draws lines nothing mindless will cross" },
+        { "result": "Whistle only the dead can hear. Something always listens" },
+        { "result": "Coin that lands on its edge when the answer is 'neither'" }
+      ]
+    },
+    {
+      "key": "reaction",
+      "name": "Reaction",
+      "description": "2d6 when it isn't obvious how the other side feels.",
+      "mode": "range",
+      "rows": [
+        { "range": [2, 2], "result": "Hostile - attacks or moves to attack" },
+        { "range": [3, 5], "result": "Unfriendly - threats, demands, blocked path" },
+        { "range": [6, 8], "result": "Wary - keeps distance, can be talked to" },
+        { "range": [9, 11], "result": "Open - will trade, talk, or share the road" },
+        { "range": [12, 12], "result": "Helpful - offers aid, information, or shelter" }
+      ]
+    },
+    {
+      "key": "morale",
+      "name": "Morale",
+      "description": "2d6 when a side takes real losses. Low is broken.",
+      "mode": "range",
+      "rows": [
+        { "range": [2, 3], "result": "Breaks - flees or surrenders immediately" },
+        { "range": [4, 6], "result": "Falters - fighting retreat, looking for exits" },
+        { "range": [7, 9], "result": "Holds - keeps fighting while it makes sense" },
+        { "range": [10, 12], "result": "Unshaken - fights on, presses the advantage" }
+      ]
+    }
+  ]
+}

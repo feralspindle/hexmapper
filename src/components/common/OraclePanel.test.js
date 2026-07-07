@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
     rollYesNo: vi.fn(),
     rollEventPrompt: vi.fn(),
     rollTable: vi.fn(),
+    listPacks: vi.fn(() => Promise.resolve([])),
+    installPack: vi.fn(),
   },
 }))
 
@@ -136,5 +138,21 @@ describe('OraclePanel', () => {
 
     await select.setValue('')
     expect(mocks.oracleStore.updateRow).toHaveBeenCalledWith('row-1', { subtable_id: null })
+  })
+
+  test('content packs list and install', async () => {
+    mocks.oracleStore.listPacks.mockResolvedValue([
+      { id: 'shadowdark-starter', name: 'Shadowdark Starter', description: 'tables', tables: 21, rows: 200 },
+    ])
+    mocks.oracleStore.installPack.mockResolvedValue({ installed_tables: 21, installed_rows: 200 })
+    const wrapper = mount(OraclePanel)
+    await new Promise(resolve => setTimeout(resolve))
+
+    const pack = wrapper.get('[data-testid="oracle-pack"]')
+    expect(pack.text()).toContain('Shadowdark Starter')
+    expect(pack.text()).toContain('21 tables')
+
+    await wrapper.get('[data-testid="oracle-pack-install"]').trigger('click')
+    expect(mocks.oracleStore.installPack).toHaveBeenCalledWith('shadowdark-starter')
   })
 })
