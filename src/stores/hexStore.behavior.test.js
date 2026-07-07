@@ -144,6 +144,37 @@ describe('hexStore behavior', () => {
     expect(store.hexCells.get('0:0').terrain_type).toBe('desert')
   })
 
+  test('in fow mode with reveal-all on, an edit on an empty hex is stored as revealed', async () => {
+    kit.session.isGM = false
+    kit.mapStore.mapFogRevealAll = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'server-cell' })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.upsertHex(0, 0, { terrain_type: 'forest' })
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith(
+      '/hex-cells/upsert',
+      expect.objectContaining({ revealed: true }),
+      'edit_hex',
+    )
+    expect(store.hexCells.get('0:0').revealed).toBe(true)
+  })
+
+  test('under reveal-all an explicitly hidden cell keeps its override on edit', async () => {
+    kit.mapStore.mapFogRevealAll = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0, { revealed: false })]
+    kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'server-cell' })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.upsertHex(0, 0, { label: 'still hidden' })
+
+    const body = kit.apiClient.post.mock.calls.find(([path]) => path === '/hex-cells/upsert')[1]
+    expect('revealed' in body).toBe(false)
+  })
+
   test('in blank mode a plain edit is stored as revealed', async () => {
     kit.session.hexMode = 'blank'
     kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'server-cell' })
