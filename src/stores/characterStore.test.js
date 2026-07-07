@@ -392,6 +392,19 @@ describe('characterStore', () => {
     expect(store.luckEvents).toHaveLength(1)
   })
 
+  test('adjustLuck goes past max and stops at zero', async () => {
+    const store = await loadedStore([char('c1', { data: { luckTokens: { current: 3, max: 3 } } })])
+
+    store.adjustLuck(1)
+    expect(store.character.luckTokens.current).toBe(4)
+
+    store.adjustLuck(3)
+    expect(store.character.luckTokens.current).toBe(7)
+
+    store.adjustLuck(-10)
+    expect(store.character.luckTokens.current).toBe(0)
+  })
+
   test('a character_updated broadcast from another client updates that character', async () => {
     const store = await loadedStore([char('c1'), char('c2', { user_id: 'them' })])
 
