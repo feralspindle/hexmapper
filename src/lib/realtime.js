@@ -137,6 +137,8 @@ class RustRealtime {
     this.refreshTimer = null
     this.lastRefreshStartedAt = null
     this.pendingPublishes = []
+    this.serverClockOffsetMs = null
+    this.tokenRefreshInFlight = false
     this.watchdog = setInterval(() => {
       if (document.visibilityState === 'visible') this.resume()
     }, 15_000)
@@ -230,11 +232,17 @@ class RustRealtime {
     socket.addEventListener('error', () => socket.close())
   }
 
+  // Server-adjusted wall clock. Null offset (no heartbeat seen yet) falls
+  // back to the local clock.
+  serverNow() {
+    return Date.now() + (this.serverClockOffsetMs ?? 0)
+  }
+
   async _freshAccessToken() {
     try {
       const { data } = await supabase.auth.getSession()
       let session = data.session
-      if (session && accessTokenNeedsRefresh(session.expires_at, Date.now(), TOKEN_REFRESH_MARGIN_S)) {
+      if (session && accessTokenNeedsRefresh(session.expires_at, this.serverNow(), TOKEN_REFRESH_MARGIN_S)) {
         const { data: refreshed, error } = await supabase.auth.refreshSession()
         if (!error && refreshed.session) session = refreshed.session
       }
@@ -245,9 +253,37 @@ class RustRealtime {
     }
   }
 
+  // Checked on every heartbeat: supabase-js schedules its own refresh off the
+  // local clock, so on a slow machine it fires too late and the server kills
+  // the connection first. A successful refresh triggers onAuthStateChange,
+  // which sends the reauthenticate frame.
+  async _refreshTokenIfStale() {
+    if (this.tokenRefreshInFlight) return
+    this.tokenRefreshInFlight = true
+    try {
+      const { data } = await supabase.auth.getSession()
+      const session = data.session
+      if (session && accessTokenNeedsRefresh(session.expires_at, this.serverNow(), TOKEN_REFRESH_MARGIN_S)) {
+        await supabase.auth.refreshSession()
+      }
+    } catch (error) {
+      console.warn('[realtime] token freshness check failed', error)
+    } finally {
+      this.tokenRefreshInFlight = false
+    }
+  }
+
   handle(message) {
     this.lastMessageAt = Date.now()
-    if (message.type === 'heartbeat') return
+    if (message.type === 'heartbeat') {
+      // token refresh decisions run on server time so a skewed local clock
+      // can't delay them past the token's real expiry (issue #112)
+      if (typeof message.server_time_ms === 'number') {
+        this.serverClockOffsetMs = message.server_time_ms - Date.now()
+      }
+      void this._refreshTokenIfStale()
+      return
+    }
     if (message.type === 'pong') {
       if (this.pendingProbe?.nonce === message.nonce) this.clearProbe()
       return
