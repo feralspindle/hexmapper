@@ -102,7 +102,7 @@ pub async fn append_row_created(
         r#"
         {APPEND_EVENT_CTE}
         insert into oracle_table_rows
-            (id, table_id, weight, range_min, range_max, result, notes, position, created_at, updated_at)
+            (id, table_id, weight, range_min, range_max, result, notes, position, subtable_id, created_at, updated_at)
         select aggregate_id,
                (payload->>'table_id')::uuid,
                coalesce((payload->>'weight')::integer, 1),
@@ -111,10 +111,11 @@ pub async fn append_row_created(
                payload->>'result',
                coalesce(payload->>'notes', ''),
                coalesce((payload->>'position')::integer, 0),
+               nullif(payload->>'subtable_id', '')::uuid,
                created_at,
                created_at
         from evt
-        returning id, table_id, weight, range_min, range_max, result, notes, position, created_at, updated_at
+        returning id, table_id, weight, range_min, range_max, result, notes, position, subtable_id, created_at, updated_at
         "#
     );
 
@@ -144,10 +145,11 @@ pub async fn append_row_updated(
             result = case when evt.payload ? 'result' then evt.payload->>'result' else row.result end,
             notes = case when evt.payload ? 'notes' then coalesce(evt.payload->>'notes', '') else row.notes end,
             position = case when evt.payload ? 'position' then (evt.payload->>'position')::integer else row.position end,
+            subtable_id = case when evt.payload ? 'subtable_id' then nullif(evt.payload->>'subtable_id', '')::uuid else row.subtable_id end,
             updated_at = evt.created_at
         from evt
         where row.id = evt.aggregate_id
-        returning row.id, row.table_id, row.weight, row.range_min, row.range_max, row.result, row.notes, row.position, row.created_at, row.updated_at
+        returning row.id, row.table_id, row.weight, row.range_min, row.range_max, row.result, row.notes, row.position, row.subtable_id, row.created_at, row.updated_at
         "#
     );
 
