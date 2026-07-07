@@ -469,3 +469,62 @@ describe('characterStore', () => {
     expect(store.characters).toEqual([])
   })
 })
+
+describe('shadowdark sheet support', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    resetKit(kit)
+    kit.auth = { user: { id: 'me' }, displayName: 'Me' }
+    localStorage.clear()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function loadedStore(chars) {
+    kit.responses.characters = { data: chars, error: null }
+    kit.responses.session_members = { data: [], error: null }
+    const store = useCharacterStore()
+    await store.loadAll('s1')
+    return store
+  }
+
+  test('gear slots default to STR with a floor of 10', async () => {
+    const store = await loadedStore([
+      char('strong', { data: { name: 'Ox', stats: { STR: 16 } } }),
+      char('weak', { data: { name: 'Wisp', stats: { STR: 6 } } }),
+      char('set', { data: { name: 'Custom', stats: { STR: 16 }, gearSlotsTotal: 12 } }),
+    ])
+
+    const by = id => store.characters.find(c => c.id === id).data
+    expect(by('strong').gearSlotsTotal).toBe(16)
+    expect(by('weak').gearSlotsTotal).toBe(10)
+    expect(by('set').gearSlotsTotal).toBe(12)
+  })
+
+  test('awardHaul books the treasure, the xp, and one log entry together', async () => {
+    const store = await loadedStore([char('c1', { data: { name: 'Ranna', XP: 3, treasures: [] } })])
+
+    store.awardHaul('pearl necklace', 5)
+
+    const data = store.characters[0].data
+    expect(data.XP).toBe(8)
+    expect(data.treasures).toEqual(['pearl necklace (+5 xp)'])
+    expect(data.xpLog).toHaveLength(1)
+    expect(data.xpLog[0].description).toBe('pearl necklace')
+    expect(data.xpLog[0].xp).toBe(5)
+  })
+
+  test('a zero-xp haul is just loot', async () => {
+    const store = await loadedStore([char('c1', { data: { name: 'Ranna', XP: 3, treasures: [] } })])
+
+    store.awardHaul('worthless but pretty stone')
+
+    const data = store.characters[0].data
+    expect(data.XP).toBe(3)
+    expect(data.treasures).toEqual(['worthless but pretty stone'])
+    expect(data.xpLog[0].xp).toBe(0)
+  })
+})

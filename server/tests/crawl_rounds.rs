@@ -46,6 +46,7 @@ create table sessions (
     play_mode         text not null default 'gm_less',
     crawl_round       int not null default 0,
     crawl_check_every int not null default 3,
+    initiative_state  jsonb not null default '{"entries": [], "active_id": null, "round": 1}'::jsonb,
     updated_at        timestamptz not null default now()
 );
 
@@ -324,4 +325,53 @@ async fn encounter_check_eventually_fires_and_rolls_the_tagged_table() {
     .await
     .unwrap();
     assert!(chat >= 1);
+}
+
+#[tokio::test]
+async fn crawl_advance_bleeds_death_timers() {
+    let _db = DB_LOCK.lock().await;
+    let Some(pool) = setup().await else {
+        eprintln!("skipping crawl_rounds test: DATABASE_URL not set");
+        return;
+    };
+    let (state, owner, session_id) = fixture(&pool, 0).await;
+
+    // a pc with one round left on the clock
+    sqlx::query(
+        r#"update sessions set initiative_state = '{"entries": [{"id": "9c000000-0000-0000-0000-000000000001", "kind": "pc", "name": "Brey", "character_id": null, "initiative": 10, "death": {"total": 2, "left": 1, "dead": false}}], "active_id": null, "round": 1}'::jsonb where id = $1"#,
+    )
+    .bind(session_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    advance(&state, owner, session_id).await;
+
+    let init: serde_json::Value =
+        sqlx::query_scalar("select initiative_state from sessions where id = $1")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(init["entries"][0]["death"]["dead"], true);
+
+    let deaths: i64 = sqlx::query_scalar(
+        "select count(*) from chat_messages where session_id = $1 and body like '%death timer runs out%'",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(deaths, 1);
+
+    // another crawl round passes, the dead stay quietly dead
+    advance(&state, owner, session_id).await;
+    let deaths: i64 = sqlx::query_scalar(
+        "select count(*) from chat_messages where session_id = $1 and body like '%death timer runs out%'",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(deaths, 1);
 }

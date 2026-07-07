@@ -364,6 +364,12 @@
                             title="Add note"
                             @click="startAnnotating(entry.id)"
                         ><i class="fa-solid fa-pencil" /></button>
+                        <button
+                            class="ds-roll-note-add"
+                            title="Pin to journal"
+                            data-testid="dice-pin"
+                            @click="pinRoll(entry)"
+                        ><i class="fa-solid fa-thumbtack" /></button>
                     </div>
 
                     <div
@@ -408,6 +414,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { DIE_ICONS } from "@/composables/useDiceIcons.js";
+import { useJournalStore } from "@/stores/journalStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
 import { useMacroStore } from "@/stores/macroStore.js";
 import { useGMLabel } from "@/composables/useGMLabel.js";
@@ -549,6 +556,14 @@ function rollColor(userId) {
 
 const annotatingId = ref(null);
 const annotationDraft = ref("");
+
+function pinRoll(entry) {
+    useJournalStore().pin({
+        source: "dice",
+        label: entry.label || formatExpr(entry),
+        text: `${gmName(entry.user_id, entry.display_name, entry.character_id)} rolled ${formatExpr(entry)} = ${entry.total}`,
+    });
+}
 
 function startAnnotating(rollId) {
     annotatingId.value = rollId;

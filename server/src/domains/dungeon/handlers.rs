@@ -128,7 +128,40 @@ pub async fn create_room(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let session_id = member_for_dungeon(&state, auth.user_id, dungeon_id).await?;
     let metadata = auth.metadata();
+    // reject_overlapping makes the insert canonical for generated rooms (#55):
+    // an advisory lock on the dungeon serializes concurrent generators, and a
+    // collision returns 409 so the losing client replans against fresh state.
+    // hand-drawn rooms never set the flag - freehand overlap stays legal.
+    let guarded = body
+        .get("reject_overlapping")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let row = retry_tx!(state.pool(), |tx| {
+        if guarded {
+            sqlx::query("select pg_advisory_xact_lock(hashtextextended('dungeon_gen:' || $1, 0))")
+                .bind(dungeon_id.to_string())
+                .execute(&mut *tx)
+                .await?;
+            let colliding: Option<i32> = sqlx::query_scalar(
+                r#"
+                select 1 from dungeon_rooms
+                where dungeon_id = $1
+                  and shape = 'rect'
+                  and origin_x < round(($2->>'origin_x')::numeric)::int + round(($2->>'width')::numeric)::int
+                  and origin_x + width > round(($2->>'origin_x')::numeric)::int
+                  and origin_y < round(($2->>'origin_y')::numeric)::int + round(($2->>'height')::numeric)::int
+                  and origin_y + height > round(($2->>'origin_y')::numeric)::int
+                limit 1
+                "#,
+            )
+            .bind(dungeon_id)
+            .bind(&body)
+            .fetch_optional(&mut *tx)
+            .await?;
+            if colliding.is_some() {
+                return Err(AppError::Conflict);
+            }
+        }
         room_projection::create(&mut tx, dungeon_id, session_id, &body, &metadata).await
     })?;
     Ok(Json(row))

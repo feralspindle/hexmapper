@@ -216,6 +216,23 @@ describe('sessionStore', () => {
     errorSpy.mockRestore()
   })
 
+  test('initiativeOp applies the returned state and realtime carries it to others', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow()
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+
+    const next = { entries: [{ id: 'e1', name: 'Goblin 1', initiative: 12 }], active_id: null, round: 1 }
+    kit.api['post /sessions/sess-1/initiative'] = next
+    await store.initiativeOp('add', { name: 'Goblin', count: 1 })
+    expect(store.initiativeState.entries).toHaveLength(1)
+
+    const configChannel = kit.channels.find(c => c.name === 'session:sess-1:config')
+    configChannel.emitPostgres('sessions', 'UPDATE', {
+      initiative_state: { entries: [], active_id: null, round: 1 },
+    })
+    expect(store.initiativeState.entries).toHaveLength(0)
+  })
+
   test('advanceCrawlRound is optimistic and reverts on failure', async () => {
     kit.api['post /sessions/sess-1/join'] = sessionRow({ crawl_round: 4 })
     const store = useSessionStore()
@@ -243,6 +260,26 @@ describe('sessionStore', () => {
 
     expect(store.crawlRound).toBe(7)
     expect(store.crawlCheckEvery).toBe(4)
+  })
+
+  test('travel applies the returned state and realtime carries it', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow({ travel_state: { enabled: true, fraction: 0 } })
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+    expect(store.travelState.enabled).toBe(true)
+
+    kit.api['post /sessions/sess-1/travel'] = {
+      travel_state: { enabled: true, fraction: 0.5 },
+      moved: true,
+      days_advanced: 0,
+    }
+    const result = await store.travel('move', { terrain: 'plains' })
+    expect(result.moved).toBe(true)
+    expect(store.travelState.fraction).toBe(0.5)
+
+    const configChannel = kit.channels.find(c => c.name === 'session:sess-1:config')
+    configChannel.emitPostgres('sessions', 'UPDATE', { travel_state: { enabled: true, fraction: 0 } })
+    expect(store.travelState.fraction).toBe(0)
   })
 
   describe('presence', () => {

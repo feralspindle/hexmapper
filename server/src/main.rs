@@ -62,6 +62,7 @@ async fn main() {
         .merge(domains::notes::router())
         .merge(domains::oracle::router())
         .merge(domains::light::router())
+        .merge(domains::journal::router())
         .merge(domains::notebook::router())
         .merge(domains::calendar::router())
         .merge(domains::vault::router())

@@ -218,6 +218,24 @@ export const useOracleStore = defineStore('oracle', () => {
     return run(() => apiClient.delete(`/oracle-table-rows/${id}`, 'oracle_table_row_delete'))
   }
 
+  async function listPacks() {
+    return run(() => apiClient.get('/oracle-packs'))
+  }
+
+  async function installPack(packId) {
+    if (!_sessionId) return
+    return run(async () => {
+      const data = await apiClient.post('/oracle-packs/install', {
+        session_id: _sessionId,
+        pack_id: packId,
+      }, 'oracle_pack_install')
+      // one install creates a lot of tables and rows, cheaper to refetch than
+      // to wait on the realtime trickle
+      await refresh()
+      return data
+    })
+  }
+
   async function rollYesNo({ question, odds }) {
     return roll({ kind: 'yes_no', question, odds })
   }
@@ -298,6 +316,8 @@ export const useOracleStore = defineStore('oracle', () => {
     createRow,
     updateRow,
     deleteRow,
+    listPacks,
+    installPack,
     rollYesNo,
     rollEventPrompt,
     rollTable,

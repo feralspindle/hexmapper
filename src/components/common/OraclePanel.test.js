@@ -19,7 +19,16 @@ const mocks = vi.hoisted(() => ({
     rollYesNo: vi.fn(),
     rollEventPrompt: vi.fn(),
     rollTable: vi.fn(),
+    listPacks: vi.fn(() => Promise.resolve([])),
+    installPack: vi.fn(),
   },
+  journalStore: {
+    pin: vi.fn(),
+  },
+}))
+
+vi.mock('@/stores/journalStore.js', () => ({
+  useJournalStore: () => mocks.journalStore,
 }))
 
 vi.mock('@/stores/oracleStore.js', () => ({
@@ -136,5 +145,41 @@ describe('OraclePanel', () => {
 
     await select.setValue('')
     expect(mocks.oracleStore.updateRow).toHaveBeenCalledWith('row-1', { subtable_id: null })
+  })
+
+  test('pinning a roll snapshots it to the journal', async () => {
+    mocks.oracleStore.rolls = [{
+      id: 'roll-1',
+      display_name: 'Player',
+      kind: 'yes_no',
+      question: 'Is the bridge safe?',
+      result: { label: 'Yes, but...', roll: 43 },
+    }]
+    const wrapper = mount(OraclePanel)
+
+    await wrapper.get('[data-testid="oracle-pin"]').trigger('click')
+
+    expect(mocks.journalStore.pin).toHaveBeenCalledWith({
+      source: 'oracle',
+      label: 'Yes / No',
+      text: 'Yes, but... (43)',
+      detail: 'Is the bridge safe?',
+    })
+  })
+
+  test('content packs list and install', async () => {
+    mocks.oracleStore.listPacks.mockResolvedValue([
+      { id: 'shadowdark-starter', name: 'Shadowdark Starter', description: 'tables', tables: 21, rows: 200 },
+    ])
+    mocks.oracleStore.installPack.mockResolvedValue({ installed_tables: 21, installed_rows: 200 })
+    const wrapper = mount(OraclePanel)
+    await new Promise(resolve => setTimeout(resolve))
+
+    const pack = wrapper.get('[data-testid="oracle-pack"]')
+    expect(pack.text()).toContain('Shadowdark Starter')
+    expect(pack.text()).toContain('21 tables')
+
+    await wrapper.get('[data-testid="oracle-pack-install"]').trigger('click')
+    expect(mocks.oracleStore.installPack).toHaveBeenCalledWith('shadowdark-starter')
   })
 })

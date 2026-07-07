@@ -10,6 +10,8 @@ pub fn router() -> Router<AppState> {
         .route("/sessions/{id}", patch(handlers::update_session))
         .route("/sessions/{id}", delete(handlers::delete_session))
         .route("/sessions/{id}/torch", post(handlers::torch))
+        .route("/sessions/{id}/travel", post(handlers::travel))
+        .route("/sessions/{id}/initiative", post(handlers::initiative))
         .route("/sessions/{id}/crawl-round", post(handlers::crawl_round))
         .route("/sessions/{id}/join", post(handlers::join_session))
         .route("/sessions/{id}/leave", post(handlers::leave_session))

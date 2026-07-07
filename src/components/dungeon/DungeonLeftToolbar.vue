@@ -67,6 +67,20 @@
     </div>
 
     <div class="ds-tool-group">
+      <button
+        class="ds-tool"
+        :class="{ disabled: dungeonStore.generating }"
+        title="Generate the next room"
+        data-testid="dungeon-generate"
+        @click="dungeonStore.generateRoom()"
+      >
+        <component :is="WandIcon" :size="18" />
+        <span class="ds-tool-key">G</span>
+        <span class="ds-tip">Generate room<kbd>G</kbd></span>
+      </button>
+    </div>
+
+    <div class="ds-tool-group">
       <span class="ds-tool-label">Party</span>
       <button
         class="ds-tool"
@@ -165,6 +179,7 @@ const CircleIcon  = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24
 const PolygonIcon = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polygon',{points:'12,3 21,9 17,21 7,21 3,9'})]) }
 const CorridorIcon= { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('path',{d:'M3 9h18M3 15h18'}),h('path',{d:'M3 9V6M3 18v-3M21 9V6M21 18v-3'})]) }
 const DoorIcon    = { render: () => h('svg', {width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M5 21V5a2 2 0 012-2h6v18'}),h('path',{d:'M3 21h18'}),h('circle',{cx:11,cy:13,r:.7,fill:'currentColor'})]) }
+const WandIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8L19 13M17.8 6.2L19 5M3 21l9-9M12.2 6.2L11 5'})]) }
 const MoveIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('path',{d:'M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3'})]) }
 const TrashIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'})]) }
 const UndoIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polyline',{points:'9 14 4 9 9 4'}),h('path',{d:'M20 20v-7a4 4 0 0 0-4-4H4'})]) }
