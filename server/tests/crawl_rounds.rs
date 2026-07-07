@@ -15,7 +15,11 @@ use hexmap_server::state::AppState;
 use jsonwebtoken::jwk::JwkSet;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use tokio::sync::Mutex;
 use uuid::Uuid;
+
+// both tests rebuild the same schema, serialize them so setup can't race itself
+static DB_LOCK: Mutex<()> = Mutex::const_new(());
 
 const SCHEMA: &str = r#"
 create schema if not exists auth;
@@ -199,6 +203,7 @@ async fn advance(state: &AppState, owner: Uuid, session_id: Uuid) -> serde_json:
 
 #[tokio::test]
 async fn advance_bumps_round_and_burns_lights_once() {
+    let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping crawl_rounds test: DATABASE_URL not set");
         return;
@@ -266,6 +271,7 @@ async fn advance_bumps_round_and_burns_lights_once() {
 
 #[tokio::test]
 async fn encounter_check_eventually_fires_and_rolls_the_tagged_table() {
+    let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping crawl_rounds test: DATABASE_URL not set");
         return;

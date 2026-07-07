@@ -17,7 +17,11 @@ use hexmap_server::state::AppState;
 use jsonwebtoken::jwk::JwkSet;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use tokio::sync::Mutex;
 use uuid::Uuid;
+
+// both tests rebuild the same schema, serialize them so setup can't race itself
+static DB_LOCK: Mutex<()> = Mutex::const_new(());
 
 const SCHEMA: &str = r#"
 create schema if not exists auth;
@@ -154,6 +158,7 @@ fn torch_request(session_id: Uuid, mode: &str, duration_rounds: i32) -> CreateLi
 
 #[tokio::test]
 async fn rounds_tick_to_zero_expires_and_announces_once() {
+    let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping light_sources test: DATABASE_URL not set");
         return;
@@ -211,6 +216,7 @@ async fn rounds_tick_to_zero_expires_and_announces_once() {
 
 #[tokio::test]
 async fn premature_expire_report_is_rejected() {
+    let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping light_sources test: DATABASE_URL not set");
         return;
