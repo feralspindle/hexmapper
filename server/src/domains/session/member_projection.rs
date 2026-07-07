@@ -99,6 +99,39 @@ pub async fn set_active(
     Ok(())
 }
 
+/// removes the caller's (session_id, user_id) row and records `session_member.left`,
+/// which `replay_select` filters so a rebuild drops them instead of re-adding from
+/// the earlier `joined` event. no-op when they aren't a member. only ever touches
+/// their own row (user_id = auth.user_id).
+pub async fn leave(
+    tx: &mut Transaction<'_, Postgres>,
+    session_id: Uuid,
+    user_id: Uuid,
+    metadata: &Value,
+) -> Result<(), AppError> {
+    sqlx::query(
+        r#"
+        with del as (
+            delete from session_members where session_id = $1 and user_id = $2 returning *
+        ),
+        evt as (
+            insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
+            select 'session_member', md5(del.session_id::text || del.user_id::text)::uuid, del.session_id,
+                coalesce((select max(sequence) from events e
+                    where e.aggregate_type = 'session_member'
+                      and e.aggregate_id = md5(del.session_id::text || del.user_id::text)::uuid), 0) + 1,
+                'session_member.left', to_jsonb(del), $3
+            from del
+        )
+        select 1
+        "#,
+    )
+    .bind(session_id).bind(user_id).bind(metadata)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub fn replay_select(target_table: &str) -> String {
     format!(
         r#"

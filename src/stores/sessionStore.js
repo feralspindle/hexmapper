@@ -136,6 +136,14 @@ export const useSessionStore = defineStore('session', () => {
     return true
   }
 
+  async function leaveSession(id) {
+    try {
+      await apiClient.post(`/sessions/${id}/leave`, undefined, 'leave_session')
+    } catch (err) { console.error('leaveSession:', err instanceof ApiError ? err.message : err); return false }
+    joinedSessions.value = joinedSessions.value.filter(s => s.id !== id)
+    return true
+  }
+
   async function joinSession(id) {
     loading.value = true
     error.value = null
@@ -343,6 +351,7 @@ export const useSessionStore = defineStore('session', () => {
     fetchUserSessions,
     createSession,
     deleteSession,
+    leaveSession,
     joinSession,
     updateSessionName,
     setActiveMapId,

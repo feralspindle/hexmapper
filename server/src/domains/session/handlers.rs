@@ -137,6 +137,21 @@ pub async fn join_session(
     Ok(Json(session))
 }
 
+/// removes the caller's own membership (user_id = auth.user_id), so there's no
+/// ownership check - a member can only remove themselves. the campaign is left
+/// intact, owners delete via `delete_session` instead.
+pub async fn leave_session(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let metadata = auth.metadata();
+    retry_tx!(state.pool(), |tx| {
+        member_projection::leave(&mut tx, id, auth.user_id, &metadata).await
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SetActiveRequest {
     pub session_id: Uuid,
