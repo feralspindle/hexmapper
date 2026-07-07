@@ -199,6 +199,23 @@ describe('sessionStore', () => {
     errorSpy.mockRestore()
   })
 
+  test('leaveSession removes the joined session from the list only when the API succeeds', async () => {
+    kit.responses.sessions = { data: [], error: null }
+    kit.responses.session_members = { data: [{ session: { id: 'joined-1', name: 'Theirs' } }], error: null }
+    const store = useSessionStore()
+    await store.fetchUserSessions()
+
+    kit.api['post /sessions/joined-1/leave'] = new kit.ApiError('nope', 500)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await store.leaveSession('joined-1')).toBe(false)
+    expect(store.joinedSessions).toHaveLength(1)
+
+    kit.api['post /sessions/joined-1/leave'] = null
+    expect(await store.leaveSession('joined-1')).toBe(true)
+    expect(store.joinedSessions).toHaveLength(0)
+    errorSpy.mockRestore()
+  })
+
   describe('presence', () => {
     test('tracks presence once subscribed and lists online users', async () => {
       const store = useSessionStore()

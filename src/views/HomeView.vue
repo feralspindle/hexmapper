@@ -262,12 +262,20 @@
                 <i class="fa-solid fa-scroll" />
                 <span class="hidden sm:inline">Notes</span>
               </RouterLink>
+              <button
+                class="flex items-center px-3 py-3 border-l border-stone-700 text-stone-600 hover:text-red-400 hover:bg-stone-750 transition-colors text-sm shrink-0 self-stretch"
+                title="Leave campaign"
+                @click.stop="leaveSession(s.id)"
+              >
+                <i class="fa-solid fa-right-from-bracket" />
+              </button>
             </div>
           </div>
         </div>
 
       </template>
     </div>
+    <ConfirmDialog />
   </div>
 </template>
 
@@ -277,6 +285,7 @@ import { useRouter, RouterLink } from 'vue-router'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -374,6 +383,10 @@ function deleteSession(id) {
     `Delete "${s.name}"? This cannot be undone.`,
     () => sessionStore.deleteSession(id),
   )
+}
+
+function leaveSession(id) {
+  sessionStore.leaveSession(id)
 }
 
 function formatDate(iso) {
