@@ -119,6 +119,63 @@ describe('calendarStore behavior', () => {
     expect(store.settings.year_suffix).toBe(' AR')
   })
 
+  test('a settings echo or stale response cannot revert a newer rapid update', async () => {
+    const resolvers = []
+    kit.api['put /calendar-settings'] = body =>
+      new Promise(resolve => resolvers.push(() => resolve({ session_id: 's1', ...body.settings })))
+    const store = useCalendarStore()
+    await store.init('s1')
+    const settingsChannel = kit.channels.find(c => c.name.startsWith('calendar:settings'))
+
+    const first = store.updateSettings({ current_day: 2 })
+    const second = store.updateSettings({ current_day: 3 })
+    expect(store.settings.current_day).toBe(3)
+
+    // puts are chained so an earlier one can't commit after a later one
+    await Promise.resolve()
+    expect(kit.apiClient.put).toHaveBeenCalledTimes(1)
+
+    // the echo of the first put arrives while writes are still outstanding
+    settingsChannel.emitPostgres('party_calendar_settings', 'UPDATE', { session_id: 's1', current_day: 2 })
+    expect(store.settings.current_day).toBe(3)
+
+    resolvers.shift()()
+    await first
+    // the first response is stale (a newer write is pending) so it is skipped
+    expect(store.settings.current_day).toBe(3)
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(kit.apiClient.put).toHaveBeenCalledTimes(2)
+    // the second put snapshots at send time, so it carries the newest value
+    expect(kit.apiClient.put.mock.calls[1][1].settings.current_day).toBe(3)
+
+    resolvers.shift()()
+    await second
+    expect(store.settings.current_day).toBe(3)
+
+    // once idle, echoes from other clients apply again
+    settingsChannel.emitPostgres('party_calendar_settings', 'UPDATE', { session_id: 's1', current_day: 7 })
+    expect(store.settings.current_day).toBe(7)
+  })
+
+  test('a day echo cannot revert an edit while its write is in flight', async () => {
+    let resolvePost
+    kit.api['post /calendar-days'] = () => new Promise(resolve => { resolvePost = resolve })
+    const store = useCalendarStore()
+    await store.init('s1')
+    const daysChannel = kit.channels.find(c => c.name.startsWith('calendar:days'))
+
+    const write = store.upsertDay(1, 3, 14, { notes: 'ambush' })
+    daysChannel.emitPostgres('party_calendar_days', 'INSERT', day('d1', { month: 3, day: 14, notes: '' }))
+    expect(store.days[0].notes).toBe('ambush')
+
+    await Promise.resolve()
+    resolvePost(day('d1', { month: 3, day: 14, notes: 'ambush' }))
+    await write
+    expect(store.days[0]).toMatchObject({ id: 'd1', notes: 'ambush' })
+  })
+
   test('refresh re-fetches every year that was ever loaded', async () => {
     const store = useCalendarStore()
     await store.init('s1')

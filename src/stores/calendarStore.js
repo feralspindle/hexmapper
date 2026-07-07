@@ -26,6 +26,17 @@ export const useCalendarStore = defineStore('calendar', () => {
   let _settingsLoaded = false
   const _fetchedYears = new Set()
 
+  // while our own writes are in flight, realtime echoes and out-of-order
+  // responses carry stale data that would stomp newer optimistic edits
+  let _settingsWrites  = 0
+  let _settingsQueue   = Promise.resolve()
+  const _dayWrites     = new Map()  // 'y-m-d' -> in-flight count
+  const _dayQueues     = new Map()  // 'y-m-d' -> tail of the write chain
+
+  function _dayKey(year, month, day) {
+    return `${year}-${month}-${day}`
+  }
+
   async function init(sessionId) {
     if (_sessionId === sessionId) return
     cleanup()
@@ -102,6 +113,7 @@ export const useCalendarStore = defineStore('calendar', () => {
         filter: `session_id=eq.${sessionId}`,
       }, e => {
         if (e.eventType === 'INSERT' || e.eventType === 'UPDATE') {
+          if (_settingsWrites > 0) return
           settings.value = { ...DEFAULT_SETTINGS, ...e.new }
         }
       })
@@ -119,6 +131,8 @@ export const useCalendarStore = defineStore('calendar', () => {
         event: '*', schema: 'public', table: 'party_calendar_days',
         filter: `session_id=eq.${sessionId}`,
       }, e => {
+        if ((e.eventType === 'INSERT' || e.eventType === 'UPDATE') &&
+            _dayWrites.has(_dayKey(e.new.year, e.new.month, e.new.day))) return
         if (e.eventType === 'INSERT') {
           const idx = days.value.findIndex(d => d.year === e.new.year && d.month === e.new.month && d.day === e.new.day && d.session_id === e.new.session_id)
           if (idx !== -1) days.value[idx] = e.new; else days.value.push(e.new)
@@ -139,14 +153,28 @@ export const useCalendarStore = defineStore('calendar', () => {
     } else {
       days.value.push({ session_id: _sessionId, year, month, day, weather: null, notes: '', ...patch, id: null })
     }
+    const sessionId = _sessionId
+    const key = _dayKey(year, month, day)
+    _dayWrites.set(key, (_dayWrites.get(key) ?? 0) + 1)
+    // chain writes to the same day so they commit in order
+    const write = (_dayQueues.get(key) ?? Promise.resolve()).then(() =>
+      apiClient.post('/calendar-days', { session_id: sessionId, year, month, day, patch })
+    )
+    _dayQueues.set(key, write.then(() => {}, () => {}))
     try {
-      const data = await apiClient.post('/calendar-days', { session_id: _sessionId, year, month, day, patch })
-      if (data) {
+      const data = await write
+      // only the last outstanding write applies its response - earlier ones
+      // are stale once another optimistic edit has happened
+      if (data && _dayWrites.get(key) === 1 && _sessionId === sessionId) {
         const i = days.value.findIndex(d => d.year === year && d.month === month && d.day === day)
         if (i !== -1) days.value[i] = data; else days.value.push(data)
       }
     } catch (error) {
       console.error('upsertDay:', error instanceof ApiError ? error.message : error)
+    } finally {
+      const count = _dayWrites.get(key) ?? 0
+      if (count <= 1) { _dayWrites.delete(key); _dayQueues.delete(key) }
+      else _dayWrites.set(key, count - 1)
     }
   }
 
@@ -156,14 +184,27 @@ export const useCalendarStore = defineStore('calendar', () => {
       return
     }
     Object.assign(settings.value, patch)
-    try {
-      const data = await apiClient.put('/calendar-settings', {
-        session_id: _sessionId,
-        settings: { ...DEFAULT_SETTINGS, ...settings.value, ...patch },
+    const sessionId = _sessionId
+    _settingsWrites += 1
+    // each put sends the whole settings blob, so chain them: an earlier put
+    // committing after a later one would silently persist stale settings. the
+    // snapshot is taken at send time to pick up any newer optimistic edits
+    const write = _settingsQueue.then(() =>
+      apiClient.put('/calendar-settings', {
+        session_id: sessionId,
+        settings: { ...DEFAULT_SETTINGS, ...settings.value },
       })
-      if (data) settings.value = { ...DEFAULT_SETTINGS, ...data }
+    )
+    _settingsQueue = write.then(() => {}, () => {})
+    try {
+      const data = await write
+      if (data && _settingsWrites === 1 && _sessionId === sessionId) {
+        settings.value = { ...DEFAULT_SETTINGS, ...data }
+      }
     } catch (error) {
       console.error('updateSettings:', error instanceof ApiError ? error.message : error)
+    } finally {
+      _settingsWrites -= 1
     }
   }
 

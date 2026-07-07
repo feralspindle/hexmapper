@@ -382,6 +382,38 @@ describe('hexStore behavior', () => {
     expect(store.partyHex).toEqual({ q: 7, r: 8 })
   })
 
+  test('a maps UPDATE echo cannot snap the party marker back during rapid moves', async () => {
+    const resolvers = []
+    kit.api['patch /maps/m1'] = () => new Promise(resolve => { resolvers.push(resolve) })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+    const dbChannel = kit.channels.find(c => c.name === 'map:m1:party_db')
+
+    const move1 = store.setPartyHex(1, 1)
+    const move2 = store.setPartyHex(2, 2)
+    expect(store.partyHex).toEqual({ q: 2, r: 2 })
+
+    // the echo of the first move arrives while patches are still in flight
+    dbChannel.emitPostgres('maps', 'UPDATE', { id: 'm1', party_hex_q: 1, party_hex_r: 1 })
+    expect(store.partyHex).toEqual({ q: 2, r: 2 })
+
+    // patches are chained so the first can't commit after the second
+    await Promise.resolve()
+    expect(kit.apiClient.patch).toHaveBeenCalledTimes(1)
+    resolvers.shift()({})
+    await move1
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(kit.apiClient.patch).toHaveBeenCalledTimes(2)
+    resolvers.shift()({})
+    await move2
+    expect(store.partyHex).toEqual({ q: 2, r: 2 })
+
+    // once idle, another client's move applies again
+    dbChannel.emitPostgres('maps', 'UPDATE', { id: 'm1', party_hex_q: 9, party_hex_r: 9 })
+    expect(store.partyHex).toEqual({ q: 9, r: 9 })
+  })
+
   test('createDungeon creates the hex if needed then navigates to the new dungeon', async () => {
     kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'hex-id-1' })
     kit.api['post /dungeons'] = body => ({ id: 'dungeon-1', ...body })

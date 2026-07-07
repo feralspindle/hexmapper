@@ -94,6 +94,29 @@ describe('sessionStore', () => {
     expect(store.sessionName).toBe('The Sunken Keep')
   })
 
+  test('a session UPDATE echo cannot stomp a field with our own write in flight', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow()
+    let resolvePatch
+    kit.api['patch /sessions/sess-1'] = () => new Promise(resolve => { resolvePatch = resolve })
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+    const configChannel = kit.channels.find(c => c.name === 'session:sess-1:config')
+
+    const write = store.setGmInitiative(15)
+
+    // the echo carries the whole row, so it holds the pre-write value for our
+    // field - it must not stomp it, but other fields still apply
+    configChannel.emitPostgres('sessions', 'UPDATE', { gm_initiative: null, torch_running: true })
+    expect(store.gmInitiative).toBe(15)
+    expect(store.torchRunning).toBe(true)
+
+    resolvePatch({})
+    await write
+    // once the write lands, echoes for the field apply again
+    configChannel.emitPostgres('sessions', 'UPDATE', { gm_initiative: 3 })
+    expect(store.gmInitiative).toBe(3)
+  })
+
   test('reconnect refetches the session row so a missed map switch is applied', async () => {
     kit.api['post /sessions/sess-1/join'] = sessionRow()
     const store = useSessionStore()
