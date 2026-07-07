@@ -18,6 +18,7 @@ export const useSessionStore = defineStore('session', () => {
   const torchRunning   = ref(false)
   const torchElapsedMs = ref(0)
   const torchStartedAt = ref(null)
+  const travelState    = ref({ enabled: false, fraction: 0 })
   const initiativeState = ref({ entries: [], active_id: null, round: 1 })
   const crawlRound     = ref(0)
   const crawlCheckEvery = ref(3)
@@ -52,6 +53,7 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = data.torch_running ?? false
     torchElapsedMs.value = data.torch_elapsed_ms ?? 0
     torchStartedAt.value = data.torch_started_at ?? null
+    travelState.value    = data.travel_state ?? { enabled: false, fraction: 0 }
     initiativeState.value = data.initiative_state ?? { entries: [], active_id: null, round: 1 }
     crawlRound.value     = data.crawl_round ?? 0
     crawlCheckEvery.value = data.crawl_check_every ?? 3
@@ -79,6 +81,7 @@ export const useSessionStore = defineStore('session', () => {
           if (row.torch_running !== undefined)    torchRunning.value   = row.torch_running
           if (row.torch_elapsed_ms !== undefined) torchElapsedMs.value = row.torch_elapsed_ms
           if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
+          if (row.travel_state !== undefined)     travelState.value    = row.travel_state ?? { enabled: false, fraction: 0 }
           if (row.initiative_state !== undefined) initiativeState.value = row.initiative_state ?? { entries: [], active_id: null, round: 1 }
           if (row.crawl_round !== undefined)      crawlRound.value     = row.crawl_round ?? 0
           if (row.crawl_check_every !== undefined) crawlCheckEvery.value = row.crawl_check_every ?? 3
@@ -343,6 +346,20 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // move: burns travel time for the destination terrain, the server advances
+  // the calendar and rolls weather at day boundaries. config: patches rates /
+  // enabled / difficult under the same row lock.
+  async function travel(op, payload = {}) {
+    try {
+      const result = await apiClient.post(`/sessions/${sessionId.value}/travel`, { op, ...payload }, `travel_${op}`)
+      if (result?.travel_state) travelState.value = result.travel_state
+      return result
+    } catch (err) {
+      console.error('travel:', err instanceof ApiError ? err.message : err)
+      return null
+    }
+  }
+
   async function torchStart() {
     torchRunning.value = true
     try {
@@ -384,6 +401,7 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = false
     torchElapsedMs.value = 0
     torchStartedAt.value = null
+    travelState.value    = { enabled: false, fraction: 0 }
     initiativeState.value = { entries: [], active_id: null, round: 1 }
     crawlRound.value     = 0
     crawlCheckEvery.value = 3
@@ -400,6 +418,8 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning,
     torchElapsedMs,
     torchStartedAt,
+    travelState,
+    travel,
     initiativeState,
     initiativeOp,
     crawlRound,

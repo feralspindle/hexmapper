@@ -262,6 +262,26 @@ describe('sessionStore', () => {
     expect(store.crawlCheckEvery).toBe(4)
   })
 
+  test('travel applies the returned state and realtime carries it', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow({ travel_state: { enabled: true, fraction: 0 } })
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+    expect(store.travelState.enabled).toBe(true)
+
+    kit.api['post /sessions/sess-1/travel'] = {
+      travel_state: { enabled: true, fraction: 0.5 },
+      moved: true,
+      days_advanced: 0,
+    }
+    const result = await store.travel('move', { terrain: 'plains' })
+    expect(result.moved).toBe(true)
+    expect(store.travelState.fraction).toBe(0.5)
+
+    const configChannel = kit.channels.find(c => c.name === 'session:sess-1:config')
+    configChannel.emitPostgres('sessions', 'UPDATE', { travel_state: { enabled: true, fraction: 0 } })
+    expect(store.travelState.fraction).toBe(0)
+  })
+
   describe('presence', () => {
     test('tracks presence once subscribed and lists online users', async () => {
       const store = useSessionStore()

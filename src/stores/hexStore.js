@@ -349,8 +349,14 @@ export const useHexStore = defineStore("hex", () => {
       event: "party",
       payload: { q, r },
     });
-    if (useSessionStore().playMode === "gm_less" && isCellUnexplored(q, r))
+    const sessionStore = useSessionStore();
+    if (sessionStore.playMode === "gm_less" && isCellUnexplored(q, r))
       await exploreHex(q, r);
+    // travel procedure: explore first so generated terrain sets the pace
+    if (sessionStore.playMode === "gm_less" && sessionStore.travelState?.enabled) {
+      const terrain = hexCells.value.get(cellKey(q, r))?.terrain_type ?? "plains";
+      await sessionStore.travel("move", { terrain });
+    }
   }
 
   function isCellUnexplored(q, r) {
