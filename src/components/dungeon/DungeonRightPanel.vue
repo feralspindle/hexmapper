@@ -8,6 +8,7 @@
 
     <div v-show="activeTab === 0" class="ds-tab-pane">
       <DungeonDiceSection ref="diceSectionRef" />
+      <LightsSection />
       <DungeonSessionSection />
     </div>
 
@@ -28,6 +29,7 @@ import DungeonInspector      from './DungeonInspector.vue'
 import DungeonDiceSection    from './DungeonDiceSection.vue'
 import DungeonPhotosSection  from './DungeonPhotosSection.vue'
 import DungeonSessionSection from './DungeonSessionSection.vue'
+import LightsSection         from '@/components/common/LightsSection.vue'
 import OraclePanel           from '@/components/common/OraclePanel.vue'
 import { useD }              from '@/stores/dungeonStore.js'
 import { useDiceStore }      from '@/stores/diceStore.js'
