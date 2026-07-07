@@ -222,6 +222,31 @@ describe('RustRealtime connection lifecycle', () => {
     expect(socket.sent).toContainEqual({ type: 'reauthenticate', token: 'token-2' })
   })
 
+  test('heartbeat server time drives token refresh, so a slow local clock cannot delay it', async () => {
+    const { socket } = await connectedRealtime()
+    const { supabase } = await import('@/lib/supabase')
+
+    // locally the token looks 2 minutes from expiry, but the server clock is
+    // 5 minutes ahead of us, so it is already expired server-side
+    authState.session.expires_at = Math.floor(Date.now() / 1000) + 120
+    socket.receive({ type: 'heartbeat', server_time_ms: Date.now() + 5 * 60_000 })
+
+    await vi.waitFor(() => {
+      expect(supabase.auth.refreshSession).toHaveBeenCalled()
+    })
+  })
+
+  test('heartbeat with an honest clock leaves a fresh token alone', async () => {
+    const { socket } = await connectedRealtime()
+    const { supabase } = await import('@/lib/supabase')
+    supabase.auth.refreshSession.mockClear()
+
+    socket.receive({ type: 'heartbeat', server_time_ms: Date.now() })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(supabase.auth.refreshSession).not.toHaveBeenCalled()
+  })
+
   test('unparseable and throwing messages do not kill the socket handler', async () => {
     const { channel, socket } = await connectedRealtime()
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
