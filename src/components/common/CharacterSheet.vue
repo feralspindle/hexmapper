@@ -332,6 +332,14 @@
                         <span v-else class="cs-big-val">{{
                             char.XP ?? 0
                         }}</span>
+                        <span
+                            class="cs-tip"
+                            style="display: block; margin-top: 2px"
+                            :style="(char.XP ?? 0) >= xpThreshold ? 'color: var(--accent-2, #c9a227); opacity: 1' : ''"
+                            data-testid="xp-threshold"
+                        >
+                            {{ (char.XP ?? 0) >= xpThreshold ? "level up!" : `next level at ${xpThreshold}` }}
+                        </span>
                     </div>
                 </div>
 
@@ -1700,6 +1708,17 @@
                             @keyup.enter="submitAddTreasure"
                             @keyup.escape="showAddTreasure = false"
                         />
+                        <input
+                            v-model.number="newTreasureXpDraft"
+                            type="number"
+                            min="0"
+                            placeholder="XP"
+                            title="XP awarded for this haul (Shadowdark: treasure is the XP)"
+                            class="cs-input"
+                            data-testid="treasure-xp"
+                            style="width: 56px; text-align: center"
+                            @keyup.enter="submitAddTreasure"
+                        />
                         <button
                             class="cs-btn primary"
                             @click="submitAddTreasure"
@@ -2499,15 +2518,19 @@ function saveGearEdit(instanceId) {
 }
 
 const showAddTreasure = ref(false);
+// shadowdark levels on 10 xp per current level; house rules can just ignore
+// the hint
+const xpThreshold = computed(() => 10 * Math.max(1, char.value?.level ?? 1));
+
 const newTreasureDraft = ref("");
+const newTreasureXpDraft = ref(null);
 function submitAddTreasure() {
     const t = newTreasureDraft.value.trim();
     if (!t) return;
-    characterStore.updateField("treasures", [
-        ...(char.value.treasures ?? []),
-        t,
-    ]);
+    // shadowdark: treasure is the xp. one call books the loot and the award
+    characterStore.awardHaul(t, newTreasureXpDraft.value || 0);
     newTreasureDraft.value = "";
+    newTreasureXpDraft.value = null;
     showAddTreasure.value = false;
 }
 function removeTreasure(idx) {
