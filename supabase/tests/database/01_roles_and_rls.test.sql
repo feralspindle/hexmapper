@@ -121,6 +121,12 @@ values ('10000000-0000-0000-0000-000000000001', 'Quest');
 insert into public.party_session_notes (session_id, title, content)
 values ('10000000-0000-0000-0000-000000000001', 'Session one', 'Notes');
 
+insert into public.light_sources (session_id, created_by, name)
+values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Torch');
+
+insert into public.journal_entries (session_id, author_user_id, author_name, body)
+values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'We set out at dawn.');
+
 insert into public.oracle_tables
   (id, session_id, created_by, name)
 values ('b0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Encounters');
