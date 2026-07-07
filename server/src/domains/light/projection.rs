@@ -3,7 +3,6 @@
 //! the timer algebra matches the session torch: pause folds the running span
 //! into elapsed_ms, the client interpolates from started_at while running.
 
-use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 

@@ -18,6 +18,8 @@ export const useSessionStore = defineStore('session', () => {
   const torchRunning   = ref(false)
   const torchElapsedMs = ref(0)
   const torchStartedAt = ref(null)
+  const crawlRound     = ref(0)
+  const crawlCheckEvery = ref(3)
   const loading        = ref(false)
   const error          = ref(null)
 
@@ -49,6 +51,8 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = data.torch_running ?? false
     torchElapsedMs.value = data.torch_elapsed_ms ?? 0
     torchStartedAt.value = data.torch_started_at ?? null
+    crawlRound.value     = data.crawl_round ?? 0
+    crawlCheckEvery.value = data.crawl_check_every ?? 3
   }
 
   function _subscribeToSession(id) {
@@ -73,6 +77,8 @@ export const useSessionStore = defineStore('session', () => {
           if (row.torch_running !== undefined)    torchRunning.value   = row.torch_running
           if (row.torch_elapsed_ms !== undefined) torchElapsedMs.value = row.torch_elapsed_ms
           if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
+          if (row.crawl_round !== undefined)      crawlRound.value     = row.crawl_round ?? 0
+          if (row.crawl_check_every !== undefined) crawlCheckEvery.value = row.crawl_check_every ?? 3
         },
       )
       .subscribe()
@@ -286,6 +292,41 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function advanceCrawlRound() {
+    crawlRound.value += 1
+    try {
+      // encounter result comes back for the caller; everyone else gets the
+      // round bump via the session UPDATE and any encounter via chat
+      return await apiClient.post(`/sessions/${sessionId.value}/crawl-round`, { action: 'advance' }, 'crawl_advance')
+    } catch (err) {
+      crawlRound.value -= 1
+      console.error('advanceCrawlRound:', err instanceof ApiError ? err.message : err)
+      return null
+    }
+  }
+
+  async function resetCrawlRound() {
+    const previous = crawlRound.value
+    crawlRound.value = 0
+    try {
+      await apiClient.post(`/sessions/${sessionId.value}/crawl-round`, { action: 'reset' }, 'crawl_reset')
+    } catch (err) {
+      crawlRound.value = previous
+      console.error('resetCrawlRound:', err instanceof ApiError ? err.message : err)
+    }
+  }
+
+  async function setCrawlCheckEvery(every) {
+    const previous = crawlCheckEvery.value
+    crawlCheckEvery.value = every
+    try {
+      await apiClient.patch(`/sessions/${sessionId.value}`, { crawl_check_every: every }, 'crawl_config')
+    } catch (err) {
+      crawlCheckEvery.value = previous
+      console.error('setCrawlCheckEvery:', err instanceof ApiError ? err.message : err)
+    }
+  }
+
   async function torchStart() {
     torchRunning.value = true
     try {
@@ -327,6 +368,8 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = false
     torchElapsedMs.value = 0
     torchStartedAt.value = null
+    crawlRound.value     = 0
+    crawlCheckEvery.value = 3
   }
 
   return {
@@ -340,6 +383,11 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning,
     torchElapsedMs,
     torchStartedAt,
+    crawlRound,
+    crawlCheckEvery,
+    advanceCrawlRound,
+    resetCrawlRound,
+    setCrawlCheckEvery,
     isGM,
     loading,
     error,
