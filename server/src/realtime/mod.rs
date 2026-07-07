@@ -272,7 +272,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
         }
     });
 
-    let mut heartbeat = tokio::time::interval(Duration::from_secs(25));
+    // interval() fires its first tick immediately, which would run the expiry
+    // check in the same instant the token was just verified — a token expiring
+    // in that exact second would get ready then killed (issue #25). Start the
+    // schedule one period out instead.
+    let mut heartbeat = tokio::time::interval_at(
+        tokio::time::Instant::now() + Duration::from_secs(25),
+        Duration::from_secs(25),
+    );
     let mut last_pong = Instant::now();
     let reason = loop {
         tokio::select! {
