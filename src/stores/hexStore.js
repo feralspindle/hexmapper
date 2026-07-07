@@ -291,6 +291,25 @@ export const useHexStore = defineStore("hex", () => {
 
   let mapPartyChannel = null;
 
+  // maps rows don't carry source_client, so our own party patches echo back.
+  // while any are in flight the echoes are stale against newer optimistic
+  // moves; the patches are also chained so they commit in order
+  let _pendingPartyWrites = 0;
+  let _partyWriteQueue = Promise.resolve();
+
+  async function _patchPartyHex(mapId, patch, intent) {
+    _pendingPartyWrites += 1;
+    const write = _partyWriteQueue.then(() =>
+      apiClient.patch(`/maps/${mapId}`, patch, intent),
+    );
+    _partyWriteQueue = write.then(() => {}, () => {});
+    try {
+      await write;
+    } finally {
+      _pendingPartyWrites -= 1;
+    }
+  }
+
   function _setupMapPartyChannel(mapId) {
     if (mapPartyChannel) realtime.removeChannel(mapPartyChannel);
     mapPartyChannel = realtime
@@ -305,6 +324,7 @@ export const useHexStore = defineStore("hex", () => {
         },
         ({ new: row }) => {
           if (row.party_hex_q !== undefined || row.party_hex_r !== undefined) {
+            if (_pendingPartyWrites > 0) return;
             const next =
               row.party_hex_q != null
                 ? { q: row.party_hex_q, r: row.party_hex_r }
@@ -340,7 +360,7 @@ export const useHexStore = defineStore("hex", () => {
     partyHex.value = { q, r };
     _savePartyHex();
     try {
-      await apiClient.patch(`/maps/${currentMapId.value}`, { party_hex_q: q, party_hex_r: r }, "move_party");
+      await _patchPartyHex(currentMapId.value, { party_hex_q: q, party_hex_r: r }, "move_party");
     } catch (error) {
       console.error("setPartyHex db update error:", error instanceof ApiError ? error.message : error);
     }
@@ -389,7 +409,7 @@ export const useHexStore = defineStore("hex", () => {
     partyHex.value = null;
     _savePartyHex();
     try {
-      await apiClient.patch(`/maps/${currentMapId.value}`, { party_hex_q: null, party_hex_r: null }, "clear_party_hex");
+      await _patchPartyHex(currentMapId.value, { party_hex_q: null, party_hex_r: null }, "clear_party_hex");
     } catch (error) {
       console.error("clearPartyHex db update error:", error instanceof ApiError ? error.message : error);
     }

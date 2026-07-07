@@ -35,6 +35,19 @@ export const useSessionStore = defineStore('session', () => {
   let _stopAuthWatch  = null
   let _stopPageHide   = null
 
+  // fields we've written optimistically with the patch still in flight. the
+  // session UPDATE echo carries every column, so until our own write commits
+  // any echo (ours or another client's) holds a stale value for these
+  const _pendingFields = new Map()
+  function _beginField(field) {
+    _pendingFields.set(field, (_pendingFields.get(field) ?? 0) + 1)
+  }
+  function _endField(field) {
+    const count = _pendingFields.get(field) ?? 0
+    if (count <= 1) _pendingFields.delete(field)
+    else _pendingFields.set(field, count - 1)
+  }
+
   const onlineUsers = ref([])
   const latestJoin  = ref(null)
 
@@ -65,14 +78,15 @@ export const useSessionStore = defineStore('session', () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${id}` },
         ({ new: row }) => {
-          if (row.name !== undefined)             sessionName.value    = row.name
-          if (row.active_map_id !== undefined)    activeMapId.value    = row.active_map_id ?? null
-          if (row.hex_mode !== undefined)         hexMode.value        = row.hex_mode
-          if (row.gm_initiative !== undefined)    gmInitiative.value   = row.gm_initiative ?? null
-          if (row.play_mode !== undefined)        playMode.value       = row.play_mode ?? 'gm'
-          if (row.torch_running !== undefined)    torchRunning.value   = row.torch_running
-          if (row.torch_elapsed_ms !== undefined) torchElapsedMs.value = row.torch_elapsed_ms
-          if (row.torch_started_at !== undefined) torchStartedAt.value = row.torch_started_at ?? null
+          const fresh = field => row[field] !== undefined && !_pendingFields.has(field)
+          if (fresh('name'))             sessionName.value    = row.name
+          if (fresh('active_map_id'))    activeMapId.value    = row.active_map_id ?? null
+          if (fresh('hex_mode'))         hexMode.value        = row.hex_mode
+          if (fresh('gm_initiative'))    gmInitiative.value   = row.gm_initiative ?? null
+          if (fresh('play_mode'))        playMode.value       = row.play_mode ?? 'gm'
+          if (fresh('torch_running'))    torchRunning.value   = row.torch_running
+          if (fresh('torch_elapsed_ms')) torchElapsedMs.value = row.torch_elapsed_ms
+          if (fresh('torch_started_at')) torchStartedAt.value = row.torch_started_at ?? null
         },
       )
       .subscribe()
@@ -161,6 +175,7 @@ export const useSessionStore = defineStore('session', () => {
   async function updateSessionName(name) {
     const prev = sessionName.value
     sessionName.value = name
+    _beginField('name')
     try {
       await apiClient.patch(`/sessions/${sessionId.value}`, { name }, 'rename_session')
       const idx = userSessions.value.findIndex(s => s.id === sessionId.value)
@@ -168,17 +183,22 @@ export const useSessionStore = defineStore('session', () => {
     } catch (err) {
       console.error('updateSessionName:', err instanceof ApiError ? err.message : err)
       sessionName.value = prev
+    } finally {
+      _endField('name')
     }
   }
 
   async function setActiveMapId(mapId) {
     const prev = activeMapId.value
     activeMapId.value = mapId
+    _beginField('active_map_id')
     try {
       await apiClient.patch(`/sessions/${sessionId.value}`, { active_map_id: mapId }, 'set_active_map')
     } catch (err) {
       console.error('setActiveMapId:', err instanceof ApiError ? err.message : err)
       activeMapId.value = prev
+    } finally {
+      _endField('active_map_id')
     }
   }
 
@@ -194,6 +214,7 @@ export const useSessionStore = defineStore('session', () => {
   async function setGmInitiative(score) {
     const previous = gmInitiative.value
     gmInitiative.value = score ?? null
+    _beginField('gm_initiative')
     try {
       await apiClient.patch(
         `/sessions/${sessionId.value}`,
@@ -205,6 +226,8 @@ export const useSessionStore = defineStore('session', () => {
       console.error('setGmInitiative:', err instanceof ApiError ? err.message : err)
       gmInitiative.value = previous
       return false
+    } finally {
+      _endField('gm_initiative')
     }
   }
 
@@ -212,6 +235,7 @@ export const useSessionStore = defineStore('session', () => {
     if (!['gm', 'gm_less'].includes(mode)) return false
     const previous = playMode.value
     playMode.value = mode
+    _beginField('play_mode')
     try {
       await apiClient.patch(`/sessions/${sessionId.value}`, { play_mode: mode }, 'set_play_mode')
       return true
@@ -219,6 +243,8 @@ export const useSessionStore = defineStore('session', () => {
       console.error('setPlayMode:', err instanceof ApiError ? err.message : err)
       playMode.value = previous
       return false
+    } finally {
+      _endField('play_mode')
     }
   }
 
@@ -288,9 +314,11 @@ export const useSessionStore = defineStore('session', () => {
 
   async function torchStart() {
     torchRunning.value = true
+    _beginField('torch_running')
     try {
       await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'start' }, 'session_torch_start')
     } catch (err) { console.error('session torchStart:', err instanceof ApiError ? err.message : err) }
+    finally { _endField('torch_running') }
   }
 
   async function torchPause() {
@@ -301,9 +329,11 @@ export const useSessionStore = defineStore('session', () => {
 
   async function torchReset() {
     torchElapsedMs.value = 0
+    _beginField('torch_elapsed_ms')
     try {
       await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'reset' }, 'session_torch_reset')
     } catch (err) { console.error('session torchReset:', err instanceof ApiError ? err.message : err) }
+    finally { _endField('torch_elapsed_ms') }
   }
 
   function cleanupPresence() {
