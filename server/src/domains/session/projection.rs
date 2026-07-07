@@ -27,12 +27,14 @@ fn snapshot_columns(s: &str) -> String {
         {s}->>'hex_mode',
         ({s}->>'gm_initiative')::integer,
         coalesce({s}->>'play_mode', 'gm'),
+        coalesce(({s}->>'crawl_round')::integer, 0),
+        coalesce(({s}->>'crawl_check_every')::integer, 3),
         coalesce({s}->'initiative_state', '{{"entries": [], "active_id": null, "round": 1}}'::jsonb)
         "#
     )
 }
 
-const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative, play_mode, initiative_state";
+const COLS: &str = "id, name, created_at, updated_at, owner_id, map_hex_size, active_map_id, party_hex_q, party_hex_r, torch_running, torch_elapsed_ms, torch_started_at, hex_mode, gm_initiative, play_mode, crawl_round, crawl_check_every, initiative_state";
 
 /// Wraps a `sessions` mutation that exposes `s` (the updated/inserted row) in a
 /// `session.<event>` snapshot event. Returns the row JSON (or None if 0 rows).
@@ -112,6 +114,7 @@ pub async fn update(
             party_hex_r   = case when $3 ? 'party_hex_r' then ($3->>'party_hex_r')::int else party_hex_r end,
             gm_initiative = case when $3 ? 'gm_initiative' then ($3->>'gm_initiative')::integer else gm_initiative end,
             play_mode     = case when $3 ? 'play_mode' then $3->>'play_mode' else play_mode end,
+            crawl_check_every = case when $3 ? 'crawl_check_every' then ($3->>'crawl_check_every')::integer else crawl_check_every end,
             updated_at    = now()
         where id = $1
         returning *
@@ -219,6 +222,32 @@ pub async fn set_initiative_state(
     .fetch_optional(&mut **tx)
     .await?;
     Ok(row)
+}
+
+/// bump the crawling round and hand back the fresh session row so the handler
+/// can run the encounter check against the new count
+pub async fn crawl_advance(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<Option<Value>, AppError> {
+    run_event(
+        tx,
+        "update sessions set crawl_round = crawl_round + 1, updated_at = now() where id = $1 returning *",
+        "session.updated", id, metadata,
+    ).await
+}
+
+pub async fn crawl_reset(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    metadata: &Value,
+) -> Result<Option<Value>, AppError> {
+    run_event(
+        tx,
+        "update sessions set crawl_round = 0, updated_at = now() where id = $1 returning *",
+        "session.updated", id, metadata,
+    ).await
 }
 
 pub async fn delete(

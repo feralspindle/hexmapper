@@ -9,6 +9,8 @@
     <div v-show="activeTab === 0" class="ds-tab-pane">
       <DungeonDiceSection ref="diceSectionRef" />
       <InitiativeSection />
+      <CrawlTracker />
+      <LightsSection />
       <DungeonSessionSection />
     </div>
 
@@ -30,6 +32,8 @@ import DungeonDiceSection    from './DungeonDiceSection.vue'
 import DungeonPhotosSection  from './DungeonPhotosSection.vue'
 import DungeonSessionSection from './DungeonSessionSection.vue'
 import InitiativeSection     from '@/components/common/InitiativeSection.vue'
+import CrawlTracker          from '@/components/common/CrawlTracker.vue'
+import LightsSection         from '@/components/common/LightsSection.vue'
 import OraclePanel           from '@/components/common/OraclePanel.vue'
 import { useD }              from '@/stores/dungeonStore.js'
 import { useDiceStore }      from '@/stores/diceStore.js'
