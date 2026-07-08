@@ -260,9 +260,10 @@ export const useVaultStore = defineStore('vault', () => {
     }
   }
 
-  async function claimLoot(lootItem) {
+  async function claimLoot(lootItem, qty = lootItem.quantity) {
     const characterStore = useCharacterStore()
     if (!characterStore.character) return
+    qty = Math.min(Math.max(Math.floor(qty), 1), lootItem.quantity)
     const authStore = useAuthStore()
     const userId = authStore.user?.id
     const member = characterStore.memberSelections.find(m => m.user_id === userId)
@@ -270,16 +271,20 @@ export const useVaultStore = defineStore('vault', () => {
     const currency = lootItem.currency
       ?? (['gold', 'silver', 'copper'].find(c => (lootItem.name ?? '').toLowerCase().includes(c)) ?? null)
     if (lootItem.loot_type === 'coins' && currency) {
-      characterStore.adjustMoney(currency, lootItem.quantity)
-      broadcastLootToast({ type: 'coins', charName, currency, amount: lootItem.quantity })
+      characterStore.adjustMoney(currency, qty)
+      broadcastLootToast({ type: 'coins', charName, currency, amount: qty })
     } else {
       characterStore.addGearItem({
         name:     lootItem.name,
         slots:    1,
-        quantity: lootItem.quantity,
+        quantity: qty,
         type:     'sundry',
       })
-      broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty: lootItem.quantity })
+      broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty })
+    }
+    if (qty < lootItem.quantity) {
+      // no patch endpoint for loot rows, so the leftover goes back as a new row (same as assignLoot)
+      await addLoot(lootItem.name, lootItem.quantity - qty, lootItem.notes, lootItem.loot_type ?? 'item', lootItem.currency ?? null)
     }
     await _removeLoot(lootItem.id)
   }
