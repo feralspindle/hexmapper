@@ -105,6 +105,23 @@ pub async fn create_loot(
     Ok(Json(row))
 }
 
+pub async fn update_loot(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(patch): Json<Value>,
+) -> Result<StatusCode, AppError> {
+    let session_id = authz::row_session_id(state.pool(), authz::SessionTable::PartyVaultLoot, id).await?.ok_or(AppError::NotFound)?;
+    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let metadata = auth.metadata();
+    retry_tx!(state.pool(), |tx| {
+        loot_projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn delete_loot(
     State(state): State<AppState>,
     auth: AuthUser,

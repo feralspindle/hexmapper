@@ -120,6 +120,10 @@ export const useVaultStore = defineStore('vault', () => {
         if (e.eventType === 'INSERT') {
           if (_deletedLootIds.has(e.new.id)) return
           if (!loot.value.find(l => l.id === e.new.id)) loot.value.push(e.new)
+        } else if (e.eventType === 'UPDATE') {
+          if (_deletedLootIds.has(e.new.id)) return
+          const idx = loot.value.findIndex(l => l.id === e.new.id)
+          if (idx !== -1) loot.value[idx] = e.new
         } else if (e.eventType === 'DELETE') {
           _deletedLootIds.add(e.old.id)
           loot.value = loot.value.filter(l => l.id !== e.old.id)
@@ -249,6 +253,16 @@ export const useVaultStore = defineStore('vault', () => {
     }
   }
 
+  async function _patchLoot(id, patch) {
+    const idx = loot.value.findIndex(l => l.id === id)
+    if (idx !== -1) loot.value[idx] = { ...loot.value[idx], ...patch }
+    try {
+      await apiClient.patch(`/vault-loot/${id}`, { ...patch, source_client: CLIENT_ID })
+    } catch (error) {
+      console.error('_patchLoot:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
   async function _removeLoot(id) {
     _deletedLootIds.add(id)
     loot.value = loot.value.filter(l => l.id !== id)
@@ -283,10 +297,13 @@ export const useVaultStore = defineStore('vault', () => {
       broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty })
     }
     if (qty < lootItem.quantity) {
-      // no patch endpoint for loot rows, so the leftover goes back as a new row (same as assignLoot)
-      await addLoot(lootItem.name, lootItem.quantity - qty, lootItem.notes, lootItem.loot_type ?? 'item', lootItem.currency ?? null)
+      // a partial claim shrinks the pile in place - one update event instead of
+      // a delete + re-add pair, so a dropped realtime frame can't leave other
+      // clients holding a ghost card
+      await _patchLoot(lootItem.id, { quantity: lootItem.quantity - qty })
+    } else {
+      await _removeLoot(lootItem.id)
     }
-    await _removeLoot(lootItem.id)
   }
 
   async function _addVaultItem(containerId, name, quantity, notes = '', slots = 0, itemType = 'sundry', currency = null) {
@@ -372,9 +389,10 @@ export const useVaultStore = defineStore('vault', () => {
     }
     const totalAssigned = assignments.reduce((s, a) => s + a.qty, 0)
     if (totalAssigned < lootItem.quantity) {
-      await addLoot(lootItem.name, lootItem.quantity - totalAssigned, lootItem.notes, lootItem.loot_type ?? 'item')
+      await _patchLoot(lootItem.id, { quantity: lootItem.quantity - totalAssigned })
+    } else {
+      await _removeLoot(lootItem.id)
     }
-    await _removeLoot(lootItem.id)
   }
 
   async function discardLoot(lootItem) {

@@ -1,5 +1,6 @@
-//! Projection of `party_vault_loot` events into `party_vault_loot`. Create + delete
-//! collection aggregate, full-snapshot events (see notebook projection.rs pattern).
+//! Projection of `party_vault_loot` events into `party_vault_loot`. Create /
+//! update (partial patch) / delete collection aggregate, full-snapshot events
+//! (see item_projection.rs pattern).
 
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
@@ -65,6 +66,36 @@ pub async fn create(
     Ok(row)
 }
 
+pub async fn update(tx: &mut Transaction<'_, Postgres>, id: Uuid, patch: &Value, metadata: &Value) -> Result<(), AppError> {
+    sqlx::query(
+        r#"
+        with upd as (
+            update party_vault_loot set
+                name          = coalesce($2->>'name', name),
+                quantity      = coalesce(($2->>'quantity')::int, quantity),
+                notes         = coalesce($2->>'notes', notes),
+                loot_type     = coalesce($2->>'loot_type', loot_type),
+                currency      = coalesce($2->>'currency', currency),
+                source_client = $2->>'source_client'
+            where id = $1
+            returning *
+        ),
+        evt as (
+            insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
+            select 'party_vault_loot', upd.id, upd.session_id,
+                coalesce((select max(sequence) from events e where e.aggregate_type = 'party_vault_loot' and e.aggregate_id = upd.id), 0) + 1,
+                'party_vault_loot.updated', to_jsonb(upd), $3
+            from upd
+        )
+        select 1
+        "#,
+    )
+    .bind(id).bind(patch).bind(metadata)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub async fn delete(tx: &mut Transaction<'_, Postgres>, id: Uuid, metadata: &Value) -> Result<(), AppError> {
     sqlx::query(
         r#"
@@ -93,7 +124,8 @@ pub fn replay_select(target_table: &str) -> String {
         insert into {target_table} ({COLS})
         select distinct on (e.aggregate_id) {cols}
         from events e
-        where e.aggregate_type = 'party_vault_loot' and e.event_type = 'party_vault_loot.created'
+        where e.aggregate_type = 'party_vault_loot'
+          and e.event_type in ('party_vault_loot.created', 'party_vault_loot.updated')
           and not exists (
             select 1 from events d
             where d.aggregate_type = 'party_vault_loot' and d.aggregate_id = e.aggregate_id

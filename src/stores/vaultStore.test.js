@@ -116,8 +116,7 @@ describe('vaultStore', () => {
     expect(kit.character.adjustMoney).not.toHaveBeenCalled()
   })
 
-  test('claiming part of an item stack returns the rest to the pile', async () => {
-    kit.api['post /vault-loot'] = body => lootItem({ id: 'loot-rest', ...body })
+  test('claiming part of an item stack shrinks the pile in place', async () => {
     const store = useVaultStore()
     await store.init('s1')
     store.loot.push(lootItem({ quantity: 5 }))
@@ -125,12 +124,13 @@ describe('vaultStore', () => {
     await store.claimLoot(store.loot[0], 2)
 
     expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Longsword', slots: 1, quantity: 2, type: 'sundry' })
-    expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-loot', expect.objectContaining({ name: 'Longsword', quantity: 3 }))
-    expect(store.loot.map(l => l.id)).toEqual(['loot-rest'])
+    expect(kit.apiClient.patch).toHaveBeenCalledWith('/vault-loot/loot-1', expect.objectContaining({ quantity: 3 }))
+    expect(kit.apiClient.delete).not.toHaveBeenCalled()
+    expect(store.loot).toHaveLength(1)
+    expect(store.loot[0]).toMatchObject({ id: 'loot-1', quantity: 3 })
   })
 
-  test('claiming part of a coin stack keeps the leftover currency', async () => {
-    kit.api['post /vault-loot'] = body => lootItem({ id: 'loot-rest', ...body })
+  test('claiming part of a coin stack pays only that amount and keeps the row', async () => {
     const store = useVaultStore()
     await store.init('s1')
     store.loot.push(lootItem({ loot_type: 'coins', currency: 'gold', quantity: 50 }))
@@ -138,8 +138,8 @@ describe('vaultStore', () => {
     await store.claimLoot(store.loot[0], 10)
 
     expect(kit.character.adjustMoney).toHaveBeenCalledWith('gold', 10)
-    expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-loot', expect.objectContaining({ quantity: 40, loot_type: 'coins', currency: 'gold' }))
-    expect(store.loot.map(l => l.id)).toEqual(['loot-rest'])
+    expect(kit.apiClient.patch).toHaveBeenCalledWith('/vault-loot/loot-1', expect.objectContaining({ quantity: 40 }))
+    expect(store.loot[0]).toMatchObject({ id: 'loot-1', quantity: 40, currency: 'gold' })
   })
 
   test('a claim qty above the stack size claims the whole stack once', async () => {
@@ -150,8 +150,23 @@ describe('vaultStore', () => {
     await store.claimLoot(store.loot[0], 99)
 
     expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Longsword', slots: 1, quantity: 3, type: 'sundry' })
-    expect(kit.apiClient.post).not.toHaveBeenCalledWith('/vault-loot', expect.anything())
+    expect(kit.apiClient.patch).not.toHaveBeenCalled()
     expect(store.loot).toEqual([])
+  })
+
+  test('realtime loot updates from other clients apply; own echoes are suppressed', async () => {
+    kit.responses.party_vault_loot = { data: [lootItem({ quantity: 5 })], error: null }
+    const store = useVaultStore()
+    await store.init('s1')
+    const lootChannel = kit.channels.find(c => c.name.startsWith('vault:loot:'))
+
+    lootChannel.emitPostgres('party_vault_loot', 'UPDATE', lootItem({ quantity: 3, source_client: 'other' }))
+    expect(store.loot[0].quantity).toBe(3)
+
+    await store.claimLoot(store.loot[0], 1)
+    const ownClientId = kit.apiClient.patch.mock.calls.at(-1)[1].source_client
+    lootChannel.emitPostgres('party_vault_loot', 'UPDATE', lootItem({ quantity: 3, source_client: ownClientId }))
+    expect(store.loot[0].quantity).toBe(2)
   })
 
   test('claiming without an active character is a no-op that preserves the loot', async () => {
@@ -218,8 +233,7 @@ describe('vaultStore', () => {
     expect(store.loot).toHaveLength(1)
   })
 
-  test('assignLoot gives gear per assignment and returns the leftover to the pile', async () => {
-    kit.api['post /vault-loot'] = body => lootItem({ id: 'loot-rest', ...body })
+  test('assignLoot gives gear per assignment and shrinks the pile by the leftover', async () => {
     const store = useVaultStore()
     await store.init('s1')
     store.loot.push(lootItem({ quantity: 5 }))
@@ -230,8 +244,19 @@ describe('vaultStore', () => {
     ])
 
     expect(kit.character.addGearItemToChar).toHaveBeenCalledTimes(2)
-    expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-loot', expect.objectContaining({ quantity: 2 }))
-    expect(store.loot.map(l => l.id)).toEqual(['loot-rest'])
+    expect(kit.apiClient.patch).toHaveBeenCalledWith('/vault-loot/loot-1', expect.objectContaining({ quantity: 2 }))
+    expect(store.loot[0]).toMatchObject({ id: 'loot-1', quantity: 2 })
+  })
+
+  test('assigning the whole pile deletes the row', async () => {
+    const store = useVaultStore()
+    await store.init('s1')
+    store.loot.push(lootItem({ quantity: 2 }))
+
+    await store.assignLoot(store.loot[0], [{ char: { id: 'c1' }, qty: 2 }])
+
+    expect(kit.apiClient.delete).toHaveBeenCalledWith('/vault-loot/loot-1')
+    expect(store.loot).toEqual([])
   })
 
   test('withdrawCoins drains smallest stacks first and splits the last one', async () => {

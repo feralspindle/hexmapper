@@ -9,6 +9,7 @@ pub fn router() -> Router<AppState> {
         .route("/vault-containers", post(handlers::create_container))
         .route("/vault-containers/{id}", delete(handlers::delete_container))
         .route("/vault-loot", post(handlers::create_loot))
+        .route("/vault-loot/{id}", patch(handlers::update_loot))
         .route("/vault-loot/{id}", delete(handlers::delete_loot))
         .route("/vault-items", post(handlers::create_item))
         .route("/vault-items/{id}", patch(handlers::update_item))
