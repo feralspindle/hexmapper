@@ -425,15 +425,11 @@
                 <div v-if="!isGmCharacter" class="cs-luck-block">
                     <div class="cs-luck-header">
                         <span class="cs-section-label">Luck</span>
-                        <span class="cs-luck-count"
-                            >{{ luckCurrent }}&thinsp;/&thinsp;{{
-                                luckMax
-                            }}</span
-                        >
+                        <span class="cs-luck-count">{{ luckCurrent }}</span>
                     </div>
                     <div class="cs-luck-gems">
                         <span
-                            v-for="i in luckMax"
+                            v-for="i in luckGemCount"
                             :key="i"
                             class="cs-luck-gem"
                             :class="{ filled: i <= luckCurrent }"
@@ -467,12 +463,11 @@
                             Spend Luck Token
                         </button>
                         <button
-                            v-if="luckCurrent < luckMax"
                             class="cs-add-btn"
                             style="margin-top: 6px"
                             @click="characterStore.adjustLuck(1)"
                         >
-                            + Restore Token
+                            + Add Token
                         </button>
                     </template>
                 </div>
@@ -2342,7 +2337,11 @@ function submitAddCoin() {
 }
 
 const luckCurrent = computed(() => char.value?.luckTokens?.current ?? 1);
-const luckMax = computed(() => char.value?.luckTokens?.max ?? 3);
+// tokens are uncapped, show at least the old baseline of 3 gems and keep
+// one empty outline past the filled ones as a hint that more can be added
+const luckGemCount = computed(() =>
+    Math.max(char.value?.luckTokens?.max ?? 3, luckCurrent.value + 1),
+);
 
 function handleSpendLuck() {
     characterStore.spendLuckToken();
@@ -3489,6 +3488,7 @@ button.cs-clickable:hover {
 
 .cs-luck-gems {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     align-items: center;
 }

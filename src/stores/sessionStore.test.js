@@ -94,6 +94,29 @@ describe('sessionStore', () => {
     expect(store.sessionName).toBe('The Sunken Keep')
   })
 
+  test('a session UPDATE echo cannot stomp a field with our own write in flight', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow()
+    let resolvePatch
+    kit.api['patch /sessions/sess-1'] = () => new Promise(resolve => { resolvePatch = resolve })
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+    const configChannel = kit.channels.find(c => c.name === 'session:sess-1:config')
+
+    const write = store.setGmInitiative(15)
+
+    // the echo carries the whole row, so it holds the pre-write value for our
+    // field - it must not stomp it, but other fields still apply
+    configChannel.emitPostgres('sessions', 'UPDATE', { gm_initiative: null, torch_running: true })
+    expect(store.gmInitiative).toBe(15)
+    expect(store.torchRunning).toBe(true)
+
+    resolvePatch({})
+    await write
+    // once the write lands, echoes for the field apply again
+    configChannel.emitPostgres('sessions', 'UPDATE', { gm_initiative: 3 })
+    expect(store.gmInitiative).toBe(3)
+  })
+
   test('reconnect refetches the session row so a missed map switch is applied', async () => {
     kit.api['post /sessions/sess-1/join'] = sessionRow()
     const store = useSessionStore()
@@ -196,6 +219,23 @@ describe('sessionStore', () => {
     kit.api['delete /sessions/owned-1'] = null
     expect(await store.deleteSession('owned-1')).toBe(true)
     expect(store.userSessions).toHaveLength(0)
+    errorSpy.mockRestore()
+  })
+
+  test('leaveSession removes the joined session from the list only when the API succeeds', async () => {
+    kit.responses.sessions = { data: [], error: null }
+    kit.responses.session_members = { data: [{ session: { id: 'joined-1', name: 'Theirs' } }], error: null }
+    const store = useSessionStore()
+    await store.fetchUserSessions()
+
+    kit.api['post /sessions/joined-1/leave'] = new kit.ApiError('nope', 500)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await store.leaveSession('joined-1')).toBe(false)
+    expect(store.joinedSessions).toHaveLength(1)
+
+    kit.api['post /sessions/joined-1/leave'] = null
+    expect(await store.leaveSession('joined-1')).toBe(true)
+    expect(store.joinedSessions).toHaveLength(0)
     errorSpy.mockRestore()
   })
 

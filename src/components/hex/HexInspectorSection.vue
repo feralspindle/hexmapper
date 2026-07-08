@@ -353,6 +353,7 @@
                         v-for="k in GM_MARKER_KINDS"
                         :key="k.id"
                         class="hm-marker-chip"
+                        :data-testid="`gm-marker-add-${k.id}`"
                         :title="`Add ${k.label}`"
                         @click="doAddGmMarker(k.id)"
                     >
@@ -727,9 +728,13 @@
                 </template>
             </div>
 
-            <div style="padding-top: 4px; border-top: 1px solid var(--rule)">
+            <div
+                v-if="sessionStore.isGM"
+                style="padding-top: 4px; border-top: 1px solid var(--rule)"
+            >
                 <button
                     class="hm-ghost-btn hm-ghost-btn--danger"
+                    data-testid="clear-hex"
                     @click="clearHex"
                 >
                     Clear hex data

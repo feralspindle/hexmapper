@@ -172,6 +172,29 @@ describe('characterStore', () => {
     expect(store.character.tempHp).toBe(3)
   })
 
+  test('a realtime echo of a stale save cannot revert edits made while the save was in flight', async () => {
+    let resolvePatch
+    kit.api['patch /characters/c1'] = () => new Promise(resolve => { resolvePatch = resolve })
+    const store = await loadedStore([char('c1', { data: { maxHitPoints: 10, currentHp: 10, tempHp: 2 } })])
+
+    store.adjustHp(-3) // temp 2 -> 0, hp 10 -> 9
+    await vi.advanceTimersByTimeAsync(800) // debounce elapses, patch now in flight
+    expect(kit.apiClient.patch).toHaveBeenCalledTimes(1)
+
+    store.adjustHp(-2) // hp 9 -> 7 while the patch is still in flight
+    resolvePatch({})
+    await vi.advanceTimersByTimeAsync(0)
+
+    // the postgres echo of the first save arrives carrying the stale hp
+    kit.channels[0].emitPostgres('characters', 'UPDATE', { id: 'c1', session_id: 's1', data: { maxHitPoints: 10, currentHp: 9, tempHp: 0 } })
+    expect(store.character.currentHp).toBe(7)
+
+    // and the newer edit still gets saved
+    await vi.advanceTimersByTimeAsync(800)
+    expect(kit.apiClient.patch).toHaveBeenCalledTimes(2)
+    expect(kit.apiClient.patch).toHaveBeenLastCalledWith('/characters/c1', { data: expect.objectContaining({ currentHp: 7, tempHp: 0 }) }, 'save_character')
+  })
+
   test('adjustTempHp and setTempHp never go below zero', async () => {
     const store = await loadedStore([char('c1', { data: { maxHitPoints: 10, currentHp: 10, tempHp: 2 } })])
 
@@ -367,6 +390,19 @@ describe('characterStore', () => {
     store.spendLuckToken()
     expect(store.character.luckTokens.current).toBe(0)
     expect(store.luckEvents).toHaveLength(1)
+  })
+
+  test('adjustLuck goes past max and stops at zero', async () => {
+    const store = await loadedStore([char('c1', { data: { luckTokens: { current: 3, max: 3 } } })])
+
+    store.adjustLuck(1)
+    expect(store.character.luckTokens.current).toBe(4)
+
+    store.adjustLuck(3)
+    expect(store.character.luckTokens.current).toBe(7)
+
+    store.adjustLuck(-10)
+    expect(store.character.luckTokens.current).toBe(0)
   })
 
   test('a character_updated broadcast from another client updates that character', async () => {

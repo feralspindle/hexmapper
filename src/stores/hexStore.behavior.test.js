@@ -31,6 +31,7 @@ vi.mock('@/router/index.js', () => ({
 
 import router from '@/router/index.js'
 import { useHexStore } from './hexStore.js'
+import { usePartyFollow } from '@/composables/usePartyFollow.js'
 
 const cell = (q, r, overrides = {}) => ({
   id: `cell-${q}-${r}`,
@@ -46,6 +47,10 @@ function hexChannel() {
   return kit.channels.find(c => c.name === 'map:m1:hex')
 }
 
+function partyFollowChannel() {
+  return kit.channels.find(c => c.name === 'session:s1:party-follow')
+}
+
 describe('hexStore behavior', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -55,6 +60,7 @@ describe('hexStore behavior', () => {
     kit.responses.maps = { data: { party_hex_q: null, party_hex_r: null }, error: null }
     vi.mocked(router.push).mockClear()
     localStorage.clear()
+    usePartyFollow().dismiss()
   })
 
   test('GM init fetches through the API so unexplored cells stay redacted', async () => {
@@ -136,6 +142,37 @@ describe('hexStore behavior', () => {
 
     expect(store.hexCells.get('0:0').id).toBe('second-server')
     expect(store.hexCells.get('0:0').terrain_type).toBe('desert')
+  })
+
+  test('in fow mode with reveal-all on, an edit on an empty hex is stored as revealed', async () => {
+    kit.session.isGM = false
+    kit.mapStore.mapFogRevealAll = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'server-cell' })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.upsertHex(0, 0, { terrain_type: 'forest' })
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith(
+      '/hex-cells/upsert',
+      expect.objectContaining({ revealed: true }),
+      'edit_hex',
+    )
+    expect(store.hexCells.get('0:0').revealed).toBe(true)
+  })
+
+  test('under reveal-all an explicitly hidden cell keeps its override on edit', async () => {
+    kit.mapStore.mapFogRevealAll = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0, { revealed: false })]
+    kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'server-cell' })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.upsertHex(0, 0, { label: 'still hidden' })
+
+    const body = kit.apiClient.post.mock.calls.find(([path]) => path === '/hex-cells/upsert')[1]
+    expect('revealed' in body).toBe(false)
   })
 
   test('in blank mode a plain edit is stored as revealed', async () => {
@@ -382,6 +419,38 @@ describe('hexStore behavior', () => {
     expect(store.partyHex).toEqual({ q: 7, r: 8 })
   })
 
+  test('a maps UPDATE echo cannot snap the party marker back during rapid moves', async () => {
+    const resolvers = []
+    kit.api['patch /maps/m1'] = () => new Promise(resolve => { resolvers.push(resolve) })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+    const dbChannel = kit.channels.find(c => c.name === 'map:m1:party_db')
+
+    const move1 = store.setPartyHex(1, 1)
+    const move2 = store.setPartyHex(2, 2)
+    expect(store.partyHex).toEqual({ q: 2, r: 2 })
+
+    // the echo of the first move arrives while patches are still in flight
+    dbChannel.emitPostgres('maps', 'UPDATE', { id: 'm1', party_hex_q: 1, party_hex_r: 1 })
+    expect(store.partyHex).toEqual({ q: 2, r: 2 })
+
+    // patches are chained so the first can't commit after the second
+    await Promise.resolve()
+    expect(kit.apiClient.patch).toHaveBeenCalledTimes(1)
+    resolvers.shift()({})
+    await move1
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(kit.apiClient.patch).toHaveBeenCalledTimes(2)
+    resolvers.shift()({})
+    await move2
+    expect(store.partyHex).toEqual({ q: 2, r: 2 })
+
+    // once idle, another client's move applies again
+    dbChannel.emitPostgres('maps', 'UPDATE', { id: 'm1', party_hex_q: 9, party_hex_r: 9 })
+    expect(store.partyHex).toEqual({ q: 9, r: 9 })
+  })
+
   test('createDungeon creates the hex if needed then navigates to the new dungeon', async () => {
     kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'hex-id-1' })
     kit.api['post /dungeons'] = body => ({ id: 'dungeon-1', ...body })
@@ -394,15 +463,77 @@ describe('hexStore behavior', () => {
     expect(router.push).toHaveBeenCalledWith({ name: 'dungeon', params: { sessionId: 's1', dungeonId: 'dungeon-1' } })
   })
 
-  test('cleanup removes all three channels and resets state', async () => {
+  test('cleanup removes all four channels and resets state', async () => {
     kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(0, 0)]
     const store = useHexStore()
     await store.init('s1', 'm1')
     store.cleanup()
 
-    expect(kit.channels).toHaveLength(3)
+    expect(kit.channels).toHaveLength(4)
     expect(kit.channels.every(c => c.removed)).toBe(true)
     expect(store.hexCells.size).toBe(0)
     expect(store.partyHex).toBeNull()
+  })
+
+  test('gm entering an existing dungeon broadcasts dungeon_entered with its name', async () => {
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.responses.dungeons = { data: [{ id: 'd1', name: 'Barrowmaze' }], error: null }
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+    await store.fetchDungeonsForHex('cell-0-0')
+
+    store.navigateToDungeon('d1')
+
+    expect(partyFollowChannel().send).toHaveBeenCalledWith({
+      type: 'broadcast',
+      event: 'dungeon_entered',
+      payload: { dungeonId: 'd1', name: 'Barrowmaze' },
+    })
+    expect(router.push).toHaveBeenCalledWith({ name: 'dungeon', params: { sessionId: 's1', dungeonId: 'd1' } })
+  })
+
+  test('gm creating a dungeon broadcasts dungeon_entered', async () => {
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.api['post /hex-cells/upsert'] = body => ({ ...body, id: 'hex-id-1' })
+    kit.api['post /dungeons'] = body => ({ id: 'dungeon-1', ...body })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.createDungeon(0, 0, 'Deep Hole')
+
+    expect(partyFollowChannel().send).toHaveBeenCalledWith({
+      type: 'broadcast',
+      event: 'dungeon_entered',
+      payload: { dungeonId: 'dungeon-1', name: 'Deep Hole' },
+    })
+  })
+
+  test('player navigation does not broadcast and clears any pending invite', async () => {
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.session.isGM = false
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+    usePartyFollow().push({ dungeonId: 'd1', name: 'Barrowmaze' })
+
+    store.navigateToDungeon('d1')
+
+    expect(partyFollowChannel().send).not.toHaveBeenCalled()
+    expect(usePartyFollow().invite.value).toBeNull()
+    expect(router.push).toHaveBeenCalledWith({ name: 'dungeon', params: { sessionId: 's1', dungeonId: 'd1' } })
+  })
+
+  test('a dungeon_entered broadcast raises the invite for players but not the gm', async () => {
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.session.isGM = false
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    partyFollowChannel().emitBroadcast('dungeon_entered', { dungeonId: 'd2', name: 'Gloomvault' })
+    expect(usePartyFollow().invite.value).toEqual({ dungeonId: 'd2', name: 'Gloomvault' })
+
+    usePartyFollow().dismiss()
+    kit.session.isGM = true
+    partyFollowChannel().emitBroadcast('dungeon_entered', { dungeonId: 'd3', name: 'Other' })
+    expect(usePartyFollow().invite.value).toBeNull()
   })
 })
