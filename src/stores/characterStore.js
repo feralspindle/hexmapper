@@ -37,6 +37,7 @@ const RENOWN_LOG_MAX = 50
 
 export const useCharacterStore = defineStore('character', () => {
   const _saveTimers = new Map()
+  const _savesInFlight = new Map()
   const _broadcastTimers = new Map()
   let _realtimeChannel = null
 
@@ -506,7 +507,8 @@ export const useCharacterStore = defineStore('character', () => {
   function adjustLuck(delta) {
     if (!character.value) return
     const luck = character.value.luckTokens ?? { current: 1, max: 3 }
-    updateField('luckTokens', { ...luck, current: Math.max(0, Math.min(luck.max, luck.current + delta)) })
+    // no upper clamp, luck tokens can pile up past max (issue #58)
+    updateField('luckTokens', { ...luck, current: Math.max(0, luck.current + delta) })
   }
 
   function updateFieldForChar(id, field, value) {
@@ -543,13 +545,6 @@ export const useCharacterStore = defineStore('character', () => {
       event: 'gm_initiative_set',
       payload: { score },
     })
-  }
-
-  function setMaxLuck(max) {
-    if (!character.value) return
-    const luck = character.value.luckTokens ?? { current: 1, max: 3 }
-    const newMax = Math.max(0, max)
-    updateField('luckTokens', { current: Math.min(luck.current, newMax), max: newMax })
   }
 
   function _pushLuckEvent(payload) {
@@ -684,15 +679,30 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   async function _saveCharacter(charId) {
+    // serialize saves per character so a slow patch can't commit after a newer one
+    while (_savesInFlight.has(charId)) await _savesInFlight.get(charId)
     const char = characters.value.find(c => c.id === charId)
     if (!char) return
+    const timer = _saveTimers.get(charId)
     saving.value = true
-    try {
-      await apiClient.patch(`/characters/${charId}`, { data: char.data }, 'save_character')
-    } catch (error) {
-      console.error('characterStore._save:', error instanceof ApiError ? error.message : error)
-    } finally {
-      saving.value = false
+    const save = (async () => {
+      try {
+        await apiClient.patch(`/characters/${charId}`, { data: char.data }, 'save_character')
+      } catch (error) {
+        console.error('characterStore._save:', error instanceof ApiError ? error.message : error)
+      }
+    })()
+    _savesInFlight.set(charId, save)
+    await save
+    _savesInFlight.delete(charId)
+    saving.value = false
+    // an edit during the patch reschedules the save under the same id. deleting
+    // that newer timer would let this save's realtime echo clobber the fresher
+    // local state, so only clear the entry if it's still the one we snapshotted
+    // (which may be unfired if this save queued behind another - its data just
+    // went out with ours, so it's done either way)
+    if (_saveTimers.get(charId) === timer) {
+      clearTimeout(timer)
       _saveTimers.delete(charId)
     }
   }
@@ -743,7 +753,7 @@ export const useCharacterStore = defineStore('character', () => {
     updateField, updateFieldForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
     renownValue, adjustRenown, setRenown, deleteRenownEntry, awardHaul,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
-    spendLuckToken, adjustLuck, setMaxLuck, clearAllInitiative, setGmInitiative,
+    spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,
     cleanup,
   }
 })

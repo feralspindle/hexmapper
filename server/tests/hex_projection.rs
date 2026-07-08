@@ -190,6 +190,27 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert!(!projection::is_revealed(&pool, map_id, 1, 0).await.unwrap());
     assert!(projection::is_revealed(&pool, map_id, 9, 9).await.unwrap());
 
+    // A cell created under reveal-all with no explicit revealed flag (a player
+    // picking terrain on an empty hex) inherits the map default instead of
+    // becoming a hidden override that fogs itself (issue #107).
+    let created_under_reveal_all = upsert(
+        &pool,
+        session_id,
+        json!({ "map_id": map_id, "q": 3, "r": 0, "terrain_type": "plains" }),
+    )
+    .await;
+    assert_eq!(created_under_reveal_all["revealed"], true);
+    assert!(projection::is_revealed(&pool, map_id, 3, 0).await.unwrap());
+
+    // ...while an update without the flag leaves an explicit hidden override alone.
+    let hidden_update = upsert(
+        &pool,
+        session_id,
+        json!({ "map_id": map_id, "q": 1, "r": 0, "label": "still hidden" }),
+    )
+    .await;
+    assert_eq!(hidden_update["revealed"], false);
+
     // Unexplored cells are fogged for everyone, GM included: both views get a
     // minimal sentinel, and the cell is never player-editable.
     let _unexplored = upsert(
@@ -284,15 +305,16 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     .unwrap();
     tx.commit().await.unwrap();
 
-    // Exactly one hex_cell.upserted event per write: 5 direct upserts
-    // (q0, q1, q2, then the q0/q2 restores) plus 5 from the two bulk
-    // set_revealed passes (reveal touches q1+q2; hide touches all three).
+    // Exactly one hex_cell.upserted event per write: 7 direct upserts
+    // (q0, q1, q3, the q1 hidden-override update, q2, then the q0/q2 restores)
+    // plus 6 from the two bulk set_revealed passes (reveal touches q1+q2;
+    // hide touches all four).
     let event_count: i64 =
         sqlx::query_scalar("select count(*) from events where event_type = 'hex_cell.upserted'")
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(event_count, 10);
+    assert_eq!(event_count, 13);
 
     // Replaying the event log into a shadow table reconstructs the read model.
     let mut tx = pool.begin().await.unwrap();
@@ -313,7 +335,7 @@ async fn projection_redacts_for_players_and_replays_from_events() {
         .await
         .unwrap();
     assert_eq!(replayed, live);
-    assert_eq!(replayed, 3);
+    assert_eq!(replayed, 4);
     let replayed_unexplored: bool =
         sqlx::query_scalar("select explored from shadow_hex where q = 2 and r = 0")
             .fetch_one(&mut *tx)

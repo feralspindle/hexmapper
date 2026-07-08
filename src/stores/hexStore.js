@@ -6,6 +6,7 @@ import { apiClient, ApiError } from "@/lib/apiClient.js";
 import router from "@/router/index.js";
 import { useMapStore } from "@/stores/mapStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
+import { usePartyFollow } from "@/composables/usePartyFollow.js";
 
 export const MARKER_KINDS = [
   { id: "town", label: "Town" },
@@ -86,6 +87,7 @@ export const useHexStore = defineStore("hex", () => {
   const currentMapId = ref(null);
   let channel = null;
   let partyChannel = null;
+  let partyFollowChannel = null;
   let playerRefreshTimer = null;
   let playerRefreshDebounce = null;
   let playerRefreshInFlight = false;
@@ -267,6 +269,16 @@ export const useHexStore = defineStore("hex", () => {
       .subscribe();
 
     _setupMapPartyChannel(mapId);
+
+    if (partyFollowChannel) realtime.removeChannel(partyFollowChannel);
+    partyFollowChannel = realtime
+      .channel(`session:${sessionId}:party-follow`, { sessionId })
+      .on("broadcast", { event: "dungeon_entered" }, ({ payload }) => {
+        // self-receive is off per connection, but a gm's second tab still hears it
+        if (useSessionStore().isGM) return;
+        usePartyFollow().push(payload);
+      })
+      .subscribe();
   }
 
   async function _loadPartyHexFromDb() {
@@ -291,6 +303,25 @@ export const useHexStore = defineStore("hex", () => {
 
   let mapPartyChannel = null;
 
+  // maps rows don't carry source_client, so our own party patches echo back.
+  // while any are in flight the echoes are stale against newer optimistic
+  // moves; the patches are also chained so they commit in order
+  let _pendingPartyWrites = 0;
+  let _partyWriteQueue = Promise.resolve();
+
+  async function _patchPartyHex(mapId, patch, intent) {
+    _pendingPartyWrites += 1;
+    const write = _partyWriteQueue.then(() =>
+      apiClient.patch(`/maps/${mapId}`, patch, intent),
+    );
+    _partyWriteQueue = write.then(() => {}, () => {});
+    try {
+      await write;
+    } finally {
+      _pendingPartyWrites -= 1;
+    }
+  }
+
   function _setupMapPartyChannel(mapId) {
     if (mapPartyChannel) realtime.removeChannel(mapPartyChannel);
     mapPartyChannel = realtime
@@ -305,6 +336,7 @@ export const useHexStore = defineStore("hex", () => {
         },
         ({ new: row }) => {
           if (row.party_hex_q !== undefined || row.party_hex_r !== undefined) {
+            if (_pendingPartyWrites > 0) return;
             const next =
               row.party_hex_q != null
                 ? { q: row.party_hex_q, r: row.party_hex_r }
@@ -340,7 +372,7 @@ export const useHexStore = defineStore("hex", () => {
     partyHex.value = { q, r };
     _savePartyHex();
     try {
-      await apiClient.patch(`/maps/${currentMapId.value}`, { party_hex_q: q, party_hex_r: r }, "move_party");
+      await _patchPartyHex(currentMapId.value, { party_hex_q: q, party_hex_r: r }, "move_party");
     } catch (error) {
       console.error("setPartyHex db update error:", error instanceof ApiError ? error.message : error);
     }
@@ -395,7 +427,7 @@ export const useHexStore = defineStore("hex", () => {
     partyHex.value = null;
     _savePartyHex();
     try {
-      await apiClient.patch(`/maps/${currentMapId.value}`, { party_hex_q: null, party_hex_r: null }, "clear_party_hex");
+      await _patchPartyHex(currentMapId.value, { party_hex_q: null, party_hex_r: null }, "clear_party_hex");
     } catch (error) {
       console.error("clearPartyHex db update error:", error instanceof ApiError ? error.message : error);
     }
@@ -445,6 +477,15 @@ export const useHexStore = defineStore("hex", () => {
     }
     const key = cellKey(q, r);
     const existing = hexCells.value.get(key);
+    // Visibility is GM-controlled in FOW. In blank mode, and in FOW while
+    // reveal-all is on, cells written without an explicit revealed flag must
+    // be stored as revealed — otherwise the row becomes an explicit hidden
+    // override that fogs itself (issue #107). Cells already hidden keep
+    // their override.
+    const impliedRevealed =
+      !("revealed" in patch) &&
+      (useSessionStore().hexMode === "blank" ||
+        (useMapStore().mapFogRevealAll && existing?.revealed !== false));
     const merged = {
       label: "",
       notes: "",
@@ -454,6 +495,7 @@ export const useHexStore = defineStore("hex", () => {
       revealed: false,
       ...existing,
       ...patch,
+      ...(impliedRevealed ? { revealed: true } : {}),
       session_id: currentSessionId.value,
       map_id: currentMapId.value,
       q,
@@ -462,14 +504,8 @@ export const useHexStore = defineStore("hex", () => {
     };
     hexCells.value.set(key, merged);
 
-    // Visibility is GM-controlled in FOW. In blank mode, player-created cells
-    // must be stored as revealed so they are not mistaken for hidden overrides
-    // on reveal-all maps.
     const body = { ...merged };
-    if (!("revealed" in patch)) {
-      if (useSessionStore().hexMode === "blank") body.revealed = true;
-      else delete body.revealed;
-    }
+    if (!("revealed" in patch) && !impliedRevealed) delete body.revealed;
     if (!("explored" in patch)) delete body.explored;
 
     const intent = "revealed" in patch
@@ -616,6 +652,7 @@ export const useHexStore = defineStore("hex", () => {
     }
 
     hexDungeons.value = [...hexDungeons.value, data];
+    _broadcastDungeonEntered(data.id, data.name ?? name);
     router.push({
       name: "dungeon",
       params: { sessionId: currentSessionId.value, dungeonId: data.id },
@@ -679,7 +716,20 @@ export const useHexStore = defineStore("hex", () => {
   function navigateToDungeon(dungeonId) {
     const sessionId =
       currentSessionId.value ?? router.currentRoute.value.params.sessionId;
+    const name = hexDungeons.value.find((d) => d.id === dungeonId)?.name;
+    _broadcastDungeonEntered(dungeonId, name);
+    // entering a dungeon makes any pending invite moot
+    usePartyFollow().dismiss();
     router.push({ name: "dungeon", params: { sessionId, dungeonId } });
+  }
+
+  function _broadcastDungeonEntered(dungeonId, name) {
+    if (!useSessionStore().isGM) return;
+    void partyFollowChannel?.send({
+      type: "broadcast",
+      event: "dungeon_entered",
+      payload: { dungeonId, name: name ?? null },
+    });
   }
 
   async function clearAll() {
@@ -707,6 +757,8 @@ export const useHexStore = defineStore("hex", () => {
     partyChannel = null;
     if (mapPartyChannel) realtime.removeChannel(mapPartyChannel);
     mapPartyChannel = null;
+    if (partyFollowChannel) realtime.removeChannel(partyFollowChannel);
+    partyFollowChannel = null;
     currentMapId.value = null;
     currentSessionId.value = null;
     hexCells.value = new Map();

@@ -180,6 +180,7 @@
                 <LootDealToast />
                 <ChatToast />
                 <JoinToast />
+                <PartyFollowBanner />
             </div>
 
             <HexRightPanel />
@@ -228,6 +229,7 @@ import QuestCompleteToast from "@/components/common/QuestCompleteToast.vue";
 import LootDealToast      from "@/components/common/LootDealToast.vue";
 import ChatToast from "@/components/common/ChatToast.vue";
 import JoinToast from "@/components/common/JoinToast.vue";
+import PartyFollowBanner from "@/components/common/PartyFollowBanner.vue";
 import PhotoBroadcastModal from "@/components/common/PhotoBroadcastModal.vue";
 import WelcomeModal from "@/components/common/WelcomeModal.vue";
 import CharacterDrawer from "@/components/common/CharacterDrawer.vue";
