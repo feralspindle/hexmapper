@@ -107,6 +107,18 @@ test.describe.serial('party vault', () => {
       await expect(
         room.player1.page.getByTestId('gear-item').filter({ hasText: 'Signal Torch' }),
       ).toHaveCount(1)
+
+      await addItemLoot(room.player2.page, 'Iron Arrow', 3)
+      const arrowCard = lootCards(room.player1.page).filter({ hasText: 'Iron Arrow' })
+      await expect(arrowCard).toHaveCount(1)
+      await arrowCard.getByTestId('vault-claim').click()
+      await arrowCard.getByTestId('vault-claim-qty').fill('1')
+      await arrowCard.getByTestId('vault-claim-confirm').click()
+      await expect(arrowCard).toContainText('×2')
+      await expect(lootCards(room.gm.page).filter({ hasText: 'Iron Arrow' })).toContainText('×2')
+      await expect(
+        room.player1.page.getByTestId('gear-item').filter({ hasText: 'Iron Arrow' }),
+      ).toHaveCount(1)
     } finally {
       await room.close()
     }

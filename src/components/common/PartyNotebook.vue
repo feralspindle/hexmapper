@@ -328,6 +328,23 @@
             <div v-if="item.notes" class="pv-loot-notes">{{ item.notes }}</div>
             <div class="pv-loot-by">from {{ item.added_by_name }}</div>
 
+            <div v-if="claimingId === item.id" class="pv-split-row">
+              <span class="pv-split-info">Take</span>
+              <input
+                v-model.number="claimQty"
+                type="number"
+                min="1"
+                :max="item.quantity"
+                class="pv-input pv-input--qty"
+                data-testid="vault-claim-qty"
+                @keydown.enter="confirmClaim(item)"
+                @keydown.escape="claimingId = null"
+              />
+              <span class="pv-split-info">of {{ item.quantity }}</span>
+              <button class="pv-split-confirm" :disabled="!claimQtyValid(item)" data-testid="vault-claim-confirm" @click="confirmClaim(item)">Claim</button>
+              <button class="pv-split-cancel" @click="claimingId = null">✕</button>
+            </div>
+
             <div v-if="splittingId === item.id" class="pv-split-row">
               <template v-if="activeChars.length > 0">
                 <span class="pv-split-info">
@@ -375,10 +392,11 @@
             <div class="pv-loot-actions">
               <button
                 class="pv-action"
+                :class="{ active: claimingId === item.id }"
                 :disabled="!characterStore.character"
                 :title="characterStore.character ? 'Add to my inventory' : 'Select a character first'"
                 data-testid="vault-claim"
-                @click="doClaimLoot(item)"
+                @click="onClaimClick(item)"
               >Claim</button>
               <button v-if="(item.loot_type ?? 'item') === 'coins'" class="pv-action" title="Move to party bank" data-testid="vault-deposit" @click="vaultStore.depositLoot(item)">Deposit</button>
               <button
@@ -935,7 +953,7 @@ function splitRemainder(item) {
 
 function toggleSplit(item) {
   splittingId.value = splittingId.value === item.id ? null : item.id
-  if (splittingId.value) { stashingId.value = null; assigningId.value = null }
+  if (splittingId.value) { stashingId.value = null; assigningId.value = null; claimingId.value = null }
 }
 
 async function confirmSplit(item) {
@@ -944,8 +962,32 @@ async function confirmSplit(item) {
   await vaultStore.splitLoot(item, activeChars.value)
 }
 
-async function doClaimLoot(item) {
-  await vaultStore.claimLoot(item)
+const claimingId = ref(null)
+const claimQty   = ref(1)
+
+function claimQtyValid(item) {
+  return Number.isInteger(claimQty.value) && claimQty.value >= 1 && claimQty.value <= item.quantity
+}
+
+function onClaimClick(item) {
+  if (item.quantity === 1) {
+    void vaultStore.claimLoot(item)
+    return
+  }
+  claimingId.value = claimingId.value === item.id ? null : item.id
+  if (claimingId.value) {
+    splittingId.value = null
+    assigningId.value = null
+    stashingId.value  = null
+    claimQty.value    = item.quantity
+  }
+}
+
+async function confirmClaim(item) {
+  if (!claimQtyValid(item)) return
+  const qty = claimQty.value
+  claimingId.value = null
+  await vaultStore.claimLoot(item, qty)
 }
 
 
@@ -959,7 +1001,7 @@ function assignCount(charId) {
 
 function toggleAssign(item) {
   assigningId.value = assigningId.value === item.id ? null : item.id
-  if (assigningId.value) { splittingId.value = null; stashingId.value = null; charAssignments.value = new Map() }
+  if (assigningId.value) { splittingId.value = null; stashingId.value = null; claimingId.value = null; charAssignments.value = new Map() }
 }
 
 function cycleAssign(char, item) {
@@ -994,7 +1036,7 @@ function onStashClick(item) {
     doStash(item, vaultStore.containers[0].id)
   } else {
     stashingId.value = stashingId.value === item.id ? null : item.id
-    if (stashingId.value) { splittingId.value = null; assigningId.value = null }
+    if (stashingId.value) { splittingId.value = null; assigningId.value = null; claimingId.value = null }
   }
 }
 

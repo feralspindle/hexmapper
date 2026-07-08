@@ -116,6 +116,44 @@ describe('vaultStore', () => {
     expect(kit.character.adjustMoney).not.toHaveBeenCalled()
   })
 
+  test('claiming part of an item stack returns the rest to the pile', async () => {
+    kit.api['post /vault-loot'] = body => lootItem({ id: 'loot-rest', ...body })
+    const store = useVaultStore()
+    await store.init('s1')
+    store.loot.push(lootItem({ quantity: 5 }))
+
+    await store.claimLoot(store.loot[0], 2)
+
+    expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Longsword', slots: 1, quantity: 2, type: 'sundry' })
+    expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-loot', expect.objectContaining({ name: 'Longsword', quantity: 3 }))
+    expect(store.loot.map(l => l.id)).toEqual(['loot-rest'])
+  })
+
+  test('claiming part of a coin stack keeps the leftover currency', async () => {
+    kit.api['post /vault-loot'] = body => lootItem({ id: 'loot-rest', ...body })
+    const store = useVaultStore()
+    await store.init('s1')
+    store.loot.push(lootItem({ loot_type: 'coins', currency: 'gold', quantity: 50 }))
+
+    await store.claimLoot(store.loot[0], 10)
+
+    expect(kit.character.adjustMoney).toHaveBeenCalledWith('gold', 10)
+    expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-loot', expect.objectContaining({ quantity: 40, loot_type: 'coins', currency: 'gold' }))
+    expect(store.loot.map(l => l.id)).toEqual(['loot-rest'])
+  })
+
+  test('a claim qty above the stack size claims the whole stack once', async () => {
+    const store = useVaultStore()
+    await store.init('s1')
+    store.loot.push(lootItem({ quantity: 3 }))
+
+    await store.claimLoot(store.loot[0], 99)
+
+    expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Longsword', slots: 1, quantity: 3, type: 'sundry' })
+    expect(kit.apiClient.post).not.toHaveBeenCalledWith('/vault-loot', expect.anything())
+    expect(store.loot).toEqual([])
+  })
+
   test('claiming without an active character is a no-op that preserves the loot', async () => {
     kit.character.character = null
     const store = useVaultStore()
