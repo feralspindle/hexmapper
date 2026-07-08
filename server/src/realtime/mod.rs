@@ -1027,7 +1027,7 @@ pub fn spawn_event_listener(database_url: String, state: AppState) {
     });
 }
 
-const EVENT_BY_ID: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id = $1";
+const EVENT_BURST: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id = $1 or id > $2 order by id";
 const EVENTS_AFTER: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id > $1 order by id";
 
 /// Retries transient query failures so one DB blip doesn't tear down every
@@ -1105,10 +1105,49 @@ async fn catch_up(state: &AppState, last_seen: i64) -> Result<i64, sqlx::Error> 
     Ok(max_seen)
 }
 
+/// bookkeeping for burst dispatch. one NOTIFY triggers a scan that can pull in
+/// rows whose own NOTIFYs are still in flight, so remember those ids and skip
+/// them when they arrive. every event insert notifies exactly once, so entries
+/// drain instead of accumulating.
+struct BurstCursor {
+    last_seen: i64,
+    dispatched_ahead: HashSet<i64>,
+}
+
+impl BurstCursor {
+    fn new(last_seen: i64) -> Self {
+        Self {
+            last_seen,
+            dispatched_ahead: HashSet::new(),
+        }
+    }
+
+    /// true if this notification's row still needs fetching, false if it
+    /// already went out with an earlier burst scan
+    fn needs_fetch(&mut self, id: i64) -> bool {
+        !self.dispatched_ahead.remove(&id)
+    }
+
+    /// record a row dispatched by the scan for notification `notified_id`
+    fn note_dispatched(&mut self, row_id: i64, notified_id: i64) {
+        if row_id != notified_id {
+            self.dispatched_ahead.insert(row_id);
+        }
+        self.last_seen = self.last_seen.max(row_id);
+    }
+
+    /// notifications for pending ids died with the old connection; catch_up
+    /// owns everything past the new mark
+    fn reset(&mut self, last_seen: i64) {
+        self.last_seen = last_seen;
+        self.dispatched_ahead.clear();
+    }
+}
+
 async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error> {
     let mut listener = PgListener::connect(database_url).await?;
     listener.listen("hexmap_events").await?;
-    let mut last_seen: i64 = retry_query(
+    let initial: i64 = retry_query(
         || {
             sqlx::query_scalar("select coalesce(max(id), 0) from events")
                 .fetch_one(state.pool())
@@ -1116,6 +1155,7 @@ async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error>
         "max_event_id",
     )
     .await?;
+    let mut cursor = BurstCursor::new(initial);
     loop {
         // `try_recv` returns Ok(None) when the connection dropped and was silently
         // re-established — NOTIFYs sent during the gap are lost, so scan the events
@@ -1126,24 +1166,36 @@ async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error>
                 let Ok(id) = notification.payload().parse::<i64>() else {
                     continue;
                 };
-                let row = retry_query(
+                if !cursor.needs_fetch(id) {
+                    continue;
+                }
+                // a bulk write (the fog brush, mostly) commits hundreds of event
+                // rows at once and the trigger NOTIFYs per row. fetching one row
+                // per notification meant one db round trip per cell, so players
+                // watched a brush stroke reveal cell by cell. scan the whole
+                // committed burst on its first notification instead. the id = $1
+                // arm covers a row committed out of id order, which the range
+                // scan would otherwise skip forever.
+                let rows = retry_query(
                     || {
-                        sqlx::query_as::<_, EventRow>(EVENT_BY_ID)
+                        sqlx::query_as::<_, EventRow>(EVENT_BURST)
                             .bind(id)
-                            .fetch_optional(state.pool())
+                            .bind(cursor.last_seen)
+                            .fetch_all(state.pool())
                     },
-                    "event_by_id",
+                    "event_burst",
                 )
                 .await?;
-                if let Some(row) = row {
+                for row in rows {
+                    cursor.note_dispatched(row.id, id);
                     dispatch_row(state, row).await?;
                 }
-                last_seen = last_seen.max(id);
             }
             None => {
                 metrics::counter!("realtime_listener_reconnects_total").increment(1);
                 tracing::warn!("realtime listener reconnected; scanning for missed events");
-                last_seen = catch_up(state, last_seen).await?;
+                let last_seen = catch_up(state, cursor.last_seen).await?;
+                cursor.reset(last_seen);
             }
         }
     }
@@ -1373,5 +1425,45 @@ mod tests {
                 request_id: None,
             }) if session_id == revoked_session
         ));
+    }
+
+    #[test]
+    fn burst_cursor_skips_notifies_for_rows_already_dispatched() {
+        let mut cursor = BurstCursor::new(10);
+        // notify for 11 arrives, scan returns the whole burst 11..=13
+        assert!(cursor.needs_fetch(11));
+        for id in 11..=13 {
+            cursor.note_dispatched(id, 11);
+        }
+        assert_eq!(cursor.last_seen, 13);
+        // the burst's remaining notifies are already handled, a new event isn't
+        assert!(!cursor.needs_fetch(12));
+        assert!(!cursor.needs_fetch(13));
+        assert!(cursor.needs_fetch(14));
+    }
+
+    #[test]
+    fn burst_cursor_fetches_a_row_committed_out_of_id_order() {
+        let mut cursor = BurstCursor::new(10);
+        // 12 and 13 commit first, then 11 (id assigned earlier) commits late
+        assert!(cursor.needs_fetch(12));
+        cursor.note_dispatched(12, 12);
+        cursor.note_dispatched(13, 12);
+        assert!(cursor.needs_fetch(11));
+        cursor.note_dispatched(11, 11);
+        assert_eq!(cursor.last_seen, 13);
+    }
+
+    #[test]
+    fn burst_cursor_reset_drops_pending_ids() {
+        let mut cursor = BurstCursor::new(0);
+        assert!(cursor.needs_fetch(1));
+        cursor.note_dispatched(1, 1);
+        cursor.note_dispatched(2, 1);
+        // reconnect: id 2's notify is gone, catch_up owns everything past 5
+        cursor.reset(5);
+        assert_eq!(cursor.last_seen, 5);
+        assert!(cursor.needs_fetch(2));
+        assert!(cursor.needs_fetch(6));
     }
 }
