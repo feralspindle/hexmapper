@@ -56,3 +56,9 @@ scratchpad/
 deploy/environment-overhaul-plan.md
 deploy/reconcile-drift.md
 deploy/staging-provisioning.md
+
+# local dev stack runtime (pids, logs)
+.dev-stack/
+hex_map-local-stack.md
+Makefile
+scripts/dev-stack.sh
