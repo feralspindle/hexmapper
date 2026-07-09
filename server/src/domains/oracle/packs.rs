@@ -157,6 +157,9 @@ pub async fn install_pack(
     let metadata = auth.metadata();
 
     retry_tx!(state.pool(), |tx| {
+        // two passes: rows can chain forward to tables later in the pack, and
+        // the subtable fk is not deferrable, so every table must exist before
+        // the first row insert
         for table in &pack.tables {
             let event = NewEvent {
                 aggregate_type: "oracle_table",
@@ -172,7 +175,9 @@ pub async fn install_pack(
                 metadata: metadata.clone(),
             };
             projection::append_table_created(&mut tx, &event).await?;
+        }
 
+        for table in &pack.tables {
             for (position, row) in table.rows.iter().enumerate() {
                 let subtable_id = row.chain.as_deref().map(|key| ids[key]);
                 let event = NewEvent {
