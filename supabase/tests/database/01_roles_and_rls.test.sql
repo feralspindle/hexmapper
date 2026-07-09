@@ -133,6 +133,12 @@ insert into public.oracle_rolls
   (id, session_id, user_id, display_name, kind, table_id, table_name, result)
 values ('b2000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'table', 'b0000000-0000-0000-0000-000000000001', 'Encounters', '{"result":"Bandits"}');
 
+insert into public.journal_entries (session_id, author_user_id, author_name, body)
+values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'journal entry');
+
+insert into public.light_sources (session_id, created_by, name)
+values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Torch');
+
 insert into public.events
   (aggregate_type, aggregate_id, session_id, sequence, event_type, payload)
 values ('hex_cell', '30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 1, 'hex_cell.updated', '{"gm_markers":"GM secret"}');
