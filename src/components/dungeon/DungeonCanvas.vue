@@ -12,7 +12,7 @@
     <canvas
       ref="canvasEl"
       class="absolute inset-0 cursor-crosshair"
-      :style="{ cursor: cursorStyle }"
+      :style="{ cursor: cursorStyle, touchAction: 'none' }"
       @mousedown="onMouseDown"
       @mousedown.middle.prevent
       @mousemove="onMouseMove"
@@ -22,6 +22,10 @@
       @wheel.prevent="onWheel"
       @contextmenu.prevent="draw.cancel"
       @dblclick="onDoubleClick"
+      @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
+      @touchcancel="onTouchEnd"
     />
 
     <svg
@@ -1968,6 +1972,77 @@ function onWheel(e) {
       offsetX: viewport.value.offsetX + e.deltaX,
       offsetY: viewport.value.offsetY + e.deltaY,
     }
+  }
+}
+
+let touchPanStart = null
+let pinch = null
+let didTouchPan = false
+
+function touchDist(touches) {
+  return Math.hypot(
+    touches[0].clientX - touches[1].clientX,
+    touches[0].clientY - touches[1].clientY,
+  )
+}
+
+function touchMid(touches, rect) {
+  return {
+    x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left,
+    y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top,
+  }
+}
+
+function onTouchStart(e) {
+  if (e.touches.length === 1) {
+    pinch = null
+    didTouchPan = false
+    touchPanStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, offsetX: viewport.value.offsetX, offsetY: viewport.value.offsetY }
+  } else if (e.touches.length === 2) {
+    touchPanStart = null
+    const rect = getRect()
+    const mid = touchMid(e.touches, rect)
+    pinch = { dist: touchDist(e.touches), x: mid.x, y: mid.y }
+  }
+}
+
+function onTouchMove(e) {
+  if (pinch && e.touches.length === 2) {
+    e.preventDefault()
+    const rect = getRect()
+    const dist = touchDist(e.touches)
+    const mid = touchMid(e.touches, rect)
+    applyZoom(dist / pinch.dist, mid.x, mid.y)
+    viewport.value = {
+      ...viewport.value,
+      offsetX: viewport.value.offsetX - (mid.x - pinch.x),
+      offsetY: viewport.value.offsetY - (mid.y - pinch.y),
+    }
+    pinch = { dist, x: mid.x, y: mid.y }
+    return
+  }
+  if (!touchPanStart || e.touches.length !== 1) return
+  const dx = e.touches[0].clientX - touchPanStart.x
+  const dy = e.touches[0].clientY - touchPanStart.y
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didTouchPan = true
+  if (!didTouchPan) return
+  e.preventDefault()
+  viewport.value = {
+    ...viewport.value,
+    offsetX: touchPanStart.offsetX - dx,
+    offsetY: touchPanStart.offsetY - dy,
+  }
+}
+
+function onTouchEnd(e) {
+  if (e.touches.length === 0) {
+    touchPanStart = null
+    pinch = null
+    didTouchPan = false
+  } else if (e.touches.length === 1 && pinch) {
+    pinch = null
+    didTouchPan = true
+    touchPanStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, offsetX: viewport.value.offsetX, offsetY: viewport.value.offsetY }
   }
 }
 
