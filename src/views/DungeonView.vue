@@ -122,7 +122,7 @@ const prefs          = useUserPrefsStore()
 const activityStore  = useActivityStore()
 const photoStore     = usePhotoStore()
 
-const { joinSession, initServices, cleanupServices } = useSessionServices(sessionId)
+const { joinSession, initServices, cleanupServices } = useSessionServices(sessionId, { alwaysOracle: true })
 
 const canvasComp  = ref(null)
 const topbarEl    = ref(null)

@@ -1,10 +1,13 @@
+use std::collections::HashSet;
+
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, Utc};
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
+use ttrpg_dice_engine::{LiveRng, RngSource};
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
@@ -21,6 +24,9 @@ const MAX_RESULT_LEN: usize = 500;
 const MAX_NOTES_LEN: usize = 1000;
 const MAX_QUESTION_LEN: usize = 500;
 const MAX_TAG_LEN: usize = 60;
+// deep enough for encounter -> monster -> reaction -> distance -> morale with
+// room to spare, small enough that a write-time a->b->a cycle can't spin
+const MAX_CHAIN_DEPTH: usize = 8;
 
 #[derive(Debug, Deserialize)]
 pub struct SessionQuery {
@@ -50,6 +56,7 @@ pub struct OracleTableRowRow {
     pub result: String,
     pub notes: String,
     pub position: i32,
+    pub subtable_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -98,6 +105,7 @@ pub struct CreateRowRequest {
     pub notes: String,
     #[serde(default)]
     pub position: i32,
+    pub subtable_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -108,6 +116,16 @@ pub struct UpdateRowRequest {
     pub result: Option<String>,
     pub notes: Option<String>,
     pub position: Option<i32>,
+    // absent = leave alone, null = clear the chain, value = set it
+    #[serde(default, deserialize_with = "double_option")]
+    pub subtable_id: Option<Option<Uuid>>,
+}
+
+fn double_option<'de, D>(de: D) -> Result<Option<Option<Uuid>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(de).map(Some)
 }
 
 #[derive(Debug, Deserialize)]
@@ -290,6 +308,9 @@ pub async fn create_row(
     validate_row_shape(req.weight, req.range_min, req.range_max)?;
     let result = clean_text(&req.result, "result", 1, MAX_RESULT_LEN)?;
     let notes = clean_text(&req.notes, "notes", 0, MAX_NOTES_LEN)?;
+    if let Some(subtable_id) = req.subtable_id {
+        validate_subtable(&state, scope.session_id, table_id, subtable_id).await?;
+    }
 
     let event = NewEvent {
         aggregate_type: "oracle_table_row",
@@ -304,6 +325,7 @@ pub async fn create_row(
             "result": result,
             "notes": notes,
             "position": req.position,
+            "subtable_id": req.subtable_id,
         }),
         metadata: auth.metadata(),
     };
@@ -353,6 +375,12 @@ pub async fn update_row(
     }
     if let Some(position) = req.position {
         payload.insert("position".to_string(), json!(position));
+    }
+    if let Some(subtable_id) = req.subtable_id {
+        if let Some(subtable_id) = subtable_id {
+            validate_subtable(&state, session_id, current.table_id, subtable_id).await?;
+        }
+        payload.insert("subtable_id".to_string(), json!(subtable_id));
     }
     if payload.is_empty() {
         return Err(AppError::BadRequest("empty row update".to_string()));
@@ -474,9 +502,9 @@ async fn row_scope(
     state: &AppState,
     row_id: Uuid,
 ) -> Result<Option<(Uuid, OracleTableRowRow)>, AppError> {
-    let row: Option<(Uuid, Uuid, Uuid, i32, Option<i32>, Option<i32>, String, String, i32, DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
+    let row: Option<(Uuid, Uuid, Uuid, i32, Option<i32>, Option<i32>, String, String, i32, Option<Uuid>, DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
         r#"
-        select ot.session_id, r.id, r.table_id, r.weight, r.range_min, r.range_max, r.result, r.notes, r.position, r.created_at, r.updated_at
+        select ot.session_id, r.id, r.table_id, r.weight, r.range_min, r.range_max, r.result, r.notes, r.position, r.subtable_id, r.created_at, r.updated_at
         from oracle_table_rows r
         join oracle_tables ot on ot.id = r.table_id
         where r.id = $1
@@ -497,6 +525,7 @@ async fn row_scope(
             result,
             notes,
             position,
+            subtable_id,
             created_at,
             updated_at,
         )| {
@@ -511,6 +540,7 @@ async fn row_scope(
                     result,
                     notes,
                     position,
+                    subtable_id,
                     created_at,
                     updated_at,
                 },
@@ -651,14 +681,98 @@ fn pick(options: &'static [&'static str]) -> &'static str {
     options[idx]
 }
 
+async fn validate_subtable(
+    state: &AppState,
+    session_id: Uuid,
+    table_id: Uuid,
+    subtable_id: Uuid,
+) -> Result<(), AppError> {
+    if subtable_id == table_id {
+        return Err(AppError::BadRequest(
+            "a row cannot chain to its own table".to_string(),
+        ));
+    }
+    let scope = table_scope(state, subtable_id)
+        .await?
+        .ok_or_else(|| AppError::BadRequest("chained table does not exist".to_string()))?;
+    if scope.session_id != session_id {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
+}
+
+/// rolls one table and walks any subtable references. every step lands in
+/// `chain`; the head step's fields stay at the top level so old history
+/// entries and readers keep working. cycles and over-deep chains stop the
+/// walk and flag `chain_truncated` instead of erroring - the rolls up to
+/// that point are still real.
 async fn table_result(
     state: &AppState,
     table_id: Uuid,
     scope: &TableScope,
 ) -> Result<Value, AppError> {
+    let mut steps: Vec<Value> = Vec::new();
+    let mut visited: HashSet<Uuid> = HashSet::new();
+    let mut truncated = false;
+    let mut current = Some((table_id, scope.name.clone(), scope.mode.clone()));
+
+    while let Some((tid, tname, tmode)) = current.take() {
+        visited.insert(tid);
+        let step = match roll_single_table(state, tid, &tname, &tmode).await? {
+            Some(step) => step,
+            None => {
+                // degenerate table (empty, range gap, zero weight): fatal for
+                // the head roll, a dead end mid-chain
+                if steps.is_empty() {
+                    return Err(AppError::BadRequest(
+                        "could not choose a table row".to_string(),
+                    ));
+                }
+                truncated = true;
+                break;
+            }
+        };
+
+        let subtable_id = step
+            .get("subtable_id")
+            .and_then(Value::as_str)
+            .and_then(|s| Uuid::parse_str(s).ok());
+        steps.push(step);
+
+        if let Some(sub) = subtable_id {
+            if steps.len() >= MAX_CHAIN_DEPTH || visited.contains(&sub) {
+                truncated = true;
+            } else if let Some(sub_scope) = table_scope(state, sub).await? {
+                if sub_scope.session_id == scope.session_id {
+                    current = Some((sub, sub_scope.name, sub_scope.mode));
+                }
+            }
+        }
+    }
+
+    let mut payload = steps[0].clone();
+    let obj = payload.as_object_mut().expect("step is an object");
+    obj.remove("subtable_id");
+    if steps.len() > 1 {
+        obj.insert("chain".to_string(), json!(steps));
+    }
+    if truncated {
+        obj.insert("chain_truncated".to_string(), json!(true));
+    }
+    Ok(payload)
+}
+
+/// one table, one row: returns the step payload or None when the table can't
+/// produce a row (empty / range gap / no positive weight)
+async fn roll_single_table(
+    state: &AppState,
+    table_id: Uuid,
+    table_name: &str,
+    table_mode: &str,
+) -> Result<Option<Value>, AppError> {
     let rows: Vec<OracleTableRowRow> = sqlx::query_as(
         r#"
-        select id, table_id, weight, range_min, range_max, result, notes, position, created_at, updated_at
+        select id, table_id, weight, range_min, range_max, result, notes, position, subtable_id, created_at, updated_at
         from oracle_table_rows
         where table_id = $1
         order by position asc, created_at asc
@@ -669,7 +783,7 @@ async fn table_result(
     .await?;
 
     if rows.is_empty() {
-        return Err(AppError::BadRequest("table has no rows".to_string()));
+        return Ok(None);
     }
 
     let roll_rows: Vec<roll::RollRow> = rows
@@ -681,38 +795,69 @@ async fn table_result(
         })
         .collect();
 
-    match roll::resolve(&scope.mode, &roll_rows) {
-        roll::TableRoll::Range { roll, index } => {
-            let row = &rows[index];
-            return Ok(json!({
+    let (mut step, index) = match roll::resolve(table_mode, &roll_rows) {
+        roll::TableRoll::Range { roll, index } => (
+            json!({
                 "table_mode": "range",
                 "roll": roll,
-                "row_id": row.id,
-                "result": row.result,
-                "notes": row.notes,
-            }));
-        }
-        roll::TableRoll::RangeGap { .. } => {
-            return Err(AppError::BadRequest(
-                "range table has a gap for the rolled value".to_string(),
-            ));
-        }
-        roll::TableRoll::Weighted { total_weight, index } => {
-            let row = &rows[index];
-            return Ok(json!({
+            }),
+            index,
+        ),
+        roll::TableRoll::Weighted { total_weight, index } => (
+            json!({
                 "table_mode": "weighted",
                 "total_weight": total_weight,
-                "row_id": row.id,
-                "result": row.result,
-                "notes": row.notes,
-            }));
-        }
-        roll::TableRoll::NoPositiveWeight => {}
-    }
+            }),
+            index,
+        ),
+        roll::TableRoll::RangeGap { .. } | roll::TableRoll::NoPositiveWeight => return Ok(None),
+    };
 
-    Err(AppError::BadRequest(
-        "could not choose a table row".to_string(),
-    ))
+    let row = &rows[index];
+    let mut rng = LiveRng::new();
+    let (text, dice) = resolve_dice_text(&row.result, &mut rng);
+    let obj = step.as_object_mut().expect("step is an object");
+    obj.insert("table_id".to_string(), json!(table_id));
+    obj.insert("table_name".to_string(), json!(table_name));
+    obj.insert("row_id".to_string(), json!(row.id));
+    obj.insert("result".to_string(), json!(text));
+    obj.insert("notes".to_string(), json!(row.notes));
+    obj.insert("subtable_id".to_string(), json!(row.subtable_id));
+    if !dice.is_empty() {
+        obj.insert("dice".to_string(), json!(dice));
+    }
+    Ok(Some(step))
+}
+
+/// replaces {expr} spans in a result cell with rolled totals ("{2d6} goblins"
+/// -> "7 goblins"). anything the dice engine can't parse is left verbatim, so
+/// braces in prose are harmless. returns the resolved text plus one
+/// {expr, total} record per rolled span.
+fn resolve_dice_text(text: &str, rng: &mut dyn RngSource) -> (String, Vec<Value>) {
+    let mut out = String::new();
+    let mut dice = Vec::new();
+    let mut rest = text;
+
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('}') else {
+            out.push_str(&rest[start..]);
+            rest = "";
+            break;
+        };
+        let expr = after[..end].trim();
+        match ttrpg_dice_engine::roll(expr, rng) {
+            Ok(rolled) => {
+                out.push_str(&rolled.total.to_string());
+                dice.push(json!({ "expr": expr, "total": rolled.total }));
+            }
+            Err(_) => out.push_str(&rest[start..start + end + 2]),
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    (out, dice)
 }
 
 #[cfg(test)]
@@ -747,5 +892,38 @@ mod tests {
         assert_eq!(yes_no_threshold("likely").unwrap(), 75);
         assert_eq!(yes_no_threshold("almost_certain").unwrap(), 95);
         assert!(yes_no_threshold("certain").is_err());
+    }
+
+    #[test]
+    fn dice_expressions_resolve_inline() {
+        let mut rng = ttrpg_dice_engine::SeededRng::new(7);
+        let (text, dice) = resolve_dice_text("{2d6} goblins with {1d4} wolves", &mut rng);
+
+        assert_eq!(dice.len(), 2);
+        assert_eq!(dice[0]["expr"], "2d6");
+        let goblins = dice[0]["total"].as_i64().unwrap();
+        let wolves = dice[1]["total"].as_i64().unwrap();
+        assert!((2..=12).contains(&goblins));
+        assert!((1..=4).contains(&wolves));
+        assert_eq!(text, format!("{goblins} goblins with {wolves} wolves"));
+    }
+
+    #[test]
+    fn unparseable_braces_are_left_verbatim() {
+        let mut rng = ttrpg_dice_engine::SeededRng::new(7);
+        let (text, dice) = resolve_dice_text("a {mysterious} figure with {2d6} coins", &mut rng);
+
+        assert!(text.starts_with("a {mysterious} figure with "));
+        assert_eq!(dice.len(), 1);
+        assert_eq!(dice[0]["expr"], "2d6");
+    }
+
+    #[test]
+    fn unclosed_brace_passes_through() {
+        let mut rng = ttrpg_dice_engine::SeededRng::new(7);
+        let (text, dice) = resolve_dice_text("brace at the end {2d6", &mut rng);
+
+        assert_eq!(text, "brace at the end {2d6");
+        assert!(dice.is_empty());
     }
 }

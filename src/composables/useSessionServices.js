@@ -13,7 +13,9 @@ import { usePhotoStore } from '@/stores/photoStore.js'
 // init block, the play-mode -> oracle sync, and cleanup of the shared stores.
 // surface-specific stores (hexStore, dungeonStore, activityStore) and
 // presence-vs-full session cleanup stay in the views.
-export function useSessionServices(sessionId) {
+// alwaysOracle keeps the oracle store hydrated in every play mode (the dungeon
+// stocking generator reads its tables); hex only needs it for the gm_less panel.
+export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
   const sessionStore = useSessionStore()
   const mapStore = useMapStore()
   const diceStore = useDiceStore()
@@ -24,7 +26,7 @@ export function useSessionServices(sessionId) {
   const photoStore = usePhotoStore()
 
   function syncOracleStore() {
-    if (sessionStore.playMode === 'gm_less') {
+    if (alwaysOracle || sessionStore.playMode === 'gm_less') {
       oracleStore.init(sessionId)
     } else {
       oracleStore.cleanup()

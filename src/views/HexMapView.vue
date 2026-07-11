@@ -180,7 +180,7 @@
                 </SessionToasts>
             </div>
 
-            <SessionRightPanel :inspector="HexInspectorSection" :selected="hexStore.selectedHex" />
+            <SessionRightPanel :inspector="HexInspectorSection" :selected="hexStore.selectedHex" show-travel />
         </div>
 
         <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />

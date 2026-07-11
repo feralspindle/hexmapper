@@ -33,6 +33,9 @@
       <button class="pn-tab" :class="{ active: activeTab === 'calendar' }" data-testid="notebook-tab-calendar" @click="activeTab = 'calendar'">
         Calendar
       </button>
+      <button class="pn-tab" :class="{ active: activeTab === 'journal' }" data-testid="notebook-tab-journal" @click="activeTab = 'journal'">
+        Journal
+      </button>
     </div>
 
     <div class="pn-body">
@@ -653,6 +656,10 @@
         <PartyCalendar :session-id="sessionId" />
       </template>
 
+      <template v-if="activeTab === 'journal'">
+        <JournalPanel :session-id="sessionId" />
+      </template>
+
     </div>
     <div class="pn-resize-handle" @mousedown.stop="startResize">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -666,6 +673,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import PartyCalendar from '@/components/common/PartyCalendar.vue'
+import JournalPanel from '@/components/common/JournalPanel.vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useNotebookStore } from '@/stores/notebookStore.js'
 import { useVaultStore } from '@/stores/vaultStore.js'

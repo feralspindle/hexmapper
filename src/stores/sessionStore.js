@@ -21,6 +21,10 @@ export const useSessionStore = defineStore('session', () => {
   const torchRunning   = ref(false)
   const torchElapsedMs = ref(0)
   const torchStartedAt = ref(null)
+  const travelState    = ref({ enabled: false, fraction: 0 })
+  const initiativeState = ref({ entries: [], active_id: null, round: 1 })
+  const crawlRound     = ref(0)
+  const crawlCheckEvery = ref(3)
   const loading        = ref(false)
   const error          = ref(null)
 
@@ -57,6 +61,10 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = data.torch_running ?? false
     torchElapsedMs.value = data.torch_elapsed_ms ?? 0
     torchStartedAt.value = data.torch_started_at ?? null
+    travelState.value    = data.travel_state ?? { enabled: false, fraction: 0 }
+    initiativeState.value = data.initiative_state ?? { entries: [], active_id: null, round: 1 }
+    crawlRound.value     = data.crawl_round ?? 0
+    crawlCheckEvery.value = data.crawl_check_every ?? 3
   }
 
   function _subscribeToSession(id) {
@@ -82,6 +90,10 @@ export const useSessionStore = defineStore('session', () => {
           if (fresh('torch_running'))    torchRunning.value   = row.torch_running
           if (fresh('torch_elapsed_ms')) torchElapsedMs.value = row.torch_elapsed_ms
           if (fresh('torch_started_at')) torchStartedAt.value = row.torch_started_at ?? null
+          if (fresh('travel_state'))     travelState.value    = row.travel_state ?? { enabled: false, fraction: 0 }
+          if (fresh('initiative_state')) initiativeState.value = row.initiative_state ?? { entries: [], active_id: null, round: 1 }
+          if (fresh('crawl_round'))      crawlRound.value     = row.crawl_round ?? 0
+          if (fresh('crawl_check_every')) crawlCheckEvery.value = row.crawl_check_every ?? 3
         },
       )
       .subscribe()
@@ -288,6 +300,68 @@ export const useSessionStore = defineStore('session', () => {
     pending: _pendingFields,
   })
 
+  // one call per tracker op, the server mutates the blob under a row lock and
+  // the fresh state comes back (and to everyone else via the session UPDATE)
+  async function initiativeOp(op, payload = {}) {
+    try {
+      const next = await apiClient.post(`/sessions/${sessionId.value}/initiative`, { op, ...payload }, `initiative_${op}`)
+      if (next) initiativeState.value = next
+      return next
+    } catch (err) {
+      console.error('initiativeOp:', err instanceof ApiError ? err.message : err)
+      return null
+    }
+  }
+
+  async function advanceCrawlRound() {
+    crawlRound.value += 1
+    try {
+      // encounter result comes back for the caller; everyone else gets the
+      // round bump via the session UPDATE and any encounter via chat
+      return await apiClient.post(`/sessions/${sessionId.value}/crawl-round`, { action: 'advance' }, 'crawl_advance')
+    } catch (err) {
+      crawlRound.value -= 1
+      console.error('advanceCrawlRound:', err instanceof ApiError ? err.message : err)
+      return null
+    }
+  }
+
+  async function resetCrawlRound() {
+    const previous = crawlRound.value
+    crawlRound.value = 0
+    try {
+      await apiClient.post(`/sessions/${sessionId.value}/crawl-round`, { action: 'reset' }, 'crawl_reset')
+    } catch (err) {
+      crawlRound.value = previous
+      console.error('resetCrawlRound:', err instanceof ApiError ? err.message : err)
+    }
+  }
+
+  async function setCrawlCheckEvery(every) {
+    const previous = crawlCheckEvery.value
+    crawlCheckEvery.value = every
+    try {
+      await apiClient.patch(`/sessions/${sessionId.value}`, { crawl_check_every: every }, 'crawl_config')
+    } catch (err) {
+      crawlCheckEvery.value = previous
+      console.error('setCrawlCheckEvery:', err instanceof ApiError ? err.message : err)
+    }
+  }
+
+  // move: burns travel time for the destination terrain, the server advances
+  // the calendar and rolls weather at day boundaries. config: patches rates /
+  // enabled / difficult under the same row lock.
+  async function travel(op, payload = {}) {
+    try {
+      const result = await apiClient.post(`/sessions/${sessionId.value}/travel`, { op, ...payload }, `travel_${op}`)
+      if (result?.travel_state) travelState.value = result.travel_state
+      return result
+    } catch (err) {
+      console.error('travel:', err instanceof ApiError ? err.message : err)
+      return null
+    }
+  }
+
   function cleanupPresence() {
     if (_stopPageHide)  { _stopPageHide(); _stopPageHide = null }
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
@@ -309,6 +383,10 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = false
     torchElapsedMs.value = 0
     torchStartedAt.value = null
+    travelState.value    = { enabled: false, fraction: 0 }
+    initiativeState.value = { entries: [], active_id: null, round: 1 }
+    crawlRound.value     = 0
+    crawlCheckEvery.value = 3
   }
 
   return {
@@ -322,6 +400,15 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning,
     torchElapsedMs,
     torchStartedAt,
+    travelState,
+    travel,
+    initiativeState,
+    initiativeOp,
+    crawlRound,
+    crawlCheckEvery,
+    advanceCrawlRound,
+    resetCrawlRound,
+    setCrawlCheckEvery,
     isGM,
     loading,
     error,

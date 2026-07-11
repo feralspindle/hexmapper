@@ -8,6 +8,10 @@
 
     <div v-show="activeTab === 0" class="ds-tab-pane">
       <DungeonDiceSection ref="diceSectionRef" />
+      <TravelSection v-if="showTravel" />
+      <InitiativeSection />
+      <CrawlTracker />
+      <LightsSection />
       <DungeonSessionSection />
     </div>
 
@@ -27,6 +31,10 @@ import { computed, ref, watch } from 'vue'
 import DungeonDiceSection    from '@/components/common/DungeonDiceSection.vue'
 import DungeonPhotosSection  from '@/components/common/DungeonPhotosSection.vue'
 import DungeonSessionSection from '@/components/common/DungeonSessionSection.vue'
+import TravelSection         from '@/components/common/TravelSection.vue'
+import InitiativeSection     from '@/components/common/InitiativeSection.vue'
+import CrawlTracker          from '@/components/common/CrawlTracker.vue'
+import LightsSection         from '@/components/common/LightsSection.vue'
 import OraclePanel           from '@/components/common/OraclePanel.vue'
 import { useDiceStore }      from '@/stores/diceStore.js'
 import { useSessionStore }   from '@/stores/sessionStore.js'
@@ -36,6 +44,8 @@ const props = defineProps({
   inspector: { type: Object, required: true },
   // current selection; a truthy value switches to the inspect tab
   selected: { default: null },
+  // hex-only travel section (solo hexcrawl); dungeons don't travel
+  showTravel: { type: Boolean, default: false },
 })
 
 const diceStore      = useDiceStore()
