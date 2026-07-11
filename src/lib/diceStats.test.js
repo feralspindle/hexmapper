@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { splitTonight, rankPlayers, rankSkills, bestPlayerPerSkill, usableRoll, formatZ, ordinal } from './diceStats.js'
+import { splitTonight, rankPlayers, rankSkills, bestPlayerPerSkill, longestStreaks, usableRoll, formatZ, ordinal } from './diceStats.js'
 
 const stats = (z, overrides = {}) => ({
   mean: 10.5,
@@ -130,6 +130,56 @@ describe('formatZ and ordinal', () => {
     expect(ordinal(11)).toBe('11th')
     expect(ordinal(13)).toBe('13th')
     expect(ordinal(50.4)).toBe('50th')
+  })
+})
+
+describe('longestStreaks', () => {
+  const hi = (over = {}) => roll({ stats: stats(1), ...over })
+  const lo = (over = {}) => roll({ stats: stats(-1), ...over })
+  const avg = (over = {}) => roll({ stats: stats(0), ...over })
+
+  test('reports the longest hot and cold run, needing at least the minimum', () => {
+    const rolls = [
+      hi({ user_id: 'u1', display_name: 'Robin' }),
+      hi({ user_id: 'u1', display_name: 'Robin' }),
+      hi({ user_id: 'u1', display_name: 'Robin' }),
+      hi({ user_id: 'u1', display_name: 'Robin' }),
+      lo({ user_id: 'u2', display_name: 'Sam' }),
+      lo({ user_id: 'u2', display_name: 'Sam' }),
+      lo({ user_id: 'u2', display_name: 'Sam' }),
+    ]
+    const { hot, cold } = longestStreaks(rolls)
+    expect(hot).toMatchObject({ userId: 'u1', displayName: 'Robin', count: 4 })
+    expect(cold).toMatchObject({ userId: 'u2', count: 3 })
+  })
+
+  test('an average roll breaks the run', () => {
+    const rolls = [hi(), hi(), hi(), avg(), hi(), hi()]
+    expect(longestStreaks(rolls).hot.count).toBe(3)
+  })
+
+  test('runs shorter than the minimum are not reported', () => {
+    expect(longestStreaks([hi(), hi(), lo(), lo()])).toEqual({ hot: null, cold: null })
+  })
+
+  test('a statless roll is skipped without breaking a run', () => {
+    const rolls = [hi(), hi(), roll({ stats: null }), hi()]
+    expect(longestStreaks(rolls).hot.count).toBe(3)
+  })
+
+  test('tracks runs per user, ignoring interleaved rolls from others', () => {
+    const rolls = [
+      hi({ user_id: 'u1' }), lo({ user_id: 'u2' }),
+      hi({ user_id: 'u1' }), lo({ user_id: 'u2' }),
+      hi({ user_id: 'u1' }), lo({ user_id: 'u2' }),
+    ]
+    const { hot, cold } = longestStreaks(rolls)
+    expect(hot).toMatchObject({ userId: 'u1', count: 3 })
+    expect(cold).toMatchObject({ userId: 'u2', count: 3 })
+  })
+
+  test('empty input', () => {
+    expect(longestStreaks([])).toEqual({ hot: null, cold: null })
   })
 })
 
