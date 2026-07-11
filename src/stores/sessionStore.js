@@ -5,6 +5,7 @@ import { realtime } from '@/lib/realtime.js'
 import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { createPresenceChannel } from '@/lib/presenceChannel.js'
+import { createTorchControls } from '@/lib/torchControls.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import router from '@/router/index.js'
 
@@ -275,29 +276,17 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function torchStart() {
-    torchRunning.value = true
-    _pendingFields.begin(['torch_running'])
-    try {
-      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'start' }, 'session_torch_start')
-    } catch (err) { console.error('session torchStart:', err instanceof ApiError ? err.message : err) }
-    finally { _pendingFields.end(['torch_running']) }
-  }
-
-  async function torchPause() {
-    try {
-      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'pause' }, 'session_torch_pause')
-    } catch (err) { console.error('session torchPause:', err instanceof ApiError ? err.message : err) }
-  }
-
-  async function torchReset() {
-    torchElapsedMs.value = 0
-    _pendingFields.begin(['torch_elapsed_ms'])
-    try {
-      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'reset' }, 'session_torch_reset')
-    } catch (err) { console.error('session torchReset:', err instanceof ApiError ? err.message : err) }
-    finally { _pendingFields.end(['torch_elapsed_ms']) }
-  }
+  const { torchStart, torchPause, torchReset } = createTorchControls({
+    base: () => `/sessions/${sessionId.value}`,
+    intent: (action) => `session_torch_${action}`,
+    apply: (action) => {
+      if (action === 'start') torchRunning.value = true
+      else if (action === 'reset') torchElapsedMs.value = 0
+    },
+    pendingFor: (action) =>
+      action === 'start' ? ['torch_running'] : action === 'reset' ? ['torch_elapsed_ms'] : [],
+    pending: _pendingFields,
+  })
 
   function cleanupPresence() {
     if (_stopPageHide)  { _stopPageHide(); _stopPageHide = null }

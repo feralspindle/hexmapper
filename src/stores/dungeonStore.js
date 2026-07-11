@@ -7,6 +7,7 @@ import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { uploadSessionImage } from '@/lib/sessionImage.js'
 import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
 import { createPresenceChannel } from '@/lib/presenceChannel.js'
+import { createTorchControls } from '@/lib/torchControls.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
@@ -649,32 +650,21 @@ export const useD = defineStore('dungeon', () => {
     finally { _pendingDungeonFields.end(fields) }
   }
 
-  async function torchStart() {
-    if (!dungeon.value?.id) return
-    dungeon.value = { ...dungeon.value, torch_running: true, torch_started_at: new Date().toISOString() }
-    try {
-      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'start' }, 'torch_start')
-    } catch (err) { console.error('torchStart error:', err instanceof ApiError ? err.message : err) }
-  }
-
-  async function torchPause() {
-    if (!dungeon.value?.id) return
-    try {
-      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'pause' }, 'torch_pause')
-    } catch (err) { console.error('torchPause error:', err instanceof ApiError ? err.message : err) }
-  }
-
-  async function torchReset() {
-    if (!dungeon.value?.id) return
-    dungeon.value = {
-      ...dungeon.value,
-      torch_elapsed_ms: 0,
-      torch_started_at: dungeon.value.torch_running ? new Date().toISOString() : null,
-    }
-    try {
-      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'reset' }, 'torch_reset')
-    } catch (err) { console.error('torchReset error:', err instanceof ApiError ? err.message : err) }
-  }
+  const { torchStart, torchPause, torchReset } = createTorchControls({
+    base: () => dungeon.value?.id ? `/dungeons/${dungeon.value.id}` : null,
+    intent: (action) => `torch_${action}`,
+    apply: (action) => {
+      if (action === 'start') {
+        dungeon.value = { ...dungeon.value, torch_running: true, torch_started_at: new Date().toISOString() }
+      } else if (action === 'reset') {
+        dungeon.value = {
+          ...dungeon.value,
+          torch_elapsed_ms: 0,
+          torch_started_at: dungeon.value.torch_running ? new Date().toISOString() : null,
+        }
+      }
+    },
+  })
 
   function cleanup() {
     _initGeneration += 1
