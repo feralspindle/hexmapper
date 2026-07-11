@@ -3,9 +3,9 @@ import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { uploadSessionImage } from '@/lib/sessionImage.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const URL_EXPIRY_SECONDS = 86400
 
@@ -331,22 +331,7 @@ export const useMapStore = defineStore('map', () => {
 
   async function uploadMapImage(file) {
     const sessionStore = useSessionStore()
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('Only JPEG, PNG, and WebP images are allowed.')
-    if (file.size > MAX_IMAGE_BYTES) throw new Error('Image must be under 10 MB.')
-    await new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file)
-      const img = new Image()
-      img.onload  = () => { URL.revokeObjectURL(url); resolve() }
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File could not be decoded as an image.')) }
-      img.src = url
-    })
-    const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
-    const path = `${sessionStore.sessionId}/${crypto.randomUUID()}.${extMap[file.type]}`
-    const { error } = await supabase.storage
-      .from('session-maps')
-      .upload(path, file, { contentType: file.type, upsert: false })
-    if (error) throw new Error(error.message)
-    return path
+    return uploadSessionImage(file, { sessionId: sessionStore.sessionId, maxBytes: MAX_IMAGE_BYTES })
   }
 
   return {

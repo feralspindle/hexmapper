@@ -4,11 +4,11 @@ import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { uploadSessionImage } from '@/lib/sessionImage.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024
 const URL_EXPIRY_SECONDS = 86400
 
@@ -157,22 +157,7 @@ export const useD = defineStore('dungeon', () => {
   watch(() => dungeon.value?.map_image_path, p => _refreshImageUrl(p ?? null), { immediate: false })
 
   async function uploadDungeonImage(sessionId, file) {
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('Only JPEG, PNG, and WebP images are allowed.')
-    if (file.size > MAX_IMAGE_BYTES) throw new Error('Image must be under 50 MB.')
-    await new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file)
-      const img = new Image()
-      img.onload  = () => { URL.revokeObjectURL(url); resolve() }
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File could not be decoded as an image.')) }
-      img.src = url
-    })
-    const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
-    const path = `${sessionId}/dungeon-${crypto.randomUUID()}.${extMap[file.type]}`
-    const { error } = await supabase.storage
-      .from('session-maps')
-      .upload(path, file, { contentType: file.type, upsert: false })
-    if (error) throw new Error(error.message)
-    return path
+    return uploadSessionImage(file, { sessionId, maxBytes: MAX_IMAGE_BYTES, prefix: 'dungeon-' })
   }
 
   async function updateDungeon(patch) {
