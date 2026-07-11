@@ -133,11 +133,21 @@ insert into public.oracle_rolls
   (id, session_id, user_id, display_name, kind, table_id, table_name, result)
 values ('b2000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'table', 'b0000000-0000-0000-0000-000000000001', 'Encounters', '{"result":"Bandits"}');
 
-insert into public.journal_entries (session_id, author_user_id, author_name, body)
-values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'journal entry');
+-- journal_entries and light_sources are created by the session journal
+-- migration, which hasn't merged to staging yet. seed them only when they
+-- exist so this fixture works on both sides of that merge
+do $$
+begin
+  if to_regclass('public.journal_entries') is not null then
+    insert into public.journal_entries (session_id, author_user_id, author_name, body)
+    values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'journal entry');
+  end if;
 
-insert into public.light_sources (session_id, created_by, name)
-values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Torch');
+  if to_regclass('public.light_sources') is not null then
+    insert into public.light_sources (session_id, created_by, name)
+    values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Torch');
+  end if;
+end $$;
 
 insert into public.events
   (aggregate_type, aggregate_id, session_id, sequence, event_type, payload)
