@@ -691,6 +691,7 @@ watch(
     border-radius: 3px;
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 9px;
+    font-weight: 700;
     line-height: 1.2;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -700,12 +701,12 @@ watch(
     font-size: 8px;
 }
 .ds-roll-streak--hot {
-    color: var(--gold, #c8a827);
-    background: color-mix(in srgb, var(--gold, #c8a827) 12%, transparent);
+    color: #b3221c;
+    background: color-mix(in srgb, #b3221c 20%, transparent);
 }
 .ds-roll-streak--cold {
-    color: var(--accent-2, #b8541c);
-    background: color-mix(in srgb, var(--accent-2, #b8541c) 12%, transparent);
+    color: #1f5c99;
+    background: color-mix(in srgb, #1f5c99 20%, transparent);
 }
 
 .ds-roll-note-add {
