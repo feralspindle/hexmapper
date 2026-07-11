@@ -766,6 +766,7 @@ import { useAuthStore } from "@/stores/authStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
+import { useNoteEditing } from "@/composables/useNoteEditing.js";
 
 const hexStore = useHexStore();
 const mapStore = useMapStore();
@@ -790,10 +791,15 @@ const hexLabel = ref("");
 const hexTerrain = ref(null);
 const hexMarkers = ref([]);
 const hexGmMarkers = ref([]);
-const newNote = ref("");
-const savingNote = ref(false);
-const editingNoteId = ref(null);
-const editingNoteBody = ref("");
+const { newNote, savingNote, editingNoteId, editingNoteBody, saveNote, startEditNote, saveEditNote } = useNoteEditing(notesStore, {
+    beforeSave: async () => {
+        if (!hexStore.selectedCell?.id && hexStore.selectedHex) {
+            const { q, r } = hexStore.selectedHex;
+            const cellId = await hexStore.ensureCellExists(q, r);
+            if (cellId) await notesStore.initForHex(cellId, sessionStore.sessionId);
+        }
+    },
+});
 const addingDungeon = ref(false);
 const newDungeonName = ref("");
 const dungeonNameEl = ref(null);
@@ -902,32 +908,6 @@ function debouncedUpdateGmMarker(marker) {
         const { q, r } = hexStore.selectedHex;
         hexStore.updateGmMarkerLabel(q, r, marker.id, marker.label);
     }, 500);
-}
-
-async function saveNote() {
-    if (!newNote.value.trim() || savingNote.value) return;
-    savingNote.value = true;
-    if (!hexStore.selectedCell?.id && hexStore.selectedHex) {
-        const { q, r } = hexStore.selectedHex;
-        const cellId = await hexStore.ensureCellExists(q, r);
-        if (cellId) await notesStore.initForHex(cellId, sessionStore.sessionId);
-    }
-    const body = newNote.value;
-    newNote.value = "";
-    await notesStore.addNote(body);
-    savingNote.value = false;
-}
-
-function startEditNote(note) {
-    editingNoteId.value = note.id;
-    editingNoteBody.value = note.body;
-}
-
-async function saveEditNote() {
-    if (!editingNoteBody.value.trim()) return;
-    const id = editingNoteId.value;
-    editingNoteId.value = null;
-    await notesStore.updateNote(id, editingNoteBody.value);
 }
 
 function clearHex() {

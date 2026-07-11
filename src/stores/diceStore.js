@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { mergeRealtimeSnapshot } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playDiceSound } from '@/lib/diceSound.js'
+import { withRollStreaks } from '@/lib/diceStreaks.js'
 
 const HISTORY_LIMIT = 60
 
@@ -14,6 +15,7 @@ export const useDiceStore = defineStore('dice', () => {
   const annotations = ref({})
   const pendingRoll = ref(null)
   const latestRoll  = ref(null)
+  const rollsWithStreaks = computed(() => withRollStreaks(rolls.value))
   let channel = null
   let currentSessionId = null
   let loadGeneration = 0
@@ -172,5 +174,5 @@ export const useDiceStore = defineStore('dice', () => {
     currentSessionId  = null
   }
 
-  return { rolls, annotations, pendingRoll, latestRoll, init, rollDice, addAnnotation, cleanup }
+  return { rolls, rollsWithStreaks, annotations, pendingRoll, latestRoll, init, rollDice, addAnnotation, cleanup }
 })

@@ -120,6 +120,10 @@ export const useVaultStore = defineStore('vault', () => {
         if (e.eventType === 'INSERT') {
           if (_deletedLootIds.has(e.new.id)) return
           if (!loot.value.find(l => l.id === e.new.id)) loot.value.push(e.new)
+        } else if (e.eventType === 'UPDATE') {
+          if (_deletedLootIds.has(e.new.id)) return
+          const idx = loot.value.findIndex(l => l.id === e.new.id)
+          if (idx !== -1) loot.value[idx] = e.new
         } else if (e.eventType === 'DELETE') {
           _deletedLootIds.add(e.old.id)
           loot.value = loot.value.filter(l => l.id !== e.old.id)
@@ -249,6 +253,16 @@ export const useVaultStore = defineStore('vault', () => {
     }
   }
 
+  async function _patchLoot(id, patch) {
+    const idx = loot.value.findIndex(l => l.id === id)
+    if (idx !== -1) loot.value[idx] = { ...loot.value[idx], ...patch }
+    try {
+      await apiClient.patch(`/vault-loot/${id}`, { ...patch, source_client: CLIENT_ID })
+    } catch (error) {
+      console.error('_patchLoot:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
   async function _removeLoot(id) {
     _deletedLootIds.add(id)
     loot.value = loot.value.filter(l => l.id !== id)
@@ -260,9 +274,10 @@ export const useVaultStore = defineStore('vault', () => {
     }
   }
 
-  async function claimLoot(lootItem) {
+  async function claimLoot(lootItem, qty = lootItem.quantity) {
     const characterStore = useCharacterStore()
     if (!characterStore.character) return
+    qty = Math.min(Math.max(Math.floor(qty), 1), lootItem.quantity)
     const authStore = useAuthStore()
     const userId = authStore.user?.id
     const member = characterStore.memberSelections.find(m => m.user_id === userId)
@@ -270,18 +285,25 @@ export const useVaultStore = defineStore('vault', () => {
     const currency = lootItem.currency
       ?? (['gold', 'silver', 'copper'].find(c => (lootItem.name ?? '').toLowerCase().includes(c)) ?? null)
     if (lootItem.loot_type === 'coins' && currency) {
-      characterStore.adjustMoney(currency, lootItem.quantity)
-      broadcastLootToast({ type: 'coins', charName, currency, amount: lootItem.quantity })
+      characterStore.adjustMoney(currency, qty)
+      broadcastLootToast({ type: 'coins', charName, currency, amount: qty })
     } else {
       characterStore.addGearItem({
         name:     lootItem.name,
         slots:    1,
-        quantity: lootItem.quantity,
+        quantity: qty,
         type:     'sundry',
       })
-      broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty: lootItem.quantity })
+      broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty })
     }
-    await _removeLoot(lootItem.id)
+    if (qty < lootItem.quantity) {
+      // a partial claim shrinks the pile in place - one update event instead of
+      // a delete + re-add pair, so a dropped realtime frame can't leave other
+      // clients holding a ghost card
+      await _patchLoot(lootItem.id, { quantity: lootItem.quantity - qty })
+    } else {
+      await _removeLoot(lootItem.id)
+    }
   }
 
   async function _addVaultItem(containerId, name, quantity, notes = '', slots = 0, itemType = 'sundry', currency = null) {
@@ -367,9 +389,10 @@ export const useVaultStore = defineStore('vault', () => {
     }
     const totalAssigned = assignments.reduce((s, a) => s + a.qty, 0)
     if (totalAssigned < lootItem.quantity) {
-      await addLoot(lootItem.name, lootItem.quantity - totalAssigned, lootItem.notes, lootItem.loot_type ?? 'item')
+      await _patchLoot(lootItem.id, { quantity: lootItem.quantity - totalAssigned })
+    } else {
+      await _removeLoot(lootItem.id)
     }
-    await _removeLoot(lootItem.id)
   }
 
   async function discardLoot(lootItem) {

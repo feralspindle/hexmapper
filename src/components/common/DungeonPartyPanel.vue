@@ -43,7 +43,13 @@
             </button>
         </div>
 
-        <div class="ds-party-body">
+        <div class="ds-panel-tabs">
+            <button class="ds-panel-tab" :class="{ active: partyTab === 'party' }" @click="partyTab = 'party'">Party</button>
+            <button class="ds-panel-tab" :class="{ active: partyTab === 'leaderboard' }" @click="partyTab = 'leaderboard'">Leaderboard</button>
+            <button class="ds-panel-tab" :class="{ active: partyTab === 'stats' }" @click="partyTab = 'stats'">Stats</button>
+        </div>
+
+        <div v-show="partyTab === 'party'" class="ds-party-body">
             <div v-if="hasInitiative || isGM" class="ds-initiative-bar">
                 <span>Initiative order</span>
                 <button
@@ -121,6 +127,14 @@
                 </div>
             </div>
         </div>
+
+        <div v-show="partyTab === 'leaderboard'" class="ds-party-body">
+            <DiceLeaderboardPanel />
+        </div>
+
+        <div v-show="partyTab === 'stats'" class="ds-party-body">
+            <DiceStatsPanel />
+        </div>
         <div class="ds-resize-handle" @mousedown.stop="startResize">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                 <line x1="2" y1="9" x2="9" y2="2"/>
@@ -138,6 +152,8 @@ import { useAuthStore } from "@/stores/authStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
+import DiceStatsPanel from "@/components/common/DiceStatsPanel.vue";
+import DiceLeaderboardPanel from "@/components/common/DiceLeaderboardPanel.vue";
 
 const characterStore = useCharacterStore();
 const sessionStore = useSessionStore();
@@ -145,6 +161,8 @@ const authStore = useAuthStore();
 const diceStore = useDiceStore();
 
 const { visible: partyVisible, close: closeParty } = usePartyPanel();
+
+const partyTab = ref("party");
 
 const STORAGE_KEY = "dm.partyPanel.pos";
 const SIZE_KEY = "dm.partyPanel.size";

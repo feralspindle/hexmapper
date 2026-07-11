@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { pendingKeys } from '@/lib/realtimeProtocol.js'
 
 const DEFAULT_SETTINGS = {
   month_names:    ['January','February','March','April','May','June','July','August','September','October','November','December'],
@@ -28,10 +29,11 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   // while our own writes are in flight, realtime echoes and out-of-order
   // responses carry stale data that would stomp newer optimistic edits
-  let _settingsWrites  = 0
-  let _settingsQueue   = Promise.resolve()
-  const _dayWrites     = new Map()  // 'y-m-d' -> in-flight count
-  const _dayQueues     = new Map()  // 'y-m-d' -> tail of the write chain
+  const _settingsWrites = pendingKeys()
+  const _dayWrites      = pendingKeys()
+  let _settingsQueue    = Promise.resolve()
+  const _dayQueues      = new Map()  // 'y-m-d' -> tail of the write chain
+  const SETTINGS_KEY    = 'settings'
 
   function _dayKey(year, month, day) {
     return `${year}-${month}-${day}`
@@ -113,7 +115,7 @@ export const useCalendarStore = defineStore('calendar', () => {
         filter: `session_id=eq.${sessionId}`,
       }, e => {
         if (e.eventType === 'INSERT' || e.eventType === 'UPDATE') {
-          if (_settingsWrites > 0) return
+          if (_settingsWrites.has(SETTINGS_KEY)) return
           settings.value = { ...DEFAULT_SETTINGS, ...e.new }
         }
       })
@@ -155,7 +157,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
     const sessionId = _sessionId
     const key = _dayKey(year, month, day)
-    _dayWrites.set(key, (_dayWrites.get(key) ?? 0) + 1)
+    _dayWrites.begin([key])
     // chain writes to the same day so they commit in order
     const write = (_dayQueues.get(key) ?? Promise.resolve()).then(() =>
       apiClient.post('/calendar-days', { session_id: sessionId, year, month, day, patch })
@@ -165,16 +167,15 @@ export const useCalendarStore = defineStore('calendar', () => {
       const data = await write
       // only the last outstanding write applies its response - earlier ones
       // are stale once another optimistic edit has happened
-      if (data && _dayWrites.get(key) === 1 && _sessionId === sessionId) {
+      if (data && _dayWrites.count(key) === 1 && _sessionId === sessionId) {
         const i = days.value.findIndex(d => d.year === year && d.month === month && d.day === day)
         if (i !== -1) days.value[i] = data; else days.value.push(data)
       }
     } catch (error) {
       console.error('upsertDay:', error instanceof ApiError ? error.message : error)
     } finally {
-      const count = _dayWrites.get(key) ?? 0
-      if (count <= 1) { _dayWrites.delete(key); _dayQueues.delete(key) }
-      else _dayWrites.set(key, count - 1)
+      _dayWrites.end([key])
+      if (!_dayWrites.has(key)) _dayQueues.delete(key)
     }
   }
 
@@ -185,7 +186,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
     Object.assign(settings.value, patch)
     const sessionId = _sessionId
-    _settingsWrites += 1
+    _settingsWrites.begin([SETTINGS_KEY])
     // each put sends the whole settings blob, so chain them: an earlier put
     // committing after a later one would silently persist stale settings. the
     // snapshot is taken at send time to pick up any newer optimistic edits
@@ -198,13 +199,13 @@ export const useCalendarStore = defineStore('calendar', () => {
     _settingsQueue = write.then(() => {}, () => {})
     try {
       const data = await write
-      if (data && _settingsWrites === 1 && _sessionId === sessionId) {
+      if (data && _settingsWrites.count(SETTINGS_KEY) === 1 && _sessionId === sessionId) {
         settings.value = { ...DEFAULT_SETTINGS, ...data }
       }
     } catch (error) {
       console.error('updateSettings:', error instanceof ApiError ? error.message : error)
     } finally {
-      _settingsWrites -= 1
+      _settingsWrites.end([SETTINGS_KEY])
     }
   }
 

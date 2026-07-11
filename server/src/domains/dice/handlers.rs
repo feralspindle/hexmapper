@@ -49,6 +49,7 @@ pub struct DiceRollRow {
     pub created_at: DateTime<Utc>,
     pub label: Option<String>,
     pub character_id: Option<Uuid>,
+    pub stats: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

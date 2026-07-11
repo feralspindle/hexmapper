@@ -313,72 +313,13 @@
         </template>
 
         <div class="ds-tool-group">
-            <button
-                class="ds-tool"
-                data-testid="hex-sound-toggle"
-                :aria-pressed="!soundEnabled ? 'true' : 'false'"
-                @click="toggleSound()"
-            >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                    <template v-if="soundEnabled">
-                        <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                        <path d="M19.07 4.93a10 10 0 010 14.14"/>
-                    </template>
-                    <template v-else>
-                        <line x1="23" y1="9" x2="17" y2="15"/>
-                        <line x1="17" y1="9" x2="23" y2="15"/>
-                    </template>
-                </svg>
-                <span class="ds-tip">{{ soundEnabled ? 'Mute sounds' : 'Unmute sounds' }}</span>
-            </button>
+            <ToolbarToggleButton kind="sound" testid="hex-sound-toggle" />
         </div>
 
         <div class="ds-tool-group">
             <span class="ds-tool-label">Party</span>
-            <button
-                class="ds-tool"
-                data-testid="hex-party-toggle"
-                :aria-pressed="partyVisible ? 'true' : 'false'"
-                @click="toggleParty()"
-            >
-                <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                >
-                    <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-                </svg>
-                <span class="ds-tip">Party panel</span>
-            </button>
-            <button
-                class="ds-tool"
-                data-testid="hex-vault-toggle"
-                :aria-pressed="vaultVisible ? 'true' : 'false'"
-                @click="toggleVault()"
-            >
-                <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                >
-                    <path d="M3 9h18M3 9V7a1 1 0 011-1h16a1 1 0 011 1v2M3 9v9a1 1 0 001 1h16a1 1 0 001-1V9"/>
-                    <path d="M10 13h4"/>
-                </svg>
-                <span class="ds-tip">Party vault</span>
-            </button>
+            <ToolbarToggleButton kind="party" testid="hex-party-toggle" />
+            <ToolbarToggleButton kind="vault" testid="hex-vault-toggle" />
         </div>
     </aside>
 
@@ -426,51 +367,10 @@
             <span class="ds-tip">Pan <kbd>H</kbd></span>
         </button>
         <div class="ds-float-sep" />
-        <button
-            class="ds-tool"
-            data-testid="hex-party-toggle"
-            :aria-pressed="partyVisible ? 'true' : 'false'"
-            @click="toggleParty()"
-        >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-            </svg>
-            <span class="ds-tip">Party panel</span>
-        </button>
-        <button
-            class="ds-tool"
-            data-testid="hex-vault-toggle"
-            :aria-pressed="vaultVisible ? 'true' : 'false'"
-            @click="toggleVault()"
-        >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 9h18M3 9V7a1 1 0 011-1h16a1 1 0 011 1v2M3 9v9a1 1 0 001 1h16a1 1 0 001-1V9"/>
-                <path d="M10 13h4"/>
-            </svg>
-            <span class="ds-tip">Party vault</span>
-        </button>
+        <ToolbarToggleButton kind="party" testid="hex-party-toggle" :size="16" />
+        <ToolbarToggleButton kind="vault" testid="hex-vault-toggle" :size="16" />
         <div class="ds-float-sep" />
-        <button
-            class="ds-tool"
-            data-testid="hex-sound-toggle"
-            :aria-pressed="!soundEnabled ? 'true' : 'false'"
-            @click="toggleSound()"
-        >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                <template v-if="soundEnabled">
-                    <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                    <path d="M19.07 4.93a10 10 0 010 14.14"/>
-                </template>
-                <template v-else>
-                    <line x1="23" y1="9" x2="17" y2="15"/>
-                    <line x1="17" y1="9" x2="23" y2="15"/>
-                </template>
-            </svg>
-            <span class="ds-tip">{{ soundEnabled ? 'Mute sounds' : 'Unmute sounds' }}</span>
-        </button>
+        <ToolbarToggleButton kind="sound" testid="hex-sound-toggle" :size="16" />
         <template v-if="hexMode === 'blank'">
             <div class="ds-float-sep" />
             <button
@@ -553,10 +453,8 @@
 </template>
 
 <script setup>
-import { computed, reactive } from "vue";
-import { usePartyNotebook } from "@/composables/usePartyNotebook.js";
-import { usePartyPanel } from "@/composables/usePartyPanel.js";
-import { soundEnabled, toggleSound } from "@/lib/soundSettings.js";
+import { useToolTooltip } from "@/composables/useToolTooltip.js";
+import ToolbarToggleButton from "@/components/common/ToolbarToggleButton.vue";
 
 defineProps({
     hexMode: { type: String, default: null },
@@ -570,32 +468,5 @@ defineProps({
 
 const emit = defineEmits(["tool", "reveal-all", "hide-all", "map-settings", "toggle-exploration"]);
 
-const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook();
-const { visible: partyVisible, toggle: toggleParty } = usePartyPanel();
-const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault');
-function toggleVault() {
-  if (vaultVisible.value) { toggleInventory(); } else { openNotebook('vault'); }
-}
-
-const tip = reactive({ show: false, x: 0, y: 0, html: '' })
-let _lastBtn = null
-
-function onHover(e) {
-  const btn = e.target.closest('.ds-tool')
-  if (btn === _lastBtn) return
-  _lastBtn = btn
-  if (!btn) { tip.show = false; return }
-  const tipEl = btn.querySelector('.ds-tip')
-  if (!tipEl) { tip.show = false; return }
-  const rect = btn.getBoundingClientRect()
-  tip.x = rect.right + 10
-  tip.y = rect.top + rect.height / 2
-  tip.html = tipEl.innerHTML
-  tip.show = true
-}
-
-function onLeave() {
-  _lastBtn = null
-  tip.show = false
-}
+const { tip, onHover, onLeave } = useToolTooltip();
 </script>

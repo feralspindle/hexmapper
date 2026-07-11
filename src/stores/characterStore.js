@@ -79,6 +79,9 @@ export const useCharacterStore = defineStore('character', () => {
       tempHp:      data.tempHp ?? 0,
       renownLog:   data.renownLog ?? [],
       luckTokens:  data.luckTokens ?? { current: 1, max: 3 },
+      // shadowdark: gear slots = STR score, 10 minimum
+      gearSlotsTotal: data.gearSlotsTotal ?? Math.max(10, data.stats?.STR ?? 10),
+      xpLog:       data.xpLog ?? [],
     }
   }
 
@@ -283,6 +286,33 @@ export const useCharacterStore = defineStore('character', () => {
     updateField('renown', next)
     updateField('renownLog', [...(character.value.renownLog ?? []), entry].slice(-RENOWN_LOG_MAX))
     _logSheet(`${charName} · renown: ${current} → ${next}${why ? ` (${why})` : ''}`)
+  }
+
+  // a treasure haul: the loot line, the xp for it, and one log entry, written
+  // together so other clients get a single consistent broadcast
+  function awardHaul(description, xp = 0) {
+    if (!activeId.value || !character.value) return
+    const desc = (description ?? '').trim()
+    if (!desc) return
+    const amount = Math.max(0, Number(xp) || 0)
+    const charName = character.value.name ?? 'character'
+    const entry = { id: crypto.randomUUID(), description: desc, xp: amount, at: new Date().toISOString() }
+    characters.value = characters.value.map(c =>
+      c.id === activeId.value
+        ? {
+            ...c,
+            data: {
+              ...c.data,
+              treasures: [...(c.data.treasures ?? []), amount > 0 ? `${desc} (+${amount} xp)` : desc],
+              XP: (c.data.XP ?? 0) + amount,
+              xpLog: [entry, ...(c.data.xpLog ?? [])].slice(0, 50),
+            },
+          }
+        : c
+    )
+    _scheduleSave(activeId.value)
+    _scheduleBroadcast(activeId.value)
+    _logSheet(`${charName} · treasure: ${desc}${amount > 0 ? ` (+${amount} xp)` : ''}`)
   }
 
   function adjustRenown(delta, reason = '') {
@@ -721,7 +751,7 @@ export const useCharacterStore = defineStore('character', () => {
     gmInitiative,
     loadAll, refresh, setActive, importCharacter, deleteCharacter,
     updateField, updateFieldForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
-    renownValue, adjustRenown, setRenown, deleteRenownEntry,
+    renownValue, adjustRenown, setRenown, deleteRenownEntry, awardHaul,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,
     cleanup,

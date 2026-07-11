@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
+import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { createPresenceChannel } from '@/lib/presenceChannel.js'
+import { createTorchControls } from '@/lib/torchControls.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import router from '@/router/index.js'
 
@@ -18,6 +21,10 @@ export const useSessionStore = defineStore('session', () => {
   const torchRunning   = ref(false)
   const torchElapsedMs = ref(0)
   const torchStartedAt = ref(null)
+  const travelState    = ref({ enabled: false, fraction: 0 })
+  const initiativeState = ref({ entries: [], active_id: null, round: 1 })
+  const crawlRound     = ref(0)
+  const crawlCheckEvery = ref(3)
   const loading        = ref(false)
   const error          = ref(null)
 
@@ -38,15 +45,7 @@ export const useSessionStore = defineStore('session', () => {
   // fields we've written optimistically with the patch still in flight. the
   // session UPDATE echo carries every column, so until our own write commits
   // any echo (ours or another client's) holds a stale value for these
-  const _pendingFields = new Map()
-  function _beginField(field) {
-    _pendingFields.set(field, (_pendingFields.get(field) ?? 0) + 1)
-  }
-  function _endField(field) {
-    const count = _pendingFields.get(field) ?? 0
-    if (count <= 1) _pendingFields.delete(field)
-    else _pendingFields.set(field, count - 1)
-  }
+  const _pendingFields = pendingKeys()
 
   const onlineUsers = ref([])
   const latestJoin  = ref(null)
@@ -62,6 +61,10 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = data.torch_running ?? false
     torchElapsedMs.value = data.torch_elapsed_ms ?? 0
     torchStartedAt.value = data.torch_started_at ?? null
+    travelState.value    = data.travel_state ?? { enabled: false, fraction: 0 }
+    initiativeState.value = data.initiative_state ?? { entries: [], active_id: null, round: 1 }
+    crawlRound.value     = data.crawl_round ?? 0
+    crawlCheckEvery.value = data.crawl_check_every ?? 3
   }
 
   function _subscribeToSession(id) {
@@ -87,6 +90,10 @@ export const useSessionStore = defineStore('session', () => {
           if (fresh('torch_running'))    torchRunning.value   = row.torch_running
           if (fresh('torch_elapsed_ms')) torchElapsedMs.value = row.torch_elapsed_ms
           if (fresh('torch_started_at')) torchStartedAt.value = row.torch_started_at ?? null
+          if (fresh('travel_state'))     travelState.value    = row.travel_state ?? { enabled: false, fraction: 0 }
+          if (fresh('initiative_state')) initiativeState.value = row.initiative_state ?? { entries: [], active_id: null, round: 1 }
+          if (fresh('crawl_round'))      crawlRound.value     = row.crawl_round ?? 0
+          if (fresh('crawl_check_every')) crawlCheckEvery.value = row.crawl_check_every ?? 3
         },
       )
       .subscribe()
@@ -175,7 +182,7 @@ export const useSessionStore = defineStore('session', () => {
   async function updateSessionName(name) {
     const prev = sessionName.value
     sessionName.value = name
-    _beginField('name')
+    _pendingFields.begin(['name'])
     try {
       await apiClient.patch(`/sessions/${sessionId.value}`, { name }, 'rename_session')
       const idx = userSessions.value.findIndex(s => s.id === sessionId.value)
@@ -184,21 +191,21 @@ export const useSessionStore = defineStore('session', () => {
       console.error('updateSessionName:', err instanceof ApiError ? err.message : err)
       sessionName.value = prev
     } finally {
-      _endField('name')
+      _pendingFields.end(['name'])
     }
   }
 
   async function setActiveMapId(mapId) {
     const prev = activeMapId.value
     activeMapId.value = mapId
-    _beginField('active_map_id')
+    _pendingFields.begin(['active_map_id'])
     try {
       await apiClient.patch(`/sessions/${sessionId.value}`, { active_map_id: mapId }, 'set_active_map')
     } catch (err) {
       console.error('setActiveMapId:', err instanceof ApiError ? err.message : err)
       activeMapId.value = prev
     } finally {
-      _endField('active_map_id')
+      _pendingFields.end(['active_map_id'])
     }
   }
 
@@ -214,7 +221,7 @@ export const useSessionStore = defineStore('session', () => {
   async function setGmInitiative(score) {
     const previous = gmInitiative.value
     gmInitiative.value = score ?? null
-    _beginField('gm_initiative')
+    _pendingFields.begin(['gm_initiative'])
     try {
       await apiClient.patch(
         `/sessions/${sessionId.value}`,
@@ -227,7 +234,7 @@ export const useSessionStore = defineStore('session', () => {
       gmInitiative.value = previous
       return false
     } finally {
-      _endField('gm_initiative')
+      _pendingFields.end(['gm_initiative'])
     }
   }
 
@@ -235,7 +242,7 @@ export const useSessionStore = defineStore('session', () => {
     if (!['gm', 'gm_less'].includes(mode)) return false
     const previous = playMode.value
     playMode.value = mode
-    _beginField('play_mode')
+    _pendingFields.begin(['play_mode'])
     try {
       await apiClient.patch(`/sessions/${sessionId.value}`, { play_mode: mode }, 'set_play_mode')
       return true
@@ -244,7 +251,7 @@ export const useSessionStore = defineStore('session', () => {
       playMode.value = previous
       return false
     } finally {
-      _endField('play_mode')
+      _pendingFields.end(['play_mode'])
     }
   }
 
@@ -254,56 +261,25 @@ export const useSessionStore = defineStore('session', () => {
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
 
     let _ready = false
-
-    const channel = realtime
-      .channel(`session:${id}:presence`, {
-        sessionId: id,
-        config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
-      })
-
-    presenceChannel = channel
-
-    const trackPresence = () => channel.track({
-      user_id:      authStore.user?.id ?? null,
-      _clientId:    CLIENT_ID,
-      display_name: authStore.displayName ?? 'Adventurer',
-      avatar_url:   authStore.avatarUrl ?? null,
-    })
-
-    const syncUsers = () => {
-      const state = channel.presenceState()
-      const latest = Object.values(state).map(e => e.at(-1)).filter(Boolean)
-      const byUser = new Map()
-      for (const p of latest) byUser.set(p.user_id ?? p._clientId, p)
-      onlineUsers.value = [...byUser.values()]
-    }
-
-    channel
-      .on('presence', { event: 'sync' }, () => { syncUsers(); _ready = true })
-      .on('presence', { event: 'join' }, ({ newPresences }) => {
-        syncUsers()
+    const presence = createPresenceChannel({
+      channelName: `session:${id}:presence`,
+      sessionId: id,
+      clientId: CLIENT_ID,
+      members: onlineUsers,
+      onSync: () => { _ready = true },
+      onJoin: (newPresences) => {
         if (!_ready) return
         for (const p of newPresences) {
           if (p.user_id && p.user_id === authStore.user?.id) continue
           latestJoin.value = { ...p, _ts: Date.now() }
         }
-      })
-      .on('presence', { event: 'leave' }, syncUsers)
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED') return
-        trackPresence()
-      })
-
-    _stopAuthWatch = watch(
-      () => authStore.user?.id,
-      (userId, prev) => {
-        if (!userId || userId === prev || !presenceChannel) return
-        trackPresence()
       },
-    )
+    })
+    presenceChannel = presence.channel
+    _stopAuthWatch = presence.stopAuthWatch
 
     const handlePageHide = () => { if (presenceChannel) presenceChannel.untrack() }
-    const handlePageShow = () => { if (presenceChannel) trackPresence() }
+    const handlePageShow = () => { if (presenceChannel) presence.track() }
     window.addEventListener('pagehide', handlePageHide)
     window.addEventListener('pageshow', handlePageShow)
     _stopPageHide = () => {
@@ -312,28 +288,78 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function torchStart() {
-    torchRunning.value = true
-    _beginField('torch_running')
+  const { torchStart, torchPause, torchReset } = createTorchControls({
+    base: () => `/sessions/${sessionId.value}`,
+    intent: (action) => `session_torch_${action}`,
+    apply: (action) => {
+      if (action === 'start') torchRunning.value = true
+      else if (action === 'reset') torchElapsedMs.value = 0
+    },
+    pendingFor: (action) =>
+      action === 'start' ? ['torch_running'] : action === 'reset' ? ['torch_elapsed_ms'] : [],
+    pending: _pendingFields,
+  })
+
+  // one call per tracker op, the server mutates the blob under a row lock and
+  // the fresh state comes back (and to everyone else via the session UPDATE)
+  async function initiativeOp(op, payload = {}) {
     try {
-      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'start' }, 'session_torch_start')
-    } catch (err) { console.error('session torchStart:', err instanceof ApiError ? err.message : err) }
-    finally { _endField('torch_running') }
+      const next = await apiClient.post(`/sessions/${sessionId.value}/initiative`, { op, ...payload }, `initiative_${op}`)
+      if (next) initiativeState.value = next
+      return next
+    } catch (err) {
+      console.error('initiativeOp:', err instanceof ApiError ? err.message : err)
+      return null
+    }
   }
 
-  async function torchPause() {
+  async function advanceCrawlRound() {
+    crawlRound.value += 1
     try {
-      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'pause' }, 'session_torch_pause')
-    } catch (err) { console.error('session torchPause:', err instanceof ApiError ? err.message : err) }
+      // encounter result comes back for the caller; everyone else gets the
+      // round bump via the session UPDATE and any encounter via chat
+      return await apiClient.post(`/sessions/${sessionId.value}/crawl-round`, { action: 'advance' }, 'crawl_advance')
+    } catch (err) {
+      crawlRound.value -= 1
+      console.error('advanceCrawlRound:', err instanceof ApiError ? err.message : err)
+      return null
+    }
   }
 
-  async function torchReset() {
-    torchElapsedMs.value = 0
-    _beginField('torch_elapsed_ms')
+  async function resetCrawlRound() {
+    const previous = crawlRound.value
+    crawlRound.value = 0
     try {
-      await apiClient.post(`/sessions/${sessionId.value}/torch`, { action: 'reset' }, 'session_torch_reset')
-    } catch (err) { console.error('session torchReset:', err instanceof ApiError ? err.message : err) }
-    finally { _endField('torch_elapsed_ms') }
+      await apiClient.post(`/sessions/${sessionId.value}/crawl-round`, { action: 'reset' }, 'crawl_reset')
+    } catch (err) {
+      crawlRound.value = previous
+      console.error('resetCrawlRound:', err instanceof ApiError ? err.message : err)
+    }
+  }
+
+  async function setCrawlCheckEvery(every) {
+    const previous = crawlCheckEvery.value
+    crawlCheckEvery.value = every
+    try {
+      await apiClient.patch(`/sessions/${sessionId.value}`, { crawl_check_every: every }, 'crawl_config')
+    } catch (err) {
+      crawlCheckEvery.value = previous
+      console.error('setCrawlCheckEvery:', err instanceof ApiError ? err.message : err)
+    }
+  }
+
+  // move: burns travel time for the destination terrain, the server advances
+  // the calendar and rolls weather at day boundaries. config: patches rates /
+  // enabled / difficult under the same row lock.
+  async function travel(op, payload = {}) {
+    try {
+      const result = await apiClient.post(`/sessions/${sessionId.value}/travel`, { op, ...payload }, `travel_${op}`)
+      if (result?.travel_state) travelState.value = result.travel_state
+      return result
+    } catch (err) {
+      console.error('travel:', err instanceof ApiError ? err.message : err)
+      return null
+    }
   }
 
   function cleanupPresence() {
@@ -357,6 +383,10 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning.value   = false
     torchElapsedMs.value = 0
     torchStartedAt.value = null
+    travelState.value    = { enabled: false, fraction: 0 }
+    initiativeState.value = { entries: [], active_id: null, round: 1 }
+    crawlRound.value     = 0
+    crawlCheckEvery.value = 3
   }
 
   return {
@@ -370,6 +400,15 @@ export const useSessionStore = defineStore('session', () => {
     torchRunning,
     torchElapsedMs,
     torchStartedAt,
+    travelState,
+    travel,
+    initiativeState,
+    initiativeOp,
+    crawlRound,
+    crawlCheckEvery,
+    advanceCrawlRound,
+    resetCrawlRound,
+    setCrawlCheckEvery,
     isGM,
     loading,
     error,

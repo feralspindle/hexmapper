@@ -2,14 +2,19 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch, toRaw } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
+import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
-import { useAuthStore } from '@/stores/authStore.js'
+import { uploadSessionImage } from '@/lib/sessionImage.js'
+import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
+import { createPresenceChannel } from '@/lib/presenceChannel.js'
+import { createTorchControls } from '@/lib/torchControls.js'
+import { MAP_IMAGE_FIELD_MAP, assignDbFields } from '@/lib/mapImageFields.js'
 import { useActivityStore } from '@/stores/activityStore.js'
+import { useOracleStore } from '@/stores/oracleStore.js'
+import { generateRoomPlan, weightedPick, STOCKING_FALLBACK } from '@/lib/dungeonGenerator.js'
 
 const CLIENT_ID = crypto.randomUUID()
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024
-const URL_EXPIRY_SECONDS = 86400
 
 export const useD = defineStore('dungeon', () => {
   const dungeon = ref(null)
@@ -23,7 +28,7 @@ export const useD = defineStore('dungeon', () => {
   const undoStack = ref([])
   const _editingRoom = ref(null)
 
-  const dungeonImageUrl = ref(null)
+  const { url: dungeonImageUrl, refresh: _refreshImageUrl, cleanup: _cleanupImageUrl } = createSignedMapUrl()
   const fogCells = ref(new Set())
   const _localOverrides = {}
 
@@ -37,28 +42,14 @@ export const useD = defineStore('dungeon', () => {
   let fogChannel = null
   let undoChannel = null
   let _stopAuthWatch = null
+  let _trackPresence = null
   let _undoing = false
-  let _urlTimer = null
-  let _urlRenewal = null
-  let _urlGeneration = 0
   let _dungeonId = null
   let _initGeneration = 0
 
-  const _pendingWrites = new Map()
-  const _pendingDungeonFields = new Map()
+  const _pendingWrites = pendingKeys()
+  const _pendingDungeonFields = pendingKeys()
   const _pendingFogOps = new Map()
-
-  function _beginPending(map, keys) {
-    for (const key of keys) map.set(key, (map.get(key) ?? 0) + 1)
-  }
-
-  function _endPending(map, keys) {
-    for (const key of keys) {
-      const count = map.get(key) ?? 0
-      if (count <= 1) map.delete(key)
-      else map.set(key, count - 1)
-    }
-  }
 
   const _logUndoError = (label) => (err) =>
     console.error(`undo ${label}:`, err instanceof ApiError ? err.message : err)
@@ -94,10 +85,10 @@ export const useD = defineStore('dungeon', () => {
       case 'update_room': {
         const r = rooms.value.get(action.roomId)
         if (r) rooms.value.set(action.roomId, { ...r, ...action.patch })
-        _beginPending(_pendingWrites, [`room:${action.roomId}`])
+        _pendingWrites.begin([`room:${action.roomId}`])
         await apiClient.patch(`/dungeon-rooms/${action.roomId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_room')
           .catch(_logUndoError('update_room'))
-          .finally(() => _endPending(_pendingWrites, [`room:${action.roomId}`]))
+          .finally(() => _pendingWrites.end([`room:${action.roomId}`]))
         break
       }
       case 'delete_corridor': {
@@ -114,10 +105,10 @@ export const useD = defineStore('dungeon', () => {
       case 'update_corridor': {
         const c = corridors.value.get(action.corridorId)
         if (c) corridors.value.set(action.corridorId, { ...c, ...action.patch })
-        _beginPending(_pendingWrites, [`corridor:${action.corridorId}`])
+        _pendingWrites.begin([`corridor:${action.corridorId}`])
         await apiClient.patch(`/dungeon-corridors/${action.corridorId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_corridor')
           .catch(_logUndoError('update_corridor'))
-          .finally(() => _endPending(_pendingWrites, [`corridor:${action.corridorId}`]))
+          .finally(() => _pendingWrites.end([`corridor:${action.corridorId}`]))
         break
       }
     }
@@ -136,69 +127,19 @@ export const useD = defineStore('dungeon', () => {
       .subscribe()
   }
 
-  async function _refreshImageUrl(path) {
-    const urlGeneration = ++_urlGeneration
-    if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
-    _urlRenewal = null
-    if (!path) { dungeonImageUrl.value = null; return }
-    const { data, error } = await supabase.storage
-      .from('session-maps')
-      .createSignedUrl(path, URL_EXPIRY_SECONDS)
-    if (urlGeneration !== _urlGeneration) return
-    if (error) {
-      if (error.message !== 'Object not found') console.error('dungeonStore refreshImageUrl:', error.message)
-      dungeonImageUrl.value = null
-      return
-    }
-    dungeonImageUrl.value = data.signedUrl
-    const renewalMs = URL_EXPIRY_SECONDS * 0.9 * 1000
-    _urlRenewal = { path, at: Date.now() + renewalMs }
-    _urlTimer = setTimeout(() => _refreshImageUrl(path), renewalMs)
-  }
-
-  // Background tabs throttle timers, so a long-hidden tab can outlive its signed
-  // URL; renew an overdue one as soon as the tab is visible again.
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return
-      if (_urlRenewal && Date.now() >= _urlRenewal.at) _refreshImageUrl(_urlRenewal.path)
-    })
-  }
-
   watch(() => dungeon.value?.map_image_path, p => _refreshImageUrl(p ?? null), { immediate: false })
 
   async function uploadDungeonImage(sessionId, file) {
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('Only JPEG, PNG, and WebP images are allowed.')
-    if (file.size > MAX_IMAGE_BYTES) throw new Error('Image must be under 50 MB.')
-    await new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file)
-      const img = new Image()
-      img.onload  = () => { URL.revokeObjectURL(url); resolve() }
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File could not be decoded as an image.')) }
-      img.src = url
-    })
-    const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
-    const path = `${sessionId}/dungeon-${crypto.randomUUID()}.${extMap[file.type]}`
-    const { error } = await supabase.storage
-      .from('session-maps')
-      .upload(path, file, { contentType: file.type, upsert: false })
-    if (error) throw new Error(error.message)
-    return path
+    return uploadSessionImage(file, { sessionId, maxBytes: MAX_IMAGE_BYTES, prefix: 'dungeon-' })
   }
 
   async function updateDungeon(patch) {
     if (!dungeon.value?.id) return false
     const id = dungeon.value.id
-    const dbPatch = {}
-    if (patch.fogMode          !== undefined) dbPatch.fog_mode            = patch.fogMode
-    if (patch.fogRevealAll     !== undefined) dbPatch.fog_reveal_all      = patch.fogRevealAll
-    if (patch.gmInitiative     !== undefined) dbPatch.gm_initiative       = patch.gmInitiative ?? null
-    if (patch.mapImagePath     !== undefined) dbPatch.map_image_path      = patch.mapImagePath
-    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x  = patch.mapImageOffsetX
-    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y  = patch.mapImageOffsetY
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale     = patch.mapImageScale
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation  = patch.mapImageRotation
-    if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked   = patch.mapOffsetLocked
+    const dbPatch = assignDbFields({}, patch, MAP_IMAGE_FIELD_MAP)
+    if (patch.fogMode      !== undefined) dbPatch.fog_mode       = patch.fogMode
+    if (patch.fogRevealAll !== undefined) dbPatch.fog_reveal_all = patch.fogRevealAll
+    if (patch.gmInitiative !== undefined) dbPatch.gm_initiative  = patch.gmInitiative ?? null
 
     dungeon.value = { ...dungeon.value, ...dbPatch }
     const overrides = _localOverrides[id]
@@ -209,22 +150,23 @@ export const useD = defineStore('dungeon', () => {
     }
 
     const fields = Object.keys(dbPatch)
-    _beginPending(_pendingDungeonFields, fields)
+    _pendingDungeonFields.begin(fields)
     try {
       await apiClient.patch(`/dungeons/${id}`, dbPatch, 'update_dungeon_config')
     } catch (err) { console.error('updateDungeon:', err instanceof ApiError ? err.message : err); return false }
-    finally { _endPending(_pendingDungeonFields, fields) }
+    finally { _pendingDungeonFields.end(fields) }
     return true
   }
 
   function applyDungeonLocalPatch(patch) {
     if (!dungeon.value?.id) return
     const id = dungeon.value.id
-    const dbPatch = {}
-    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x  = patch.mapImageOffsetX
-    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y  = patch.mapImageOffsetY
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale     = patch.mapImageScale
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation  = patch.mapImageRotation
+    const dbPatch = assignDbFields({}, patch, {
+      mapImageOffsetX:  'map_image_offset_x',
+      mapImageOffsetY:  'map_image_offset_y',
+      mapImageScale:    'map_image_scale',
+      mapImageRotation: 'map_image_rotation',
+    })
     _localOverrides[id] = { ...(_localOverrides[id] ?? {}), ...dbPatch }
     dungeon.value = { ...dungeon.value, ...dbPatch }
   }
@@ -381,6 +323,7 @@ export const useD = defineStore('dungeon', () => {
 
   function _removeChannels() {
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
+    _trackPresence = null
     if (dungeonChannel)  { realtime.removeChannel(dungeonChannel); dungeonChannel = null }
     if (roomChannel)     { realtime.removeChannel(roomChannel); roomChannel = null }
     if (corridorChannel) { realtime.removeChannel(corridorChannel); corridorChannel = null }
@@ -400,7 +343,7 @@ export const useD = defineStore('dungeon', () => {
     _removeChannels()
 
     try {
-      const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }] = await Promise.all([
+      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }] = await Promise.all([
         supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
         supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
@@ -408,6 +351,8 @@ export const useD = defineStore('dungeon', () => {
 
       if (generation !== _initGeneration) return
       if (e1) throw new Error(e1.message)
+      if (e2) throw new Error(e2.message)
+      if (e3) throw new Error(e3.message)
 
       dungeon.value = dungeonData
       rooms.value = new Map((roomData ?? []).map(r => [r.id, r]))
@@ -527,166 +472,228 @@ export const useD = defineStore('dungeon', () => {
       )
       .subscribe()
 
-    const authStore = useAuthStore()
-
-    const syncViewers = () => {
-      const state = presenceChannel.presenceState()
-      const latest = Object.values(state).map(entries => entries.at(-1)).filter(Boolean)
-      const byUser = new Map()
-      for (const p of latest) byUser.set(p.user_id ?? p._clientId, p)
-      viewers.value = [...byUser.values()]
-    }
-
-    presenceChannel = realtime.channel(`dungeon:${dungeonId}:presence`, {
+    const presence = createPresenceChannel({
+      channelName: `dungeon:${dungeonId}:presence`,
       sessionId,
-      config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
+      clientId: CLIENT_ID,
+      members: viewers,
+      extraFields: () => ({
+        editing_id:   selectedElement.value?.id ?? null,
+        editing_type: selectedElement.value?.type ?? null,
+      }),
     })
-      .on('presence', { event: 'sync' }, syncViewers)
-      .on('presence', { event: 'join' }, syncViewers)
-      .on('presence', { event: 'leave' }, syncViewers)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({
-            user_id:      authStore.user?.id ?? null,
-            _clientId:    CLIENT_ID,
-            display_name: authStore.displayName ?? 'Adventurer',
-            avatar_url:   authStore.avatarUrl ?? null,
-            editing_id:   selectedElement.value?.id ?? null,
-            editing_type: selectedElement.value?.type ?? null,
-          })
-        }
-      })
-
-    _stopAuthWatch = watch(
-      () => authStore.user?.id,
-      (userId, prev) => {
-        if (!userId || userId === prev || !presenceChannel) return
-        presenceChannel.track({
-          user_id:      userId,
-          _clientId:    CLIENT_ID,
-          display_name: authStore.displayName ?? 'Adventurer',
-          avatar_url:   authStore.avatarUrl ?? null,
-          editing_id:   selectedElement.value?.id ?? null,
-          editing_type: selectedElement.value?.type ?? null,
-        })
-      },
-    )
+    presenceChannel = presence.channel
+    _trackPresence = presence.track
+    _stopAuthWatch = presence.stopAuthWatch
   }
 
-  async function addRoom(roomData) {
+  // temp ids of creates still in flight - the generator must not anchor a
+  // plan on a room whose id is about to change
+  const _pendingCreates = new Set()
+
+  // rooms and corridors are the same optimistic collection: temp-id insert then
+  // reconcile, toRaw-guarded rollback on a failed patch, backup-restore on a
+  // failed delete, each step mirrored into the undo stack. they differ only in
+  // endpoint, undo id field, and the activity label. rooms pass no addLabel
+  // because their create path is the standalone addRoom below.
+  function _elementOps({ collection, path, entity, idKey, addLabel, deleteLabel, nameOf }) {
+    const Entity = entity[0].toUpperCase() + entity.slice(1)
+
+    async function update(id, patch) {
+      const existing = collection.value.get(id)
+      if (!existing) return
+      const optimistic = { ...existing, ...patch }
+      collection.value.set(id, optimistic)
+
+      _pendingWrites.begin([`${entity}:${id}`])
+      try {
+        await apiClient.patch(`${path}/${id}`, { ...patch, source_client: CLIENT_ID }, `update_${entity}`)
+        const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
+        pushUndo({ type: `update_${entity}`, [idKey]: id, patch: revert })
+      } catch (error) {
+        if (toRaw(collection.value.get(id)) === optimistic) collection.value.set(id, existing)
+        console.error(`update${Entity} error:`, error instanceof ApiError ? error.message : error)
+      } finally {
+        _pendingWrites.end([`${entity}:${id}`])
+      }
+    }
+
+    async function remove(id) {
+      const backup = collection.value.get(id)
+      collection.value.delete(id)
+      if (selectedElement.value?.id === id) selectedElement.value = null
+
+      try {
+        await apiClient.delete(`${path}/${id}`, `delete_${entity}`)
+        useActivityStore().record(deleteLabel, nameOf(backup))
+        pushUndo({ type: `insert_${entity}`, data: backup })
+      } catch (error) {
+        if (backup && !collection.value.has(id)) collection.value.set(id, backup)
+        console.error(`delete${Entity} error:`, error instanceof ApiError ? error.message : error)
+      }
+    }
+
+    const ops = { update, remove }
+
+    if (addLabel) {
+      ops.add = async function add(elementData) {
+        const tempId = crypto.randomUUID()
+        const optimistic = { id: tempId, ...elementData, source_client: CLIENT_ID }
+        collection.value.set(tempId, optimistic)
+
+        let data
+        try {
+          data = await apiClient.post(path, { ...elementData, source_client: CLIENT_ID }, `create_${entity}`)
+        } catch (error) {
+          collection.value.delete(tempId)
+          console.error(`add${Entity} error:`, error instanceof ApiError ? error.message : error)
+          return
+        }
+
+        collection.value.delete(tempId)
+        if (!collection.value.has(data.id)) collection.value.set(data.id, data)
+        useActivityStore().record(addLabel, nameOf(data))
+        pushUndo({ type: `delete_${entity}`, [idKey]: data.id })
+      }
+    }
+
+    return ops
+  }
+
+  const _roomOps = _elementOps({
+    collection: rooms, path: '/dungeon-rooms', entity: 'room', idKey: 'roomId',
+    deleteLabel: 'deleted room',
+    nameOf: (el) => el?.name ?? 'Unnamed Room',
+  })
+  const _corridorOps = _elementOps({
+    collection: corridors, path: '/dungeon-corridors', entity: 'corridor', idKey: 'corridorId',
+    addLabel: 'added corridor', deleteLabel: 'deleted corridor',
+    nameOf: () => '',
+  })
+
+  // room's add is standalone: the generator needs the created row returned, a
+  // silent mode, a 409 rethrow, and the temp id tracked in _pendingCreates so a
+  // plan never anchors on a room whose id is about to change
+  async function addRoom(roomData, { silent = false, rethrowConflict = false } = {}) {
     const tempId = crypto.randomUUID()
     const optimistic = { id: tempId, ...roomData, source_client: CLIENT_ID }
     rooms.value.set(tempId, optimistic)
+    _pendingCreates.add(tempId)
 
     let data
     try {
       data = await apiClient.post('/dungeon-rooms', { ...roomData, source_client: CLIENT_ID }, 'create_room')
     } catch (error) {
       rooms.value.delete(tempId)
+      _pendingCreates.delete(tempId)
+      if (rethrowConflict && error instanceof ApiError && error.status === 409) throw error
       console.error('addRoom error:', error instanceof ApiError ? error.message : error)
       return
     }
 
     rooms.value.delete(tempId)
+    _pendingCreates.delete(tempId)
     if (!rooms.value.has(data.id)) rooms.value.set(data.id, data)
-    useActivityStore().record('added room', data.name ?? 'Unnamed Room')
+    if (!silent) useActivityStore().record('added room', data.label ?? data.name ?? 'Unnamed Room')
     pushUndo({ type: 'delete_room', roomId: data.id })
+    return data
   }
+  const updateRoom = _roomOps.update
+  const deleteRoom = _roomOps.remove
+  const addCorridor = _corridorOps.add
+  const updateCorridor = _corridorOps.update
+  const deleteCorridor = _corridorOps.remove
 
-  async function updateRoom(id, patch) {
-    const existing = rooms.value.get(id)
-    if (!existing) return
-    const optimistic = { ...existing, ...patch }
-    rooms.value.set(id, optimistic)
-
-    _beginPending(_pendingWrites, [`room:${id}`])
-    try {
-      await apiClient.patch(`/dungeon-rooms/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_room')
-      const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
-      pushUndo({ type: 'update_room', roomId: id, patch: revert })
-    } catch (error) {
-      if (toRaw(rooms.value.get(id)) === optimistic) rooms.value.set(id, existing)
-      console.error('updateRoom error:', error instanceof ApiError ? error.message : error)
-    } finally {
-      _endPending(_pendingWrites, [`room:${id}`])
-    }
-  }
-
-  async function deleteRoom(id) {
-    const backup = rooms.value.get(id)
-    rooms.value.delete(id)
-    if (selectedElement.value?.id === id) selectedElement.value = null
-
-    try {
-      await apiClient.delete(`/dungeon-rooms/${id}`, 'delete_room')
-      useActivityStore().record('deleted room', backup?.name ?? 'Unnamed Room')
-      pushUndo({ type: 'insert_room', data: backup })
-    } catch (error) {
-      if (backup && !rooms.value.has(id)) rooms.value.set(id, backup)
-      console.error('deleteRoom error:', error instanceof ApiError ? error.message : error)
-    }
-  }
-
-  async function addCorridor(corridorData) {
-    const tempId = crypto.randomUUID()
-    const optimistic = { id: tempId, ...corridorData, source_client: CLIENT_ID }
-    corridors.value.set(tempId, optimistic)
-
-    let data
-    try {
-      data = await apiClient.post('/dungeon-corridors', { ...corridorData, source_client: CLIENT_ID }, 'create_corridor')
-    } catch (error) {
-      corridors.value.delete(tempId)
-      console.error('addCorridor error:', error instanceof ApiError ? error.message : error)
-      return
-    }
-
-    corridors.value.delete(tempId)
-    if (!corridors.value.has(data.id)) corridors.value.set(data.id, data)
-    useActivityStore().record('added corridor', '')
-    pushUndo({ type: 'delete_corridor', corridorId: data.id })
-  }
-
-  async function updateCorridor(id, patch) {
-    const existing = corridors.value.get(id)
-    if (!existing) return
-    const optimistic = { ...existing, ...patch }
-    corridors.value.set(id, optimistic)
-
-    _beginPending(_pendingWrites, [`corridor:${id}`])
-    try {
-      await apiClient.patch(`/dungeon-corridors/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_corridor')
-      const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
-      pushUndo({ type: 'update_corridor', corridorId: id, patch: revert })
-    } catch (error) {
-      if (toRaw(corridors.value.get(id)) === optimistic) corridors.value.set(id, existing)
-      console.error('updateCorridor error:', error instanceof ApiError ? error.message : error)
-    } finally {
-      _endPending(_pendingWrites, [`corridor:${id}`])
-    }
-  }
-
-  async function deleteCorridor(id) {
-    const backup = corridors.value.get(id)
-    corridors.value.delete(id)
-    if (selectedElement.value?.id === id) selectedElement.value = null
-
-    try {
-      await apiClient.delete(`/dungeon-corridors/${id}`, 'delete_corridor')
-      useActivityStore().record('deleted corridor', '')
-      pushUndo({ type: 'insert_corridor', data: backup })
-    } catch (error) {
-      if (backup && !corridors.value.has(id)) corridors.value.set(id, backup)
-      console.error('deleteCorridor error:', error instanceof ApiError ? error.message : error)
-    }
-  }
-
-  function addDoor(roomId, doorData) {
+  function addDoor(roomId, doorData, { silent = false } = {}) {
     const room = rooms.value.get(roomId)
     if (!room) return
     const doors = [...(room.doors ?? []), { id: crypto.randomUUID(), ...doorData }]
-    updateRoom(roomId, { doors })
-    useActivityStore().record('added door to', room.name ?? 'Unnamed Room')
+    const write = updateRoom(roomId, { doors })
+    if (!silent) useActivityStore().record('added door to', room.label ?? room.name ?? 'Unnamed Room')
+    return write
+  }
+
+  // generator mode (#50): one click rolls the next room - size, placement
+  // flush against an existing room, exits in the create payload, contents from
+  // the session table tagged dungeon.stocking (built-in fallback when there's
+  // no table). the server rejects overlapping generated rooms with a 409 under
+  // an advisory lock, so concurrent generators replan instead of stacking
+  // rooms - generation is canonical (#55). generated geometry stays ordinary
+  // room data, editable like anything hand-drawn.
+  const generating = ref(false)
+
+  async function generateRoom() {
+    if (generating.value) return null
+    if (!dungeon.value?.id) return null
+    generating.value = true
+    try {
+      const stocking = await _rollStocking()
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        // fresh snapshot each attempt, excluding creates still in flight so a
+        // plan never anchors on a temp id
+        const snapshot = [...rooms.value.values()].filter(r => !_pendingCreates.has(r.id))
+        const plan = generateRoomPlan(snapshot)
+
+        let created
+        try {
+          created = await addRoom({
+            dungeon_id: dungeon.value.id,
+            session_id: dungeon.value.session_id,
+            ...plan.room,
+            doors: plan.roomDoors.map(door => ({ id: crypto.randomUUID(), ...door })),
+            label: _nextRoomLabel(),
+            notes: stocking,
+            reject_overlapping: true,
+          }, { silent: true, rethrowConflict: true })
+        } catch {
+          // someone generated into the same spot first - replan on fresh state
+          continue
+        }
+        if (!created) return null
+
+        if (plan.sourceDoor && rooms.value.has(plan.sourceDoor.roomId)) {
+          await addDoor(plan.sourceDoor.roomId, plan.sourceDoor.door, { silent: true })
+        }
+        useActivityStore().record('explored into', `${created.label ?? 'a room'} - ${stocking}`)
+        return { room: created, stocking }
+      }
+      console.error('generateRoom: no free placement after 3 attempts')
+      return null
+    } finally {
+      generating.value = false
+    }
+  }
+
+  // highest existing "Room N" + 1, stable across deletions and gaps
+  function _nextRoomLabel() {
+    let highest = 0
+    for (const room of rooms.value.values()) {
+      const match = /^Room (\d+)$/.exec(room.label ?? '')
+      if (match) highest = Math.max(highest, Number(match[1]))
+    }
+    return `Room ${highest + 1}`
+  }
+
+  async function _rollStocking() {
+    const table = useOracleStore().tables.find(t => t.tag === 'dungeon.stocking')
+    if (table) {
+      // straight to the api - no shared rolling-flag coupling with the oracle
+      // panel, and the roll still lands in oracle history
+      try {
+        const roll = await apiClient.post('/oracle-rolls', {
+          session_id: dungeon.value?.session_id,
+          kind: 'table',
+          table_id: table.id,
+        }, 'dungeon_stocking_roll')
+        const text = roll?.result?.result
+        if (text) return text
+        console.error('_rollStocking: empty roll from tagged table, using fallback')
+      } catch (error) {
+        console.error('_rollStocking failed, using fallback:', error instanceof ApiError ? error.message : error)
+      }
+    }
+    return weightedPick(STOCKING_FALLBACK, Math.random).result
   }
 
   function moveDoor(fromRoomId, doorId, toRoomId, newDoorData) {
@@ -735,25 +742,12 @@ export const useD = defineStore('dungeon', () => {
 
   function selectElement(type, id, extra = {}) {
     selectedElement.value = { type, id, ...extra }
-    _trackPresence()
+    _trackPresence?.()
   }
 
   function deselect() {
     selectedElement.value = null
-    _trackPresence()
-  }
-
-  function _trackPresence() {
-    if (!presenceChannel) return
-    const authStore = useAuthStore()
-    presenceChannel.track({
-      user_id:      authStore.user?.id ?? null,
-      _clientId:    CLIENT_ID,
-      display_name: authStore.displayName ?? 'Adventurer',
-      avatar_url:   authStore.avatarUrl ?? null,
-      editing_id:   selectedElement.value?.id ?? null,
-      editing_type: selectedElement.value?.type ?? null,
-    })
+    _trackPresence?.()
   }
 
   function beginRoomEdit(id, fields) {
@@ -768,46 +762,33 @@ export const useD = defineStore('dungeon', () => {
     if (!dungeon.value?.id) return
     dungeon.value = { ...dungeon.value, ...patch }
     const fields = Object.keys(patch)
-    _beginPending(_pendingDungeonFields, fields)
+    _pendingDungeonFields.begin(fields)
     try {
       await apiClient.patch(`/dungeons/${dungeon.value.id}`, patch, 'update_torch')
     } catch (err) { console.error('updateTorch error:', err instanceof ApiError ? err.message : err) }
-    finally { _endPending(_pendingDungeonFields, fields) }
+    finally { _pendingDungeonFields.end(fields) }
   }
 
-  async function torchStart() {
-    if (!dungeon.value?.id) return
-    dungeon.value = { ...dungeon.value, torch_running: true, torch_started_at: new Date().toISOString() }
-    try {
-      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'start' }, 'torch_start')
-    } catch (err) { console.error('torchStart error:', err instanceof ApiError ? err.message : err) }
-  }
-
-  async function torchPause() {
-    if (!dungeon.value?.id) return
-    try {
-      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'pause' }, 'torch_pause')
-    } catch (err) { console.error('torchPause error:', err instanceof ApiError ? err.message : err) }
-  }
-
-  async function torchReset() {
-    if (!dungeon.value?.id) return
-    dungeon.value = {
-      ...dungeon.value,
-      torch_elapsed_ms: 0,
-      torch_started_at: dungeon.value.torch_running ? new Date().toISOString() : null,
-    }
-    try {
-      await apiClient.post(`/dungeons/${dungeon.value.id}/torch`, { action: 'reset' }, 'torch_reset')
-    } catch (err) { console.error('torchReset error:', err instanceof ApiError ? err.message : err) }
-  }
+  const { torchStart, torchPause, torchReset } = createTorchControls({
+    base: () => dungeon.value?.id ? `/dungeons/${dungeon.value.id}` : null,
+    intent: (action) => `torch_${action}`,
+    apply: (action) => {
+      if (action === 'start') {
+        dungeon.value = { ...dungeon.value, torch_running: true, torch_started_at: new Date().toISOString() }
+      } else if (action === 'reset') {
+        dungeon.value = {
+          ...dungeon.value,
+          torch_elapsed_ms: 0,
+          torch_started_at: dungeon.value.torch_running ? new Date().toISOString() : null,
+        }
+      }
+    },
+  })
 
   function cleanup() {
     _initGeneration += 1
-    _urlGeneration += 1
     _removeChannels()
-    if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
-    _urlRenewal = null
+    _cleanupImageUrl()
     _dungeonId  = null
     _pendingWrites.clear()
     _pendingDungeonFields.clear()
@@ -820,7 +801,6 @@ export const useD = defineStore('dungeon', () => {
     loadError.value = null
     loading.value = true
     undoStack.value = []
-    dungeonImageUrl.value = null
     fogCells.value = new Set()
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
   }
@@ -843,6 +823,8 @@ export const useD = defineStore('dungeon', () => {
     refresh,
     undo,
     addRoom,
+    generateRoom,
+    generating,
     updateRoom,
     deleteRoom,
     addCorridor,
