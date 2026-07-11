@@ -45,6 +45,7 @@
 
         <div class="ds-panel-tabs">
             <button class="ds-panel-tab" :class="{ active: partyTab === 'party' }" @click="partyTab = 'party'">Party</button>
+            <button class="ds-panel-tab" :class="{ active: partyTab === 'leaderboard' }" @click="partyTab = 'leaderboard'">Leaderboard</button>
             <button class="ds-panel-tab" :class="{ active: partyTab === 'stats' }" @click="partyTab = 'stats'">Stats</button>
         </div>
 
@@ -127,6 +128,10 @@
             </div>
         </div>
 
+        <div v-show="partyTab === 'leaderboard'" class="ds-party-body">
+            <DiceLeaderboardPanel />
+        </div>
+
         <div v-show="partyTab === 'stats'" class="ds-party-body">
             <DiceStatsPanel />
         </div>
@@ -148,6 +153,7 @@ import { useDiceStore } from "@/stores/diceStore.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 import DiceStatsPanel from "@/components/common/DiceStatsPanel.vue";
+import DiceLeaderboardPanel from "@/components/common/DiceLeaderboardPanel.vue";
 
 const characterStore = useCharacterStore();
 const sessionStore = useSessionStore();
