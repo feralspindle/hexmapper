@@ -134,24 +134,19 @@
 </template>
 
 <script setup>
-import { h, reactive } from 'vue'
+import { h } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
-import { computed } from 'vue'
-import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
-import { usePartyPanel } from '@/composables/usePartyPanel.js'
+import { usePartyToggles } from '@/composables/usePartyToggles.js'
+import { useToolTooltip } from '@/composables/useToolTooltip.js'
 import { soundEnabled, toggleSound } from '@/lib/soundSettings.js'
 
 const dungeonStore = useD()
 const sessionStore = useSessionStore()
 const { confirm } = useConfirmDialog()
-const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook()
-const { visible: partyVisible, toggle: toggleParty } = usePartyPanel()
-const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault')
-function toggleVault() {
-  if (vaultVisible.value) { toggleInventory() } else { openNotebook('vault') }
-}
+const { inventoryVisible, toggleInventory, partyVisible, toggleParty, vaultVisible, toggleVault } = usePartyToggles()
+const { tip, onHover, onLeave } = useToolTooltip()
 
 defineProps({
   mapSettingsOpen: { type: Boolean, default: false },
@@ -189,27 +184,6 @@ const drawingTools = [
   { mode: 'door',     icon: DoorIcon,     label: 'Door',     key: 'D' },
 ]
 
-const tip = reactive({ show: false, x: 0, y: 0, html: '' })
-let _lastBtn = null
-
-function onHover(e) {
-  const btn = e.target.closest('.ds-tool')
-  if (btn === _lastBtn) return
-  _lastBtn = btn
-  if (!btn) { tip.show = false; return }
-  const tipEl = btn.querySelector('.ds-tip')
-  if (!tipEl) { tip.show = false; return }
-  const rect = btn.getBoundingClientRect()
-  tip.x = rect.right + 10
-  tip.y = rect.top + rect.height / 2
-  tip.html = tipEl.innerHTML
-  tip.show = true
-}
-
-function onLeave() {
-  _lastBtn = null
-  tip.show = false
-}
 
 function deleteSelected() {
   if (!dungeonStore.selectedElement) return

@@ -553,9 +553,8 @@
 </template>
 
 <script setup>
-import { computed, reactive } from "vue";
-import { usePartyNotebook } from "@/composables/usePartyNotebook.js";
-import { usePartyPanel } from "@/composables/usePartyPanel.js";
+import { usePartyToggles } from "@/composables/usePartyToggles.js";
+import { useToolTooltip } from "@/composables/useToolTooltip.js";
 import { soundEnabled, toggleSound } from "@/lib/soundSettings.js";
 
 defineProps({
@@ -570,32 +569,6 @@ defineProps({
 
 const emit = defineEmits(["tool", "reveal-all", "hide-all", "map-settings", "toggle-exploration"]);
 
-const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook();
-const { visible: partyVisible, toggle: toggleParty } = usePartyPanel();
-const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault');
-function toggleVault() {
-  if (vaultVisible.value) { toggleInventory(); } else { openNotebook('vault'); }
-}
-
-const tip = reactive({ show: false, x: 0, y: 0, html: '' })
-let _lastBtn = null
-
-function onHover(e) {
-  const btn = e.target.closest('.ds-tool')
-  if (btn === _lastBtn) return
-  _lastBtn = btn
-  if (!btn) { tip.show = false; return }
-  const tipEl = btn.querySelector('.ds-tip')
-  if (!tipEl) { tip.show = false; return }
-  const rect = btn.getBoundingClientRect()
-  tip.x = rect.right + 10
-  tip.y = rect.top + rect.height / 2
-  tip.html = tipEl.innerHTML
-  tip.show = true
-}
-
-function onLeave() {
-  _lastBtn = null
-  tip.show = false
-}
+const { inventoryVisible, toggleInventory, partyVisible, toggleParty, vaultVisible, toggleVault } = usePartyToggles();
+const { tip, onHover, onLeave } = useToolTooltip();
 </script>
