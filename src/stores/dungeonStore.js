@@ -8,6 +8,7 @@ import { uploadSessionImage } from '@/lib/sessionImage.js'
 import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
 import { createPresenceChannel } from '@/lib/presenceChannel.js'
 import { createTorchControls } from '@/lib/torchControls.js'
+import { MAP_IMAGE_FIELD_MAP, assignDbFields } from '@/lib/mapImageFields.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
@@ -133,16 +134,10 @@ export const useD = defineStore('dungeon', () => {
   async function updateDungeon(patch) {
     if (!dungeon.value?.id) return false
     const id = dungeon.value.id
-    const dbPatch = {}
-    if (patch.fogMode          !== undefined) dbPatch.fog_mode            = patch.fogMode
-    if (patch.fogRevealAll     !== undefined) dbPatch.fog_reveal_all      = patch.fogRevealAll
-    if (patch.gmInitiative     !== undefined) dbPatch.gm_initiative       = patch.gmInitiative ?? null
-    if (patch.mapImagePath     !== undefined) dbPatch.map_image_path      = patch.mapImagePath
-    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x  = patch.mapImageOffsetX
-    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y  = patch.mapImageOffsetY
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale     = patch.mapImageScale
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation  = patch.mapImageRotation
-    if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked   = patch.mapOffsetLocked
+    const dbPatch = assignDbFields({}, patch, MAP_IMAGE_FIELD_MAP)
+    if (patch.fogMode      !== undefined) dbPatch.fog_mode       = patch.fogMode
+    if (patch.fogRevealAll !== undefined) dbPatch.fog_reveal_all = patch.fogRevealAll
+    if (patch.gmInitiative !== undefined) dbPatch.gm_initiative  = patch.gmInitiative ?? null
 
     dungeon.value = { ...dungeon.value, ...dbPatch }
     const overrides = _localOverrides[id]
@@ -164,11 +159,12 @@ export const useD = defineStore('dungeon', () => {
   function applyDungeonLocalPatch(patch) {
     if (!dungeon.value?.id) return
     const id = dungeon.value.id
-    const dbPatch = {}
-    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x  = patch.mapImageOffsetX
-    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y  = patch.mapImageOffsetY
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale     = patch.mapImageScale
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation  = patch.mapImageRotation
+    const dbPatch = assignDbFields({}, patch, {
+      mapImageOffsetX:  'map_image_offset_x',
+      mapImageOffsetY:  'map_image_offset_y',
+      mapImageScale:    'map_image_scale',
+      mapImageRotation: 'map_image_rotation',
+    })
     _localOverrides[id] = { ...(_localOverrides[id] ?? {}), ...dbPatch }
     dungeon.value = { ...dungeon.value, ...dbPatch }
   }

@@ -5,6 +5,7 @@ import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { uploadSessionImage } from '@/lib/sessionImage.js'
 import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
+import { MAP_IMAGE_FIELD_MAP, assignDbFields } from '@/lib/mapImageFields.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -220,14 +221,15 @@ export const useMapStore = defineStore('map', () => {
   function applyLocalPatch(patch) {
     const map = activeMap.value
     if (!map) return
-    const dbPatch = {}
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation = patch.mapImageRotation
-    if (patch.mapGridRotation  !== undefined) dbPatch.map_grid_rotation  = patch.mapGridRotation
-    if (patch.mapHexWidth      !== undefined) dbPatch.map_hex_width      = patch.mapHexWidth
-    if (patch.mapHexHeight     !== undefined) dbPatch.map_hex_height     = patch.mapHexHeight
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
-    if (patch.mapGridCols      !== undefined) dbPatch.map_grid_cols      = patch.mapGridCols
-    if (patch.mapGridRows      !== undefined) dbPatch.map_grid_rows      = patch.mapGridRows
+    const dbPatch = assignDbFields({}, patch, {
+      mapImageRotation: 'map_image_rotation',
+      mapGridRotation:  'map_grid_rotation',
+      mapHexWidth:      'map_hex_width',
+      mapHexHeight:     'map_hex_height',
+      mapImageScale:    'map_image_scale',
+      mapGridCols:      'map_grid_cols',
+      mapGridRows:      'map_grid_rows',
+    })
     _localOverrides[map.id] = { ...(_localOverrides[map.id] ?? {}), ...dbPatch }
     _overrideAt[map.id] = Date.now()
     maps.value = maps.value.map(m => (m.id === map.id ? { ...m, ...dbPatch } : m))
@@ -237,23 +239,19 @@ export const useMapStore = defineStore('map', () => {
     const map = activeMap.value
     if (!map) return false
 
-    const dbPatch = {}
-    if (patch.mapType          !== undefined) dbPatch.map_type           = patch.mapType
-    if (patch.mapImagePath     !== undefined) dbPatch.map_image_path     = patch.mapImagePath
-    if (patch.mapHexWidth      !== undefined) dbPatch.map_hex_width      = patch.mapHexWidth
-    if (patch.mapHexHeight     !== undefined) dbPatch.map_hex_height     = patch.mapHexHeight
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation = patch.mapImageRotation
-    if (patch.mapGridRotation  !== undefined) dbPatch.map_grid_rotation  = patch.mapGridRotation
-    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x = patch.mapImageOffsetX
-    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y = patch.mapImageOffsetY
-    if (patch.mapGridOffsetX   !== undefined) dbPatch.map_grid_offset_x  = patch.mapGridOffsetX
-    if (patch.mapGridOffsetY   !== undefined) dbPatch.map_grid_offset_y  = patch.mapGridOffsetY
-    if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked  = patch.mapOffsetLocked
-    if (patch.mapScale         !== undefined) dbPatch.map_scale          = patch.mapScale
-    if (patch.mapScaleUnit     !== undefined) dbPatch.map_scale_unit     = patch.mapScaleUnit
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
-    if (patch.mapGridCols      !== undefined) dbPatch.map_grid_cols      = patch.mapGridCols
-    if (patch.mapGridRows      !== undefined) dbPatch.map_grid_rows      = patch.mapGridRows
+    const dbPatch = assignDbFields({}, patch, MAP_IMAGE_FIELD_MAP)
+    assignDbFields(dbPatch, patch, {
+      mapType:         'map_type',
+      mapHexWidth:     'map_hex_width',
+      mapHexHeight:    'map_hex_height',
+      mapGridRotation: 'map_grid_rotation',
+      mapGridOffsetX:  'map_grid_offset_x',
+      mapGridOffsetY:  'map_grid_offset_y',
+      mapScale:        'map_scale',
+      mapScaleUnit:    'map_scale_unit',
+      mapGridCols:     'map_grid_cols',
+      mapGridRows:     'map_grid_rows',
+    })
 
     try {
       await apiClient.patch(`/maps/${map.id}`, dbPatch, 'update_map_settings')
