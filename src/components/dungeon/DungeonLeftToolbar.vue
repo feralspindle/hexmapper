@@ -66,7 +66,7 @@
       </button>
     </div>
 
-    <div class="ds-tool-group">
+    <div v-if="sessionStore.playMode === 'gm_less'" class="ds-tool-group">
       <button
         class="ds-tool"
         :class="{ disabled: dungeonStore.generating }"
