@@ -21,7 +21,8 @@ select
   'dice_roll', dr.id, dr.session_id, 1, 'dice_roll.rolled',
   jsonb_build_object(
     'pending', dr.pending, 'modifier', dr.modifier, 'results', dr.results,
-    'total', dr.total, 'label', dr.label, 'character_id', dr.character_id
+    'total', dr.total, 'label', dr.label, 'character_id', dr.character_id,
+    'stats', dr.stats
   ),
   jsonb_build_object('user_id', dr.user_id, 'genesis', true),
   dr.created_at
@@ -43,12 +44,13 @@ create temp table shadow_dice_rolls (
   total        int,
   label        text,
   character_id uuid,
+  stats        jsonb,
   created_at   timestamptz
 ) on commit drop
 "#;
 
 const DIFF_COLS: &str =
-    "id, session_id, user_id, pending, modifier, results, total, label, character_id, created_at";
+    "id, session_id, user_id, pending, modifier, results, total, label, character_id, stats, created_at";
 
 #[tokio::main]
 async fn main() {

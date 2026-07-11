@@ -21,7 +21,7 @@
                 <rect x="2" y="13" width="9" height="9" rx="1" />
             </svg>
             <h3>Dice</h3>
-            <span class="ds-meta">{{ diceStore.rolls.length }} rolls</span>
+            <span class="ds-meta">{{ historyRolls.length }} rolls</span>
             <svg
                 class="ds-chevron"
                 width="14"
@@ -310,7 +310,7 @@
             @scroll="onScroll"
         >
             <div
-                v-if="!diceStore.rolls.length"
+                v-if="!historyRolls.length"
                 style="
                     font-family: var(--font-body);
                     font-style: italic;
@@ -324,10 +324,15 @@
             </div>
 
             <div
-                v-for="entry in diceStore.rolls"
+                v-for="entry in historyRolls"
                 :key="entry.id"
                 class="ds-roll-row"
-                :class="{ crit: isCrit(entry), fumble: isFumble(entry) }"
+                :class="{
+                    crit: isCrit(entry),
+                    fumble: isFumble(entry),
+                    'hot-streak': entry.streak?.kind === 'hot',
+                    'cold-streak': entry.streak?.kind === 'cold',
+                }"
                 :style="{ '--roll-color': rollColor(entry.user_id) }"
                 data-testid="dice-roll-row"
             >
@@ -336,6 +341,15 @@
                     <div class="ds-roll-who-row">
                         <span class="ds-roll-who" :style="{ color: rollColor(entry.user_id) }">{{ gmName(entry.user_id, entry.display_name, entry.character_id) }}</span>
                         <span v-if="entry.label" class="ds-roll-label">{{ entry.label }}</span>
+                        <span
+                            v-if="entry.streak"
+                            class="ds-roll-streak"
+                            :class="`ds-roll-streak--${entry.streak.kind}`"
+                            :title="streakTitle(entry)"
+                        >
+                            <i :class="entry.streak.kind === 'hot' ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'" />
+                            <span>{{ streakLabel(entry) }}</span>
+                        </span>
                     </div>
                     <div class="ds-roll-expr">{{ formatExpr(entry) }}</div>
                     <div v-if="entry.results?.length" class="ds-roll-breakdown">
@@ -418,6 +432,7 @@ const diceStore = useDiceStore();
 const macroStore = useMacroStore();
 const { gmName } = useGMLabel();
 const { timeAgo } = useTimeAgo();
+const historyRolls = computed(() => diceStore.rollsWithStreaks);
 
 onMounted(() => macroStore.init());
 
@@ -543,6 +558,29 @@ function isFumble(e) {
     );
 }
 
+function formatAverage(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    return Number.isInteger(number) ? String(number) : number.toFixed(1);
+}
+
+function streakLabel(entry) {
+    return `${entry.streak.kind === "hot" ? "Hot" : "Cold"} x${entry.streak.count}`;
+}
+
+function streakTitle(entry) {
+    const direction = entry.streak.kind === "hot" ? "above" : "below";
+    let title = `${entry.streak.count} ${direction}-average rolls in a row`;
+    const mean = Number(entry.stats?.mean);
+    if (Number.isFinite(mean)) {
+        const delta = Math.abs(entry.total - mean);
+        title += ` (avg ${formatAverage(mean)}, rolled ${entry.total}`;
+        if (delta > 0) title += `, ${formatAverage(delta)} ${direction}`;
+        title += ")";
+    }
+    return title;
+}
+
 function rollColor(userId) {
     return playerColorFor(userId);
 }
@@ -580,9 +618,9 @@ function scrollToTop() {
 }
 
 watch(
-    () => diceStore.rolls[0],
-    (r) => {
-        if (!r) return;
+    () => historyRolls.value[0]?.id,
+    (id) => {
+        if (!id) return;
         if (!isAtTop.value) hasUnseen.value = true;
     },
 );
@@ -627,6 +665,32 @@ watch(
 }
 .result-sep {
     color: var(--ink-mute, #8a7a68);
+}
+
+.ds-roll-streak {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 9px;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.ds-roll-streak i {
+    font-size: 8px;
+}
+.ds-roll-streak--hot {
+    color: var(--gold, #c8a827);
+    background: color-mix(in srgb, var(--gold, #c8a827) 12%, transparent);
+}
+.ds-roll-streak--cold {
+    color: var(--accent-2, #b8541c);
+    background: color-mix(in srgb, var(--accent-2, #b8541c) 12%, transparent);
 }
 
 .ds-roll-note-add {

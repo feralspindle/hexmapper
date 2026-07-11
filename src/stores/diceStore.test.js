@@ -27,11 +27,17 @@ vi.mock('@/lib/diceSound.js', () => ({
 import { playDiceSound } from '@/lib/diceSound.js'
 import { useDiceStore } from './diceStore.js'
 
+const rollStats = category => ({ mean: 10.5, std_dev: 5.766, category })
+
 const roll = (id, overrides = {}) => ({
   id,
   session_id: 's1',
   user_id: 'someone-else',
+  pending: { d20: 1 },
   results: [4],
+  total: 4,
+  modifier: 0,
+  stats: rollStats('below'),
   created_at: `2026-07-04T00:00:0${id.at(-1) ?? 0}Z`,
   ...overrides,
 })
@@ -51,6 +57,26 @@ describe('diceStore', () => {
 
     expect(store.rolls.map(r => r.id)).toEqual(['r2', 'r1'])
     expect(store.annotations.r1).toHaveLength(1)
+  })
+
+  test('rollsWithStreaks marks per-user hot and cold streaks without mutating raw rolls', async () => {
+    kit.responses.dice_rolls = {
+      data: [
+        roll('r1', { user_id: 'hot', total: 13, stats: rollStats('above') }),
+        roll('r2', { user_id: 'hot', total: 12, stats: rollStats('above') }),
+        roll('r3', { user_id: 'cold', total: 3, stats: rollStats('below') }),
+        roll('r4', { user_id: 'hot', total: 14, stats: rollStats('above') }),
+        roll('r5', { user_id: 'cold', total: 4, stats: rollStats('below') }),
+        roll('r6', { user_id: 'cold', total: 5, stats: rollStats('below') }),
+      ],
+      error: null,
+    }
+    const store = useDiceStore()
+    await store.init('s1')
+
+    expect(store.rollsWithStreaks.find(r => r.id === 'r4').streak).toMatchObject({ kind: 'hot', count: 3 })
+    expect(store.rollsWithStreaks.find(r => r.id === 'r6').streak).toMatchObject({ kind: 'cold', count: 3 })
+    expect(store.rolls.find(r => r.id === 'r4').streak).toBeUndefined()
   })
 
   test('re-init with the same session id does not create a duplicate channel', async () => {

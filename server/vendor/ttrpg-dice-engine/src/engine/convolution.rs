@@ -10,6 +10,13 @@ const EXPLODE_CAP: u32 = 20;
 
 /// convolve two PMFs
 pub fn convolve(a: &Pmf, b: &Pmf) -> Pmf {
+    normalize(convolve_raw(a, b))
+}
+
+/// convolve without renormalizing. needed when the inputs are partial
+/// probability masses (like one branch of an exploding die) whose sums are
+/// deliberately less than 1
+fn convolve_raw(a: &Pmf, b: &Pmf) -> Pmf {
     let (a_min, a_probs) = a;
     let (b_min, b_probs) = b;
     let result_min = a_min + b_min;
@@ -19,7 +26,7 @@ pub fn convolve(a: &Pmf, b: &Pmf) -> Pmf {
             result[i + j] += pa * pb;
         }
     }
-    normalize((result_min, result))
+    (result_min, result)
 }
 
 /// convolve a PMF with itself n times
@@ -215,7 +222,12 @@ fn multinomial_prob(counts: &[usize], n: usize, sides: usize) -> f64 {
 }
 
 /// PMF of an exploding die (faces >= threshold cause the die to be rerolled and added).
-/// capped at `EXPLODE_CAP` extra layers (you can only explode so much)
+/// capped at `EXPLODE_CAP` extra dice to match eval_dice, where the final extra die
+/// counts whatever it shows even if it would explode again
+///
+/// the total is L + E + E' + ... where each E is an exploding face and L is the
+/// stopping face, so the k-th explosion layer is the k-fold convolution of the
+/// exploding faces with itself, convolved with the stopping faces
 pub fn exploding_pmf(sides: u32, threshold: u32) -> Pmf {
     if sides == 0 {
         return (0, vec![1.0]);
@@ -223,29 +235,21 @@ pub fn exploding_pmf(sides: u32, threshold: u32) -> Pmf {
     if threshold > sides {
         return single_die_pmf(sides);
     }
+    let threshold = threshold.max(1);
     let p = 1.0 / sides as f64;
-    let n_explode_faces = (sides - threshold + 1) as usize;
-    let p_explode = n_explode_faces as f64 * p;
+    let low: Pmf = (1, vec![p; (threshold as usize) - 1]);
+    let explode: Pmf = (threshold as i64, vec![p; (sides - threshold + 1) as usize]);
 
-    let mut result: Pmf = {
-        let mut v = vec![0.0_f64; (threshold as usize).saturating_sub(1)];
-        for x in v.iter_mut() {
-            *x = p;
+    let mut result = low.clone();
+    let mut chain: Pmf = (0, vec![1.0]);
+    for depth in 1..=EXPLODE_CAP {
+        chain = convolve_raw(&chain, &explode);
+        if depth == EXPLODE_CAP {
+            result = add_pmfs(&result, &convolve_raw(&chain, &single_die_pmf(sides)));
+        } else if !low.1.is_empty() {
+            result = add_pmfs(&result, &convolve_raw(&chain, &low));
         }
-        (1, v)
-    };
-
-    let explode_face_pmf: Pmf = (threshold as i64, vec![p; n_explode_faces]);
-    let single = single_die_pmf(sides);
-
-    let mut chain = explode_face_pmf;
-    for _ in 0..EXPLODE_CAP {
-        let contribution = convolve(&chain, &single);
-        result = add_pmfs(&result, &contribution);
-
-        let next_chain: Vec<f64> = chain.1.iter().map(|&cp| cp * p_explode).collect();
-        chain = (chain.0, next_chain);
-        if chain.1.iter().all(|&x| x < 1e-15) {
+        if chain.1.iter().sum::<f64>() < 1e-15 {
             break;
         }
     }
