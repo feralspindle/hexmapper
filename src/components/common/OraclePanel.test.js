@@ -19,7 +19,16 @@ const mocks = vi.hoisted(() => ({
     rollYesNo: vi.fn(),
     rollEventPrompt: vi.fn(),
     rollTable: vi.fn(),
+    listPacks: vi.fn(() => Promise.resolve([])),
+    installPack: vi.fn(),
   },
+  journalStore: {
+    pin: vi.fn(),
+  },
+}))
+
+vi.mock('@/stores/journalStore.js', () => ({
+  useJournalStore: () => mocks.journalStore,
 }))
 
 vi.mock('@/stores/oracleStore.js', () => ({
@@ -89,5 +98,88 @@ describe('OraclePanel', () => {
     expect(wrapper.get('[data-testid="oracle-table-name"]').element.value).toBe('Encounters')
     expect(wrapper.get('[data-testid="oracle-row-result"]').element.value).toBe('Bandits')
     expect(mocks.oracleStore.rollTable).toHaveBeenCalledWith('table-1', null)
+  })
+
+  test('chained roll history shows every step in the chain', () => {
+    mocks.oracleStore.rolls = [{
+      id: 'roll-1',
+      display_name: 'Player',
+      kind: 'table',
+      table_name: 'Encounter',
+      result: {
+        table_mode: 'weighted',
+        result: 'monsters ahead',
+        notes: '',
+        chain: [
+          { row_id: 'r1', table_name: 'Encounter', result: 'monsters ahead' },
+          { row_id: 'r2', table_name: 'Monster', result: '7 goblins' },
+          { row_id: 'r3', table_name: 'Reaction', result: 'hostile' },
+        ],
+      },
+    }]
+    const wrapper = mount(OraclePanel)
+
+    const chain = wrapper.get('[data-testid="oracle-roll-chain"]')
+    expect(chain.text()).toContain('Monster: 7 goblins')
+    expect(chain.text()).toContain('Reaction: hostile')
+    expect(chain.text()).not.toContain('chain stopped')
+  })
+
+  test('chain select writes subtable_id and null clears it', async () => {
+    mocks.oracleStore.tables = [
+      { id: 'table-1', name: 'Encounters', description: '', mode: 'weighted' },
+      { id: 'table-2', name: 'Monsters', description: '', mode: 'weighted' },
+    ]
+    mocks.oracleStore.rowsByTable = {
+      'table-1': [{ id: 'row-1', table_id: 'table-1', weight: 1, result: 'Bandits', position: 0, subtable_id: null }],
+      'table-2': [],
+    }
+    const wrapper = mount(OraclePanel)
+
+    const select = wrapper.get('[data-testid="oracle-row-chain"]')
+    // own table is not offered as a target
+    expect(select.findAll('option').map(o => o.text())).not.toContain('→ Encounters')
+
+    await select.setValue('table-2')
+    expect(mocks.oracleStore.updateRow).toHaveBeenCalledWith('row-1', { subtable_id: 'table-2' })
+
+    await select.setValue('')
+    expect(mocks.oracleStore.updateRow).toHaveBeenCalledWith('row-1', { subtable_id: null })
+  })
+
+  test('pinning a roll snapshots it to the journal', async () => {
+    mocks.oracleStore.rolls = [{
+      id: 'roll-1',
+      display_name: 'Player',
+      kind: 'yes_no',
+      question: 'Is the bridge safe?',
+      result: { label: 'Yes, but...', roll: 43 },
+    }]
+    const wrapper = mount(OraclePanel)
+
+    await wrapper.get('[data-testid="oracle-pin"]').trigger('click')
+
+    expect(mocks.journalStore.pin).toHaveBeenCalledWith({
+      source: 'oracle',
+      label: 'Yes / No',
+      text: 'Yes, but... (43)',
+      detail: 'Is the bridge safe?',
+    })
+  })
+
+  test('content packs list and install', async () => {
+    mocks.oracleStore.listPacks.mockResolvedValue([
+      { id: 'shadowdark-starter', name: 'Shadowdark Starter', description: 'tables', tables: 21, rows: 200 },
+    ])
+    mocks.oracleStore.installPack.mockResolvedValue({ installed_tables: 21, installed_rows: 200 })
+    const wrapper = mount(OraclePanel)
+    await new Promise(resolve => setTimeout(resolve))
+
+    const pack = wrapper.get('[data-testid="oracle-pack"]')
+    expect(pack.text()).toContain('Shadowdark Starter')
+    expect(pack.text()).toContain('21 tables')
+
+    await wrapper.get('[data-testid="oracle-pack-install"]').trigger('click')
+    expect(mocks.oracleStore.installPack).toHaveBeenCalledWith('shadowdark-starter')
   })
 })

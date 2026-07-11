@@ -285,6 +285,32 @@ describe('hexStore behavior', () => {
     expect(kit.api['post /hex-cells/explore']).not.toHaveBeenCalled()
   })
 
+  test('a party move on an explored hex burns travel time for its terrain', async () => {
+    kit.session.playMode = 'gm_less'
+    kit.session.travelState = { enabled: true, fraction: 0 }
+    kit.session.travel = vi.fn()
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(2, 2, { explored: true, terrain_type: 'swamp' })]
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(2, 2)
+
+    expect(kit.session.travel).toHaveBeenCalledWith('move', { terrain: 'swamp' })
+  })
+
+  test('travel stays quiet when the procedure is off', async () => {
+    kit.session.playMode = 'gm_less'
+    kit.session.travelState = { enabled: false, fraction: 0 }
+    kit.session.travel = vi.fn()
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(1, 1, { explored: true })]
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(1, 1)
+
+    expect(kit.session.travel).not.toHaveBeenCalled()
+  })
+
   test('GM-led sessions never trigger generation on party movement', async () => {
     kit.session.playMode = 'gm'
     kit.mapStore.mapExplorationMode = true

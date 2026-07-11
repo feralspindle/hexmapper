@@ -5,6 +5,8 @@ pub mod chat;
 pub mod dice;
 pub mod dungeon;
 pub mod hex;
+pub mod journal;
+pub mod light;
 pub mod macros;
 pub mod map;
 pub mod notebook;
