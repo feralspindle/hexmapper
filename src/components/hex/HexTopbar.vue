@@ -37,82 +37,11 @@
             </button>
         </div>
 
-        <nav
-            v-if="visibleAncestors.length"
-            :title="fullBreadcrumbPath"
-            style="
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                margin-left: 8px;
-                font-family: var(--font-mono);
-                font-size: 10px;
-                letter-spacing: 0.04em;
-                color: rgba(237, 225, 199, 0.45);
-                min-width: 0;
-                overflow: hidden;
-            "
-        >
-            <template
-                v-for="(segment, i) in visibleAncestors"
-                :key="segment.id ?? segment.ellipsis"
-            >
-                <span v-if="i > 0" style="opacity: 0.4; flex-shrink: 0">/</span>
-                <span
-                    v-if="segment.ellipsis"
-                    style="opacity: 0.4; flex-shrink: 0"
-                    >…</span
-                >
-                <button
-                    v-else-if="sessionStore.isGM"
-                    style="
-                        background: none;
-                        border: none;
-                        cursor: pointer;
-                        color: rgba(237, 225, 199, 0.55);
-                        font-family: var(--font-mono);
-                        font-size: 10px;
-                        letter-spacing: 0.04em;
-                        padding: 0;
-                        max-width: 120px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                        flex-shrink: 1;
-                    "
-                    data-testid="map-breadcrumb"
-                    @click="mapStore.setActiveMap(segment.id)"
-                >
-                    {{ segment.name }}
-                </button>
-                <span
-                    v-else
-                    style="
-                        color: rgba(237, 225, 199, 0.55);
-                        max-width: 120px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                        flex-shrink: 1;
-                    "
-                >
-                    {{ segment.name }}
-                </span>
-            </template>
-            <span style="opacity: 0.4; flex-shrink: 0">/</span>
-            <span
-                style="
-                    color: rgba(237, 225, 199, 0.8);
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 140px;
-                    flex-shrink: 1;
-                "
-                data-testid="active-map-name"
-                >{{ mapStore.activeMap?.name }}</span
-            >
-        </nav>
+        <MapBreadcrumb
+            leading-gap
+            :navigable="sessionStore.isGM"
+            @navigate="mapStore.setActiveMap"
+        />
 
         <div style="flex: 1" />
 
@@ -160,7 +89,7 @@ import TopbarBrand from "@/components/common/TopbarBrand.vue";
 import TopbarPresence from "@/components/common/TopbarPresence.vue";
 import TopbarUserBlock from "@/components/common/TopbarUserBlock.vue";
 import CharacterSheetButton from "@/components/common/CharacterSheetButton.vue";
-import { useMapBreadcrumb } from "@/composables/useMapBreadcrumb.js";
+import MapBreadcrumb from "@/components/common/MapBreadcrumb.vue";
 
 defineProps({
     hexMode: { type: String, default: null },
@@ -176,8 +105,6 @@ const mapStore = useMapStore();
 const editing = ref(false);
 const nameInput = ref("");
 const nameInputEl = ref(null);
-
-const { visibleAncestors, fullBreadcrumbPath } = useMapBreadcrumb();
 
 function startEdit() {
     nameInput.value = sessionStore.sessionName;
