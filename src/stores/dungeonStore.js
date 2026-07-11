@@ -5,12 +5,12 @@ import { realtime } from '@/lib/realtime.js'
 import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { uploadSessionImage } from '@/lib/sessionImage.js'
+import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024
-const URL_EXPIRY_SECONDS = 86400
 
 export const useD = defineStore('dungeon', () => {
   const dungeon = ref(null)
@@ -24,7 +24,7 @@ export const useD = defineStore('dungeon', () => {
   const undoStack = ref([])
   const _editingRoom = ref(null)
 
-  const dungeonImageUrl = ref(null)
+  const { url: dungeonImageUrl, refresh: _refreshImageUrl, cleanup: _cleanupImageUrl } = createSignedMapUrl()
   const fogCells = ref(new Set())
   const _localOverrides = {}
 
@@ -39,9 +39,6 @@ export const useD = defineStore('dungeon', () => {
   let undoChannel = null
   let _stopAuthWatch = null
   let _undoing = false
-  let _urlTimer = null
-  let _urlRenewal = null
-  let _urlGeneration = 0
   let _dungeonId = null
   let _initGeneration = 0
 
@@ -123,35 +120,6 @@ export const useD = defineStore('dungeon', () => {
         if (undoStack.value.length > 50) undoStack.value.shift()
       })
       .subscribe()
-  }
-
-  async function _refreshImageUrl(path) {
-    const urlGeneration = ++_urlGeneration
-    if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
-    _urlRenewal = null
-    if (!path) { dungeonImageUrl.value = null; return }
-    const { data, error } = await supabase.storage
-      .from('session-maps')
-      .createSignedUrl(path, URL_EXPIRY_SECONDS)
-    if (urlGeneration !== _urlGeneration) return
-    if (error) {
-      if (error.message !== 'Object not found') console.error('dungeonStore refreshImageUrl:', error.message)
-      dungeonImageUrl.value = null
-      return
-    }
-    dungeonImageUrl.value = data.signedUrl
-    const renewalMs = URL_EXPIRY_SECONDS * 0.9 * 1000
-    _urlRenewal = { path, at: Date.now() + renewalMs }
-    _urlTimer = setTimeout(() => _refreshImageUrl(path), renewalMs)
-  }
-
-  // Background tabs throttle timers, so a long-hidden tab can outlive its signed
-  // URL; renew an overdue one as soon as the tab is visible again.
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return
-      if (_urlRenewal && Date.now() >= _urlRenewal.at) _refreshImageUrl(_urlRenewal.path)
-    })
   }
 
   watch(() => dungeon.value?.map_image_path, p => _refreshImageUrl(p ?? null), { immediate: false })
@@ -778,10 +746,8 @@ export const useD = defineStore('dungeon', () => {
 
   function cleanup() {
     _initGeneration += 1
-    _urlGeneration += 1
     _removeChannels()
-    if (_urlTimer) { clearTimeout(_urlTimer); _urlTimer = null }
-    _urlRenewal = null
+    _cleanupImageUrl()
     _dungeonId  = null
     _pendingWrites.clear()
     _pendingDungeonFields.clear()
@@ -794,7 +760,6 @@ export const useD = defineStore('dungeon', () => {
     loadError.value = null
     loading.value = true
     undoStack.value = []
-    dungeonImageUrl.value = null
     fogCells.value = new Set()
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
   }

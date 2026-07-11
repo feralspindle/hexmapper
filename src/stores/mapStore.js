@@ -4,10 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { uploadSessionImage } from '@/lib/sessionImage.js'
+import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const URL_EXPIRY_SECONDS = 86400
 
 export const useMapStore = defineStore('map', () => {
   const maps   = ref([])
@@ -75,43 +75,9 @@ export const useMapStore = defineStore('map', () => {
     return chain
   }
 
-  const activeMapImageUrl = ref(null)
-  const _urlTimers = {}
-  const _urlRenewals = {}
+  const { url: activeMapImageUrl, refresh: _refreshActiveUrl, cleanup: _cleanupUrl } = createSignedMapUrl()
 
-  async function _refreshUrl(path, targetRef, key) {
-    if (_urlTimers[key]) { clearTimeout(_urlTimers[key]); delete _urlTimers[key] }
-    delete _urlRenewals[key]
-    if (!path) { targetRef.value = null; return }
-    const { data, error } = await supabase.storage
-      .from('session-maps')
-      .createSignedUrl(path, URL_EXPIRY_SECONDS)
-    if (error) {
-      if (error.message === 'Object not found') {
-        targetRef.value = null
-      } else {
-        console.error('refreshSignedUrl:', error.message)
-      }
-      return
-    }
-    targetRef.value = data.signedUrl
-    const renewalMs = URL_EXPIRY_SECONDS * 0.9 * 1000
-    _urlRenewals[key] = { path, targetRef, at: Date.now() + renewalMs }
-    _urlTimers[key] = setTimeout(() => _refreshUrl(path, targetRef, key), renewalMs)
-  }
-
-  // Background tabs throttle timers, so a long-hidden tab can outlive its signed
-  // URLs; renew any overdue ones as soon as the tab is visible again.
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return
-      for (const [key, renewal] of Object.entries(_urlRenewals)) {
-        if (Date.now() >= renewal.at) _refreshUrl(renewal.path, renewal.targetRef, key)
-      }
-    })
-  }
-
-  watch(() => activeMap.value?.map_image_path, p => _refreshUrl(p, activeMapImageUrl, 'active'), { immediate: false })
+  watch(() => activeMap.value?.map_image_path, p => _refreshActiveUrl(p), { immediate: false })
 
   const mapType          = computed(() => activeMap.value?.map_type           ?? 'hex')
   const mapHexWidth      = computed(() => activeMap.value?.map_hex_width      ?? 96)
@@ -158,7 +124,7 @@ export const useMapStore = defineStore('map', () => {
     localStorage.removeItem(`map_view_${sessionId}`)
 
     const activeImgPath = activeMap.value?.map_image_path
-    if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
+    if (activeImgPath) _refreshActiveUrl(activeImgPath)
 
     if (mapChannel) realtime.removeChannel(mapChannel)
     let subscribedRefreshed = false
@@ -192,10 +158,7 @@ export const useMapStore = defineStore('map', () => {
   function cleanup() {
     _initGeneration += 1
     if (mapChannel) { realtime.removeChannel(mapChannel); mapChannel = null }
-    Object.values(_urlTimers).forEach(clearTimeout)
-    Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
-    Object.keys(_urlRenewals).forEach(k => delete _urlRenewals[k])
-    activeMapImageUrl.value = null
+    _cleanupUrl()
     maps.value = []
     _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
