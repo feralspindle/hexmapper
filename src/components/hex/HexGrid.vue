@@ -19,13 +19,17 @@
             :width="svgWidth"
             :height="svgHeight"
             class="block"
-            style="overflow: visible"
+            style="overflow: visible; touch-action: none"
             @mousedown.left="onPanStart"
             @mousedown.middle.prevent="onMiddlePanStart"
             @mousemove="onMouseMove"
             @mouseup="onPanEnd"
             @mouseleave="onPanEnd"
             @wheel.prevent="onWheel"
+            @touchstart="onTouchStart"
+            @touchmove="onTouchMove"
+            @touchend="onTouchEnd"
+            @touchcancel="onTouchEnd"
         >
             <g :transform="`translate(${pan.x}, ${pan.y}) scale(${zoom})`">
                 <g :transform="imageTransform">
@@ -417,6 +421,101 @@ function onMiddlePanStart(e) {
 function onWheel(e) {
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
     zoom.value = Math.min(3, Math.max(0.3, zoom.value * factor));
+}
+
+let pinchStart = null;
+
+function touchDist(touches) {
+    return Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY,
+    );
+}
+
+function touchMid(touches, rect) {
+    return {
+        x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left,
+        y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top,
+    };
+}
+
+function beginTouchPan(t) {
+    panning = true;
+    didPan = false;
+    panStart = { x: t.clientX, y: t.clientY };
+    if (props.moveMode === "image") {
+        panOrigin = { x: localImageOffsetX.value, y: localImageOffsetY.value };
+    } else if (props.moveMode === "grid") {
+        panOrigin = { x: localGridOffsetX.value, y: localGridOffsetY.value };
+    } else {
+        panOrigin = { x: pan.value.x, y: pan.value.y };
+    }
+}
+
+function onTouchStart(e) {
+    if (e.touches.length === 1) {
+        pinchStart = null;
+        beginTouchPan(e.touches[0]);
+    } else if (e.touches.length === 2) {
+        panning = false;
+        const rect = svgEl.value.getBoundingClientRect();
+        const mid = touchMid(e.touches, rect);
+        pinchStart = {
+            dist: touchDist(e.touches),
+            zoom: zoom.value,
+            world: {
+                x: (mid.x - pan.value.x) / zoom.value,
+                y: (mid.y - pan.value.y) / zoom.value,
+            },
+        };
+    }
+}
+
+function onTouchMove(e) {
+    if (pinchStart && e.touches.length === 2) {
+        e.preventDefault();
+        const rect = svgEl.value.getBoundingClientRect();
+        const mid = touchMid(e.touches, rect);
+        const newZoom = Math.min(
+            3,
+            Math.max(0.3, pinchStart.zoom * (touchDist(e.touches) / pinchStart.dist)),
+        );
+        zoom.value = newZoom;
+        pan.value = {
+            x: mid.x - pinchStart.world.x * newZoom,
+            y: mid.y - pinchStart.world.y * newZoom,
+        };
+        return;
+    }
+    if (!panning || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - panStart.x;
+    const dy = t.clientY - panStart.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan = true;
+    if (!didPan) return;
+    e.preventDefault();
+    if (props.moveMode === "image") {
+        localImageOffsetX.value = panOrigin.x + dx;
+        localImageOffsetY.value = panOrigin.y + dy;
+    } else if (props.moveMode === "grid") {
+        localGridOffsetX.value = panOrigin.x + dx;
+        localGridOffsetY.value = panOrigin.y + dy;
+    } else {
+        pan.value = { x: panOrigin.x + dx, y: panOrigin.y + dy };
+    }
+}
+
+function onTouchEnd(e) {
+    if (e.touches.length === 0) {
+        if (panning && didPan) onPanEnd();
+        panning = false;
+        didPan = false;
+        pinchStart = null;
+    } else if (e.touches.length === 1 && pinchStart) {
+        pinchStart = null;
+        beginTouchPan(e.touches[0]);
+        didPan = true;
+    }
 }
 
 function zoomIn() {
