@@ -6,35 +6,18 @@
         </div>
 
         <div class="dstat-block">
-            <div class="dstat-title">Leaderboard</div>
-            <div v-if="!leaderboard.length" class="dstat-empty">not enough rolls yet</div>
-            <div
-                v-for="(player, i) in leaderboard"
-                :key="player.userId"
-                class="dstat-row"
-            >
-                <span class="dstat-rank">{{ i + 1 }}</span>
-                <span class="dstat-name" :style="{ color: playerColorFor(player.userId) }">
-                    {{ gmName(player.userId, player.displayName, player.characterId) }}
-                </span>
-                <span class="dstat-z" :class="player.avgZ >= 0 ? 'pos' : 'neg'">{{ fmtZ(player.avgZ) }}</span>
-                <span class="dstat-sub">{{ ordinal(player.avgPercentile) }} · {{ player.count }}</span>
-            </div>
-        </div>
-
-        <div class="dstat-block">
             <div class="dstat-title">Party skills</div>
             <div v-if="!skills.length" class="dstat-empty">no labeled rolls yet</div>
             <template v-else>
                 <div class="dstat-line">
                     <span class="dstat-tag pos">best</span>
                     <span class="dstat-name">{{ skillName(best.label) }}</span>
-                    <span class="dstat-z pos">{{ fmtZ(best.avgZ) }}</span>
+                    <span class="dstat-z pos">{{ formatZ(best.avgZ) }}</span>
                 </div>
                 <div v-if="worst && worst !== best" class="dstat-line">
                     <span class="dstat-tag neg">worst</span>
                     <span class="dstat-name">{{ skillName(worst.label) }}</span>
-                    <span class="dstat-z" :class="worst.avgZ >= 0 ? 'pos' : 'neg'">{{ fmtZ(worst.avgZ) }}</span>
+                    <span class="dstat-z" :class="worst.avgZ >= 0 ? 'pos' : 'neg'">{{ formatZ(worst.avgZ) }}</span>
                 </div>
             </template>
         </div>
@@ -44,7 +27,7 @@
             <div v-for="entry in bestAt" :key="entry.label ?? '_'" class="dstat-line">
                 <span class="dstat-skill">{{ skillName(entry.label) }}</span>
                 <span class="dstat-name" :style="{ color: playerColorFor(entry.userId) }">{{ entry.displayName }}</span>
-                <span class="dstat-z" :class="entry.avgZ >= 0 ? 'pos' : 'neg'">{{ fmtZ(entry.avgZ) }}</span>
+                <span class="dstat-z" :class="entry.avgZ >= 0 ? 'pos' : 'neg'">{{ formatZ(entry.avgZ) }}</span>
             </div>
         </div>
     </div>
@@ -53,31 +36,18 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useDiceStatsStore } from '@/stores/diceStatsStore.js'
-import { useGMLabel } from '@/composables/useGMLabel.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { formatZ } from '@/lib/diceStats.js'
 
 const statsStore = useDiceStatsStore()
-const { gmName } = useGMLabel()
 
 const range = ref('tonight')
 
-const leaderboard = computed(() => range.value === 'tonight' ? statsStore.leaderboardTonight : statsStore.leaderboardAllTime)
 const skills = computed(() => range.value === 'tonight' ? statsStore.skillsTonight : statsStore.skillsAllTime)
 const bestAt = computed(() => range.value === 'tonight' ? statsStore.bestAtTonight : statsStore.bestAtAllTime)
 
 const best = computed(() => skills.value[0])
 const worst = computed(() => skills.value[skills.value.length - 1])
-
-function fmtZ(z) {
-    return `${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(2)}σ`
-}
-
-function ordinal(value) {
-    const n = Math.round(value)
-    const tens = n % 100
-    if (tens >= 11 && tens <= 13) return `${n}th`
-    return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
-}
 
 function skillName(label) {
     return label ?? 'unlabeled'
@@ -112,19 +82,11 @@ function skillName(label) {
     font-size: 12px;
     color: var(--ink-mute);
 }
-.dstat-row,
 .dstat-line {
     display: flex;
     align-items: baseline;
     gap: 8px;
     font-size: 12px;
-}
-.dstat-rank {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--ink-mute);
-    min-width: 12px;
-    text-align: right;
 }
 .dstat-name {
     font-weight: 600;
@@ -133,7 +95,6 @@ function skillName(label) {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.dstat-row .dstat-name,
 .dstat-line .dstat-name {
     flex: 1;
     min-width: 0;
@@ -158,12 +119,6 @@ function skillName(label) {
 }
 .dstat-z.neg {
     color: var(--accent-2, #b8541c);
-}
-.dstat-sub {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--ink-mute);
-    flex: 0 0 auto;
 }
 .dstat-tag {
     font-family: var(--font-zine);

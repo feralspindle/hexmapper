@@ -101,6 +101,17 @@ export function rankSkills(rolls) {
     .sort((a, b) => b.avgZ - a.avgZ)
 }
 
+export function formatZ(z) {
+  return `${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(2)}σ`
+}
+
+export function ordinal(value) {
+  const n = Math.round(value)
+  const tens = n % 100
+  if (tens >= 11 && tens <= 13) return `${n}th`
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+}
+
 export function bestPlayerPerSkill(rolls) {
   const source = Array.isArray(rolls) ? rolls : []
   const byLabel = new Map()

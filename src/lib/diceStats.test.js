@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { splitTonight, rankPlayers, rankSkills, bestPlayerPerSkill, usableRoll } from './diceStats.js'
+import { splitTonight, rankPlayers, rankSkills, bestPlayerPerSkill, usableRoll, formatZ, ordinal } from './diceStats.js'
 
 const stats = (z, overrides = {}) => ({
   mean: 10.5,
@@ -113,6 +113,23 @@ describe('rankSkills', () => {
       [null, 1, 0.1],
       ['Perception', 1, -0.5],
     ])
+  })
+})
+
+describe('formatZ and ordinal', () => {
+  test('formatZ signs and fixes to 2 decimals with a real minus glyph', () => {
+    expect(formatZ(0.823)).toBe('+0.82σ')
+    expect(formatZ(-0.12)).toBe('−0.12σ')
+    expect(formatZ(0)).toBe('+0.00σ')
+  })
+
+  test('ordinal handles the teens and the 1/2/3 suffixes', () => {
+    expect(ordinal(73)).toBe('73rd')
+    expect(ordinal(51)).toBe('51st')
+    expect(ordinal(42)).toBe('42nd')
+    expect(ordinal(11)).toBe('11th')
+    expect(ordinal(13)).toBe('13th')
+    expect(ordinal(50.4)).toBe('50th')
   })
 })
 
