@@ -24,8 +24,10 @@ export function createSignedMapUrl() {
       .createSignedUrl(path, URL_EXPIRY_SECONDS)
     if (gen !== generation) return
     if (error) {
-      if (error.message !== 'Object not found') console.error('signed map url:', error.message)
-      url.value = null
+      // only blank the image when the object is actually gone; a transient
+      // sign failure (network blip at the renewal tick) keeps the last-good url
+      if (error.message === 'Object not found') url.value = null
+      else console.error('signed map url:', error.message)
       return
     }
     url.value = data.signedUrl

@@ -221,14 +221,13 @@ export const useMapStore = defineStore('map', () => {
   function applyLocalPatch(patch) {
     const map = activeMap.value
     if (!map) return
-    const dbPatch = assignDbFields({}, patch, {
-      mapImageRotation: 'map_image_rotation',
-      mapGridRotation:  'map_grid_rotation',
-      mapHexWidth:      'map_hex_width',
-      mapHexHeight:     'map_hex_height',
-      mapImageScale:    'map_image_scale',
-      mapGridCols:      'map_grid_cols',
-      mapGridRows:      'map_grid_rows',
+    const dbPatch = assignDbFields({}, patch, MAP_IMAGE_FIELD_MAP)
+    assignDbFields(dbPatch, patch, {
+      mapGridRotation: 'map_grid_rotation',
+      mapHexWidth:     'map_hex_width',
+      mapHexHeight:    'map_hex_height',
+      mapGridCols:     'map_grid_cols',
+      mapGridRows:     'map_grid_rows',
     })
     _localOverrides[map.id] = { ...(_localOverrides[map.id] ?? {}), ...dbPatch }
     _overrideAt[map.id] = Date.now()

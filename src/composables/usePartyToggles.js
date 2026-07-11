@@ -10,5 +10,5 @@ export function usePartyToggles() {
   function toggleVault() {
     if (vaultVisible.value) { toggleInventory() } else { openNotebook('vault') }
   }
-  return { inventoryVisible, toggleInventory, partyVisible, toggleParty, vaultVisible, toggleVault }
+  return { partyVisible, toggleParty, vaultVisible, toggleVault }
 }

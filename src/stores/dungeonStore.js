@@ -494,29 +494,10 @@ export const useD = defineStore('dungeon', () => {
   // rooms and corridors are the same optimistic collection: temp-id insert then
   // reconcile, toRaw-guarded rollback on a failed patch, backup-restore on a
   // failed delete, each step mirrored into the undo stack. they differ only in
-  // endpoint, undo id field, and the activity label.
+  // endpoint, undo id field, and the activity label. rooms pass no addLabel
+  // because their create path is the standalone addRoom below.
   function _elementOps({ collection, path, entity, idKey, addLabel, deleteLabel, nameOf }) {
     const Entity = entity[0].toUpperCase() + entity.slice(1)
-
-    async function add(elementData) {
-      const tempId = crypto.randomUUID()
-      const optimistic = { id: tempId, ...elementData, source_client: CLIENT_ID }
-      collection.value.set(tempId, optimistic)
-
-      let data
-      try {
-        data = await apiClient.post(path, { ...elementData, source_client: CLIENT_ID }, `create_${entity}`)
-      } catch (error) {
-        collection.value.delete(tempId)
-        console.error(`add${Entity} error:`, error instanceof ApiError ? error.message : error)
-        return
-      }
-
-      collection.value.delete(tempId)
-      if (!collection.value.has(data.id)) collection.value.set(data.id, data)
-      useActivityStore().record(addLabel, nameOf(data))
-      pushUndo({ type: `delete_${entity}`, [idKey]: data.id })
-    }
 
     async function update(id, patch) {
       const existing = collection.value.get(id)
@@ -552,12 +533,36 @@ export const useD = defineStore('dungeon', () => {
       }
     }
 
-    return { add, update, remove }
+    const ops = { update, remove }
+
+    if (addLabel) {
+      ops.add = async function add(elementData) {
+        const tempId = crypto.randomUUID()
+        const optimistic = { id: tempId, ...elementData, source_client: CLIENT_ID }
+        collection.value.set(tempId, optimistic)
+
+        let data
+        try {
+          data = await apiClient.post(path, { ...elementData, source_client: CLIENT_ID }, `create_${entity}`)
+        } catch (error) {
+          collection.value.delete(tempId)
+          console.error(`add${Entity} error:`, error instanceof ApiError ? error.message : error)
+          return
+        }
+
+        collection.value.delete(tempId)
+        if (!collection.value.has(data.id)) collection.value.set(data.id, data)
+        useActivityStore().record(addLabel, nameOf(data))
+        pushUndo({ type: `delete_${entity}`, [idKey]: data.id })
+      }
+    }
+
+    return ops
   }
 
   const _roomOps = _elementOps({
     collection: rooms, path: '/dungeon-rooms', entity: 'room', idKey: 'roomId',
-    addLabel: 'added room', deleteLabel: 'deleted room',
+    deleteLabel: 'deleted room',
     nameOf: (el) => el?.name ?? 'Unnamed Room',
   })
   const _corridorOps = _elementOps({

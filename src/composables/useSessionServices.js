@@ -58,5 +58,5 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
     mapStore.cleanup()
   }
 
-  return { joinSession, initServices, cleanupServices, syncOracleStore }
+  return { joinSession, initServices, cleanupServices }
 }
