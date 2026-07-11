@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed, toRaw } from "vue";
 import { supabase } from "@/lib/supabase";
 import { realtime, usingRustRealtime } from "@/lib/realtime.js";
+import { pendingKeys } from "@/lib/realtimeProtocol.js";
 import { apiClient, ApiError } from "@/lib/apiClient.js";
 import router from "@/router/index.js";
 import { useMapStore } from "@/stores/mapStore.js";
@@ -306,11 +307,11 @@ export const useHexStore = defineStore("hex", () => {
   // maps rows don't carry source_client, so our own party patches echo back.
   // while any are in flight the echoes are stale against newer optimistic
   // moves; the patches are also chained so they commit in order
-  let _pendingPartyWrites = 0;
+  const _pendingPartyWrites = pendingKeys();
   let _partyWriteQueue = Promise.resolve();
 
   async function _patchPartyHex(mapId, patch, intent) {
-    _pendingPartyWrites += 1;
+    _pendingPartyWrites.begin([mapId]);
     const write = _partyWriteQueue.then(() =>
       apiClient.patch(`/maps/${mapId}`, patch, intent),
     );
@@ -318,7 +319,7 @@ export const useHexStore = defineStore("hex", () => {
     try {
       await write;
     } finally {
-      _pendingPartyWrites -= 1;
+      _pendingPartyWrites.end([mapId]);
     }
   }
 
@@ -336,7 +337,7 @@ export const useHexStore = defineStore("hex", () => {
         },
         ({ new: row }) => {
           if (row.party_hex_q !== undefined || row.party_hex_r !== undefined) {
-            if (_pendingPartyWrites > 0) return;
+            if (_pendingPartyWrites.has(mapId)) return;
             const next =
               row.party_hex_q != null
                 ? { q: row.party_hex_q, r: row.party_hex_r }

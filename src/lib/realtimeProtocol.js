@@ -91,6 +91,7 @@ export function pendingKeys() {
       }
     },
     has(key) { return counts.has(key) },
+    count(key) { return counts.get(key) ?? 0 },
     keys() { return counts.keys() },
     clear() { counts.clear() },
   }
