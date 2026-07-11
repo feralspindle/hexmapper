@@ -1,14 +1,5 @@
 <template>
-  <div class="map-settings-panel">
-
-    <div class="map-settings-header">
-      <span class="map-settings-title">Map Settings</span>
-      <button class="map-settings-close" data-testid="map-settings-close" title="Close" @click="emit('close')">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M1 1l10 10M11 1L1 11"/>
-        </svg>
-      </button>
-    </div>
+  <SettingsPanel panel-class="map-settings-panel" @close="emit('close')">
 
     <div class="map-settings-section">
       <div class="map-settings-subsection">
@@ -76,98 +67,41 @@
     </div>
 
     <div v-if="hexMode === 'fow'" class="map-settings-section">
-      <div v-if="mapStore.activeMapImageUrl" class="map-preview">
-        <img :src="mapStore.activeMapImageUrl" alt="Map image" />
-      </div>
-      <div v-else class="map-preview-empty">No image uploaded</div>
-
-      <label class="map-upload-btn">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-        </svg>
-        {{ mapStore.activeMap?.map_image_path ? 'Replace image' : 'Upload map image' }}
-        <input type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="handleUpload" />
-      </label>
-
-      <p v-if="uploadError" class="map-settings-error">{{ uploadError }}</p>
-      <p v-if="uploading" class="map-settings-hint">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite;display:inline-block">
-          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-        </svg>
-        Uploading…
-      </p>
-      <p v-else class="map-settings-hint">JPEG, PNG, or WebP I guess if youre a fucking psychopath · max 50 MB</p>
+      <UploadControl
+        :image-url="mapStore.activeMapImageUrl"
+        :has-image="!!mapStore.activeMap?.map_image_path"
+        :uploading="uploading"
+        :error="uploadError"
+        hint="JPEG, PNG, or WebP I guess if youre a fucking psychopath · max 50 MB"
+        @file="handleUpload"
+      />
     </div>
 
     <div v-if="hexMode === 'fow'" :class="['map-settings-section', isAlignmentLocked ? 'map-settings-locked' : '']">
 
       <div class="map-settings-subsection">
         <div class="map-settings-label">Image rotation</div>
-        <div class="map-rot-row">
-          <button class="map-rot-btn" title="Rotate image 90° CCW" @click="rotateImageBy(-90)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12a9 9 0 109-9M3 3v4h4"/>
-            </svg>
-          </button>
-          <div style="position:relative;flex:1">
-            <input
-              v-model.number="imageRotationDraft"
-              type="number" min="0" max="359"
-              class="map-rot-input"
-              @change="saveImageRotation"
-            />
-            <span class="map-rot-unit">°</span>
-          </div>
-          <button class="map-rot-btn" title="Rotate image 90° CW" @click="rotateImageBy(90)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 12a9 9 0 11-9-9M21 3v4h-4"/>
-            </svg>
-          </button>
-        </div>
+        <RotationControl
+          v-model="imageRotationDraft"
+          what="image"
+          @step="(v) => saveRotationField('mapImageRotation', v, true)"
+          @commit="(v) => saveRotationField('mapImageRotation', v, false, 'imageRotation')"
+        />
       </div>
 
       <div class="map-settings-subsection">
         <div class="map-settings-label">Grid rotation</div>
-        <div class="map-rot-row">
-          <button class="map-rot-btn" title="Rotate grid 90° CCW" @click="rotateGridBy(-90)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12a9 9 0 109-9M3 3v4h4"/>
-            </svg>
-          </button>
-          <div style="position:relative;flex:1">
-            <input
-              v-model.number="gridRotationDraft"
-              type="number" min="0" max="359"
-              class="map-rot-input"
-              @change="saveGridRotation"
-            />
-            <span class="map-rot-unit">°</span>
-          </div>
-          <button class="map-rot-btn" title="Rotate grid 90° CW" @click="rotateGridBy(90)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 12a9 9 0 11-9-9M21 3v4h-4"/>
-            </svg>
-          </button>
-        </div>
+        <RotationControl
+          v-model="gridRotationDraft"
+          what="grid"
+          @step="(v) => saveRotationField('mapGridRotation', v, true)"
+          @commit="(v) => saveRotationField('mapGridRotation', v, false, 'gridRotation')"
+        />
       </div>
 
       <div class="map-settings-subsection">
         <div class="map-settings-label">Image scale</div>
-        <div class="map-size-row">
-          <input
-            v-model.number="imageScaleDraft"
-            type="number" min="25" max="400" step="1"
-            class="map-size-input"
-            @change="saveImageScaleDebounced"
-          />
-          <span class="map-size-px">%</span>
-        </div>
-        <input
-          v-model.number="imageScaleDraft"
-          type="range" min="25" max="400" step="1"
-          class="map-slider"
-          @input="saveImageScaleDebounced"
-        />
+        <ScaleControl v-model="imageScaleDraft" :min="25" :max="400" @save="saveImageScaleDebounced" />
         <p class="map-settings-hint">Scale the background image to match the hex grid.</p>
       </div>
 
@@ -210,30 +144,11 @@
 
       <div class="map-settings-subsection">
         <div class="map-settings-label">Drag to reposition</div>
-        <div class="map-move-row">
-          <button
-            :class="['map-move-btn', moveMode === 'none' ? 'active' : '']"
-            @click="emit('update:moveMode', 'none')"
-          >Off</button>
-          <button
-            :class="['map-move-btn', moveMode === 'image' ? 'active' : '']"
-            @click="emit('update:moveMode', 'image')"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-            </svg>
-            Image
-          </button>
-          <button
-            :class="['map-move-btn', moveMode === 'grid' ? 'active' : '']"
-            @click="emit('update:moveMode', 'grid')"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>
-            </svg>
-            Grid
-          </button>
-        </div>
+        <MoveModeToggle
+          :model-value="moveMode"
+          :modes="['image', 'grid']"
+          @update:model-value="(v) => emit('update:moveMode', v)"
+        />
         <p class="map-settings-hint">Pan and zoom until aligned, then adjust hex size to fit.</p>
       </div>
 
@@ -254,13 +169,18 @@
       </button>
     </div>
 
-  </div>
+  </SettingsPanel>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useMapStore } from '@/stores/mapStore.js'
 import { DEFAULT_GRID_COLS, DEFAULT_GRID_ROWS } from '@/composables/useHexGeometry.js'
+import SettingsPanel from '@/components/common/mapSettings/SettingsPanel.vue'
+import UploadControl from '@/components/common/mapSettings/UploadControl.vue'
+import RotationControl from '@/components/common/mapSettings/RotationControl.vue'
+import ScaleControl from '@/components/common/mapSettings/ScaleControl.vue'
+import MoveModeToggle from '@/components/common/mapSettings/MoveModeToggle.vue'
 
 const props = defineProps({
   moveMode: { type: String, default: 'none' },
@@ -320,10 +240,7 @@ const hexHeightDraftInput = computed({
   set: (v) => { hexHeightDraft.value = v },
 })
 
-async function handleUpload(event) {
-  const file = event.target.files?.[0]
-  event.target.value = ''
-  if (!file) return
+async function handleUpload(file) {
   uploadError.value = ''
   uploading.value = true
   try {
@@ -335,8 +252,6 @@ async function handleUpload(event) {
     uploading.value = false
   }
 }
-
-function _clampDeg(v) { return Math.max(0, Math.min(359, v || 0)) }
 
 const _saveTimers = {}
 function _scheduleSave(key, getPatch) {
@@ -352,23 +267,13 @@ function _cancelSave(key) {
   delete _saveTimers[key]
 }
 
-async function rotateImageBy(delta) {
-  imageRotationDraft.value = ((imageRotationDraft.value + delta) % 360 + 360) % 360
-  mapStore.applyLocalPatch({ mapImageRotation: imageRotationDraft.value })
-  await mapStore.updateActiveMap({ mapImageRotation: imageRotationDraft.value })
-}
-function saveImageRotation() {
-  imageRotationDraft.value = _clampDeg(imageRotationDraft.value)
-  _scheduleSave('imageRotation', () => ({ mapImageRotation: imageRotationDraft.value }))
-}
-async function rotateGridBy(delta) {
-  gridRotationDraft.value = ((gridRotationDraft.value + delta) % 360 + 360) % 360
-  mapStore.applyLocalPatch({ mapGridRotation: gridRotationDraft.value })
-  await mapStore.updateActiveMap({ mapGridRotation: gridRotationDraft.value })
-}
-function saveGridRotation() {
-  gridRotationDraft.value = _clampDeg(gridRotationDraft.value)
-  _scheduleSave('gridRotation', () => ({ mapGridRotation: gridRotationDraft.value }))
+function saveRotationField(field, value, immediate, debounceKey) {
+  if (immediate) {
+    mapStore.applyLocalPatch({ [field]: value })
+    mapStore.updateActiveMap({ [field]: value })
+  } else {
+    _scheduleSave(debounceKey, () => ({ [field]: value }))
+  }
 }
 
 function saveImageScaleDebounced() {
@@ -441,51 +346,6 @@ async function setUnit(unit) {
 </script>
 
 <style scoped>
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.map-settings-panel {
-  position: absolute;
-  left: 72px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 20;
-  width: 272px;
-  background: var(--paper);
-  border: 1px solid var(--rule-strong);
-  border-radius: 3px;
-  box-shadow: 0 6px 24px rgba(26,20,16,0.22), 0 1px 4px rgba(26,20,16,0.12);
-  max-height: 90vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.map-settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--rule-strong);
-  flex-shrink: 0;
-}
-
-.map-settings-title {
-  font-family: var(--font-display);
-  font-size: 12px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-
-.map-settings-close {
-  width: 22px; height: 22px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--ink-mute);
-  border-radius: 2px;
-  transition: color .15s, background .15s;
-}
-.map-settings-close:hover { color: var(--ink); background: rgba(26,20,16,.08); }
-
 .map-settings-section {
   padding: 10px 12px;
   border-bottom: 1px solid var(--rule);
@@ -519,82 +379,7 @@ async function setUnit(unit) {
   color: var(--ink-mute);
   margin-top: 4px;
   line-height: 1.4;
-  display: flex;
-  align-items: center;
-  gap: 5px;
 }
-
-.map-settings-error {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--accent);
-  margin-top: 4px;
-}
-
-/* Image preview */
-.map-preview {
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-.map-preview img {
-  display: block;
-  width: 100%;
-  height: 80px;
-  object-fit: cover;
-}
-.map-preview-empty {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed var(--rule-strong);
-  border-radius: 2px;
-  margin-bottom: 8px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ink-mute);
-  letter-spacing: .04em;
-}
-
-.map-upload-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: .04em;
-  color: var(--ink-2);
-  background: var(--paper-2);
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.map-upload-btn:hover { background: var(--paper-3); color: var(--ink); }
-
-/* Rotation controls */
-.map-rot-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.map-rot-btn {
-  width: 28px; height: 28px;
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--paper-2);
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
-  color: var(--ink-2);
-  transition: background .15s, color .15s;
-}
-.map-rot-btn:hover { background: var(--paper-3); color: var(--ink); }
 
 .map-rot-input {
   width: 100%;
@@ -614,18 +399,6 @@ async function setUnit(unit) {
 .map-rot-input::-webkit-outer-spin-button { -webkit-appearance: none; }
 .map-rot-input:focus { outline: none; border-color: var(--accent); }
 
-.map-rot-unit {
-  position: absolute;
-  right: 7px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-mute);
-  pointer-events: none;
-}
-
-/* Hex size */
 .map-size-row {
   display: flex;
   align-items: center;
@@ -700,35 +473,6 @@ async function setUnit(unit) {
 }
 .map-reset-btn:hover { color: var(--ink-2); }
 
-/* Move mode */
-.map-move-row {
-  display: flex;
-  gap: 4px;
-}
-.map-move-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 5px 4px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: .03em;
-  color: var(--ink-mute);
-  background: var(--paper-2);
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
-  transition: background .15s, color .15s, border-color .15s;
-}
-.map-move-btn:hover { color: var(--ink-2); background: var(--paper-3); }
-.map-move-btn.active {
-  background: var(--ink);
-  color: var(--paper);
-  border-color: var(--ink);
-}
-
-/* Scale */
 .map-scale-row {
   display: flex;
   align-items: center;
@@ -756,7 +500,6 @@ async function setUnit(unit) {
 .map-scale-unit-btn:hover { background: var(--paper-3); color: var(--ink-2); }
 .map-scale-unit-btn.active { background: var(--ink); color: var(--paper); }
 
-/* Lock toggle */
 .map-lock-row {
   display: flex;
   align-items: center;
