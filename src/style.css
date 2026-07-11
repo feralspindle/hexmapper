@@ -169,7 +169,9 @@ svg {
     display: grid;
     grid-template-rows: var(--topbar-h) 1fr;
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
+    width: 100dvw;
     background: var(--void);
     overflow: hidden;
     position: fixed;
@@ -2836,4 +2838,171 @@ textarea.ds-input {
 }
 .dungeon-scribe .cs-form-label {
     font-size: 11px !important;
+}
+
+/* ═══════════════════ responsive / touch ═══════════════════ */
+
+/* mobile drawer chrome is inert on desktop */
+.ds-panel-fab,
+.ds-panel-scrim,
+.ds-panel-close-mobile {
+    display: none;
+}
+
+/* tablet-portrait and phones: the fixed side-panel column becomes an
+   off-canvas drawer so the canvas can use the full width. !important is
+   needed to beat the [data-panel-layout] pref selectors and the panel's
+   inline layout. */
+@media (max-width: 900px) {
+    .hm-body,
+    .ds-body,
+    .dungeon-scribe .ds-body {
+        grid-template-columns: var(--toolbar-w) 1fr 0 !important;
+    }
+    .hm-body--player-hex {
+        grid-template-columns: 0 1fr 0 !important;
+    }
+
+    .ds-right-panel {
+        position: absolute !important;
+        top: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: min(360px, 88vw) !important;
+        transform: translateX(100%);
+        transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+        z-index: 46;
+        border-left: 1px solid var(--rule-strong);
+        box-shadow: -8px 0 28px rgba(0, 0, 0, 0.45);
+    }
+    .ds-right-panel.is-open {
+        transform: translateX(0);
+    }
+
+    .ds-panel-scrim {
+        display: block;
+        position: absolute;
+        inset: 0;
+        border: none;
+        padding: 0;
+        background: rgba(13, 10, 7, 0.5);
+        z-index: 45;
+        animation: ds-scrim-in 0.2s ease;
+    }
+    .ds-panel-fab {
+        display: flex;
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        z-index: 40;
+        width: 48px;
+        height: 48px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--rule-strong);
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--paper);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+        cursor: pointer;
+    }
+    .ds-panel-fab:active {
+        transform: scale(0.94);
+    }
+    .ds-panel-close-mobile {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 34px;
+        border: none;
+        border-left: 1px solid var(--rule);
+        background: var(--paper-3);
+        color: var(--ink-soft);
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+    }
+
+    /* draggable floating windows: pin to a full-bleed sheet under the topbar */
+    .ds-party-panel,
+    .pn-panel,
+    .ds-char-drawer {
+        left: 0 !important;
+        right: 0 !important;
+        top: var(--topbar-h) !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: auto !important;
+        bottom: 0 !important;
+        z-index: 95 !important;
+        border-radius: 0 !important;
+    }
+    .ds-party-head,
+    .pn-head {
+        cursor: default;
+    }
+    .ds-grip,
+    .ds-resize-handle,
+    .pn-resize-handle {
+        display: none !important;
+    }
+
+    /* keep the floating map toolbar clear of the zoom cluster */
+    .hm-contents-bar {
+        max-width: calc(100% - 24px);
+    }
+}
+
+@keyframes ds-scrim-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* phones: thin the shell and shed the topbar's informational cluster so the
+   action buttons still fit one row */
+@media (max-width: 620px) {
+    .dungeon-scribe {
+        --toolbar-w: 48px;
+        --tool-size: 34px;
+        --topbar-h: 48px;
+    }
+    .ds-topbar {
+        padding: 0 8px;
+        gap: 4px;
+    }
+    .ds-divider,
+    .hm-mode-badge,
+    .mb-nav,
+    .ds-presence,
+    .hm-presence-count {
+        display: none !important;
+    }
+    .ds-session-name {
+        max-width: 34vw;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .ds-session-name .ds-ornament {
+        display: none;
+    }
+
+    .ds-right-panel {
+        width: min(360px, 94vw) !important;
+    }
+
+    .hm-mode-picker-grid {
+        grid-template-columns: 1fr;
+    }
+    .hm-mode-picker {
+        padding: 20px;
+    }
+    .hm-setup-bg {
+        padding: 16px;
+    }
 }
