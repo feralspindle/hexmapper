@@ -223,7 +223,7 @@ import HexRightPanel from "@/components/hex/HexRightPanel.vue";
 import HexGrid from "@/components/hex/HexGrid.vue";
 import MapImageSettings from "@/components/hex/MapImageSettings.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
-import DiceRollToast      from "@/components/dungeon/DiceRollToast.vue";
+import DiceRollToast      from "@/components/common/DiceRollToast.vue";
 import LuckTokenToast     from "@/components/common/LuckTokenToast.vue";
 import QuestCompleteToast from "@/components/common/QuestCompleteToast.vue";
 import LootDealToast      from "@/components/common/LootDealToast.vue";
@@ -233,7 +233,7 @@ import PartyFollowBanner from "@/components/common/PartyFollowBanner.vue";
 import PhotoBroadcastModal from "@/components/common/PhotoBroadcastModal.vue";
 import WelcomeModal from "@/components/common/WelcomeModal.vue";
 import CharacterDrawer from "@/components/common/CharacterDrawer.vue";
-import DungeonPartyPanel from "@/components/dungeon/DungeonPartyPanel.vue";
+import DungeonPartyPanel from "@/components/common/DungeonPartyPanel.vue";
 import PartyNotebook       from "@/components/common/PartyNotebook.vue";
 
 import HexBottomBar from "@/components/hex/HexBottomBar.vue";

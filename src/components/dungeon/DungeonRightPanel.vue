@@ -25,9 +25,9 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import DungeonInspector      from './DungeonInspector.vue'
-import DungeonDiceSection    from './DungeonDiceSection.vue'
-import DungeonPhotosSection  from './DungeonPhotosSection.vue'
-import DungeonSessionSection from './DungeonSessionSection.vue'
+import DungeonDiceSection    from '@/components/common/DungeonDiceSection.vue'
+import DungeonPhotosSection  from '@/components/common/DungeonPhotosSection.vue'
+import DungeonSessionSection from '@/components/common/DungeonSessionSection.vue'
 import OraclePanel           from '@/components/common/OraclePanel.vue'
 import { useD }              from '@/stores/dungeonStore.js'
 import { useDiceStore }      from '@/stores/diceStore.js'
