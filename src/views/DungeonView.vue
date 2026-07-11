@@ -40,26 +40,7 @@
           <button class="ds-btn" @click="dungeonStore.init(sessionId, dungeonId)">Retry</button>
         </div>
 
-        <Transition name="ds-map-fade">
-          <div v-if="dungeonStore.loading" class="ds-map-loading-overlay">
-            <svg class="ds-map-spinner" width="52" height="52" viewBox="0 0 52 52" fill="none">
-              <polygon
-                points="26,3 47.7,15 47.7,37 26,49 4.3,37 4.3,15"
-                stroke="#d4a74b"
-                stroke-width="2"
-                stroke-linejoin="round"
-              />
-              <polygon
-                points="26,13 40.6,21 40.6,37 26,45 11.4,37 11.4,21"
-                stroke="#d4a74b"
-                stroke-width="1.2"
-                stroke-linejoin="round"
-                opacity="0.35"
-              />
-            </svg>
-            <span class="ds-map-loading-label">Loading dungeon…</span>
-          </div>
-        </Transition>
+        <MapLoadingOverlay :visible="dungeonStore.loading" label="Loading dungeon…" />
 
         <DungeonMapImageSettings
           v-if="mapSettingsOpen && sessionStore.isGM"
@@ -76,14 +57,10 @@
         <DungeonContentsBar />
 
         <ConfirmDialog />
-        <DiceRollToast />
-        <LuckTokenToast />
-        <QuestCompleteToast />
-        <LootDealToast />
-        <ChatToast bottom-class="bottom-20" />
+        <SessionToasts chat-bottom-class="bottom-20" />
       </div>
 
-      <DungeonRightPanel />
+      <SessionRightPanel :inspector="DungeonInspector" :selected="dungeonStore.selectedElement" />
     </div>
 
 
@@ -111,14 +88,11 @@ import { useRoute } from 'vue-router'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useMapStore } from '@/stores/mapStore.js'
-import { useDiceStore } from '@/stores/diceStore.js'
-import { useChatStore } from '@/stores/chatStore.js'
-import { useOracleStore } from '@/stores/oracleStore.js'
-import { useCharacterStore } from '@/stores/characterStore.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 import { usePhotoStore } from '@/stores/photoStore.js'
 import { useItemDrag } from '@/composables/useItemDrag.js'
+import { useSessionServices } from '@/composables/useSessionServices.js'
 import { activeNavDropdown } from '@/composables/useNavDropdown.js'
 
 import DungeonTopbar           from '@/components/dungeon/DungeonTopbar.vue'
@@ -126,18 +100,16 @@ import DungeonLeftToolbar      from '@/components/dungeon/DungeonLeftToolbar.vue
 import DungeonCanvas           from '@/components/dungeon/DungeonCanvas.vue'
 import DungeonContentsBar      from '@/components/dungeon/DungeonContentsBar.vue'
 import DungeonMapImageSettings from '@/components/dungeon/DungeonMapImageSettings.vue'
-import DungeonRightPanel   from '@/components/dungeon/DungeonRightPanel.vue'
-import DungeonPartyPanel   from '@/components/dungeon/DungeonPartyPanel.vue'
+import SessionRightPanel   from '@/components/common/SessionRightPanel.vue'
+import MapLoadingOverlay   from '@/components/common/MapLoadingOverlay.vue'
+import DungeonInspector    from '@/components/dungeon/DungeonInspector.vue'
+import DungeonPartyPanel   from '@/components/common/DungeonPartyPanel.vue'
 import PartyNotebook       from '@/components/common/PartyNotebook.vue'
 
 import CharacterDrawer     from '@/components/common/CharacterDrawer.vue'
 import ConfirmDialog       from '@/components/common/ConfirmDialog.vue'
-import DiceRollToast       from '@/components/dungeon/DiceRollToast.vue'
-import LuckTokenToast      from '@/components/common/LuckTokenToast.vue'
-import QuestCompleteToast  from '@/components/common/QuestCompleteToast.vue'
-import LootDealToast       from '@/components/common/LootDealToast.vue'
-import ChatToast           from '@/components/common/ChatToast.vue'
 import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
+import SessionToasts       from '@/components/common/SessionToasts.vue'
 
 const route     = useRoute()
 const sessionId = route.params.sessionId
@@ -146,20 +118,11 @@ const dungeonId = route.params.dungeonId
 const dungeonStore   = useD()
 const sessionStore   = useSessionStore()
 const mapStore       = useMapStore()
-const diceStore      = useDiceStore()
-const chatStore      = useChatStore()
-const oracleStore    = useOracleStore()
-const characterStore = useCharacterStore()
 const prefs          = useUserPrefsStore()
 const activityStore  = useActivityStore()
 const photoStore     = usePhotoStore()
 
-// the store hydrates in every play mode so tag-driven features (dungeon
-// stocking) see the session's tables - only the oracle panel ui is gm_less
-// gated
-function syncOracleStore() {
-  oracleStore.init(sessionId)
-}
+const { joinSession, initServices, cleanupServices } = useSessionServices(sessionId, { alwaysOracle: true })
 
 const canvasComp  = ref(null)
 const topbarEl    = ref(null)
@@ -210,33 +173,19 @@ onMounted(async () => {
   window.addEventListener('resize', measureTopbar)
   window.addEventListener('keydown', onKeyDown)
 
-  await prefs.load()
-
-  if (!sessionStore.sessionId) {
-    await sessionStore.joinSession(sessionId)
-  }
+  await joinSession()
   await mapStore.init(sessionId)
   await dungeonStore.init(sessionId, dungeonId)
-  diceStore.init(sessionId)
-  chatStore.init(sessionId)
-  syncOracleStore()
-  characterStore.loadAll(sessionId)
-  sessionStore.initPresence(sessionId)
-  photoStore.init(sessionId)
+  initServices()
   activityStore.init(sessionId, dungeonId)
 })
-
-watch(() => sessionStore.playMode, syncOracleStore)
 
 onUnmounted(() => {
   window.removeEventListener('resize', measureTopbar)
   window.removeEventListener('keydown', onKeyDown)
   dungeonStore.cleanup()
   activityStore.cleanup()
-  mapStore.cleanup()
-  characterStore.cleanup()
-  chatStore.cleanup()
-  oracleStore.cleanup()
+  cleanupServices()
   sessionStore.cleanupPresence()
 })
 
@@ -273,44 +222,4 @@ watchEffect(() => {
 </script>
 
 <style scoped>
-.ds-map-loading-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(8, 12, 22, 0.72);
-  backdrop-filter: blur(3px);
-  z-index: 10;
-  gap: 16px;
-  pointer-events: none;
-}
-
-.ds-map-spinner {
-  animation: ds-hex-spin 2.4s linear infinite;
-  transform-origin: center;
-}
-
-@keyframes ds-hex-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-.ds-map-loading-label {
-  font-family: 'Cinzel', 'Cormorant Garamond', Georgia, serif;
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: rgba(212, 167, 75, 0.7);
-}
-
-.ds-map-fade-enter-active,
-.ds-map-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.ds-map-fade-enter-from,
-.ds-map-fade-leave-to {
-  opacity: 0;
-}
 </style>

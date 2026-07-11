@@ -162,6 +162,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { useTimeAgo } from '@/composables/useTimeAgo.js'
+import { useNoteEditing } from '@/composables/useNoteEditing.js'
 
 const dungeonStore   = useD()
 const notesStore     = useNotesStore()
@@ -179,10 +180,7 @@ const selectedRoom     = computed(() => dungeonStore.selectedElement?.type === '
 const selectedCorridor = computed(() => dungeonStore.selectedElement?.type === 'corridor' ? dungeonStore.corridors.get(dungeonStore.selectedElement.id) ?? null : null)
 
 const roomLabel   = ref('')
-const newNote     = ref('')
-const savingNote  = ref(false)
-const editingNoteId   = ref(null)
-const editingNoteBody = ref('')
+const { newNote, savingNote, editingNoteId, editingNoteBody, saveNote, startEditNote, saveEditNote } = useNoteEditing(notesStore)
 
 watch(() => dungeonStore.selectedElement, (el) => {
   if (!el) { roomLabel.value = ''; return }
@@ -208,27 +206,6 @@ function debouncedSave() {
       dungeonStore.updateCorridor(el.id, { label: roomLabel.value })
     }
   }, 500)
-}
-
-async function saveNote() {
-  if (!newNote.value.trim() || savingNote.value) return
-  savingNote.value = true
-  const body = newNote.value
-  newNote.value = ''
-  await notesStore.addNote(body)
-  savingNote.value = false
-}
-
-function startEditNote(note) {
-  editingNoteId.value = note.id
-  editingNoteBody.value = note.body
-}
-
-async function saveEditNote() {
-  if (!editingNoteBody.value.trim()) return
-  const id = editingNoteId.value
-  editingNoteId.value = null
-  await notesStore.updateNote(id, editingNoteBody.value)
 }
 
 function noteColor(userId) {

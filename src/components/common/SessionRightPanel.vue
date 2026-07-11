@@ -8,7 +8,7 @@
 
     <div v-show="activeTab === 0" class="ds-tab-pane">
       <DungeonDiceSection ref="diceSectionRef" />
-      <TravelSection />
+      <TravelSection v-if="showTravel" />
       <InitiativeSection />
       <CrawlTracker />
       <LightsSection />
@@ -20,7 +20,7 @@
     </div>
 
     <div v-show="activeTab === 2" class="ds-tab-pane">
-      <HexInspectorSection class="flex-grow" />
+      <component :is="inspector" ref="inspectorRef" class="flex-grow" />
       <DungeonPhotosSection />
     </div>
   </aside>
@@ -28,23 +28,30 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useHexStore }  from '@/stores/hexStore.js'
-import { useDiceStore } from '@/stores/diceStore.js'
-import { useSessionStore } from '@/stores/sessionStore.js'
-import DungeonDiceSection    from '@/components/dungeon/DungeonDiceSection.vue'
+import DungeonDiceSection    from '@/components/common/DungeonDiceSection.vue'
+import DungeonPhotosSection  from '@/components/common/DungeonPhotosSection.vue'
+import DungeonSessionSection from '@/components/common/DungeonSessionSection.vue'
 import TravelSection         from '@/components/common/TravelSection.vue'
 import InitiativeSection     from '@/components/common/InitiativeSection.vue'
 import CrawlTracker          from '@/components/common/CrawlTracker.vue'
 import LightsSection         from '@/components/common/LightsSection.vue'
-import DungeonPhotosSection  from '@/components/dungeon/DungeonPhotosSection.vue'
-import DungeonSessionSection from '@/components/dungeon/DungeonSessionSection.vue'
-import HexInspectorSection   from './HexInspectorSection.vue'
 import OraclePanel           from '@/components/common/OraclePanel.vue'
+import { useDiceStore }      from '@/stores/diceStore.js'
+import { useSessionStore }   from '@/stores/sessionStore.js'
 
-const hexStore       = useHexStore()
+const props = defineProps({
+  // the surface-specific inspector component (DungeonInspector, HexInspectorSection)
+  inspector: { type: Object, required: true },
+  // current selection; a truthy value switches to the inspect tab
+  selected: { default: null },
+  // hex-only travel section (solo hexcrawl); dungeons don't travel
+  showTravel: { type: Boolean, default: false },
+})
+
 const diceStore      = useDiceStore()
 const sessionStore   = useSessionStore()
 const activeTab      = ref(0)
+const inspectorRef   = ref(null)
 const diceSectionRef = ref(null)
 const showOracle     = computed(() => sessionStore.playMode === 'gm_less')
 
@@ -52,14 +59,15 @@ watch(showOracle, (visible) => {
   if (!visible && activeTab.value === 1) activeTab.value = 0
 })
 
-watch(() => hexStore.selectedHex, (hex) => {
-  if (!hex) return
+watch(() => props.selected, (sel) => {
+  if (!sel) return
   activeTab.value = 2
+  inspectorRef.value?.openSection?.()
 })
 
 watch(() => diceStore.pendingRoll, (roll) => {
   if (!roll) return
   activeTab.value = 0
-  diceSectionRef.value?.openSection()
+  diceSectionRef.value?.openSection?.()
 })
 </script>

@@ -174,16 +174,13 @@
                     @marker-color="activeMarkerColor = $event"
                 />
 
-                <DiceRollToast />
-                <LuckTokenToast />
-                <QuestCompleteToast />
-                <LootDealToast />
-                <ChatToast />
-                <JoinToast />
-                <PartyFollowBanner />
+                <SessionToasts>
+                    <JoinToast />
+                    <PartyFollowBanner />
+                </SessionToasts>
             </div>
 
-            <HexRightPanel />
+            <SessionRightPanel :inspector="HexInspectorSection" :selected="hexStore.selectedHex" show-travel />
         </div>
 
         <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
@@ -210,30 +207,24 @@ import { useAuthStore } from "@/stores/authStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useMapStore } from "@/stores/mapStore.js";
 import { useHexStore } from "@/stores/hexStore.js";
-import { useDiceStore } from "@/stores/diceStore.js";
-import { useCharacterStore } from "@/stores/characterStore.js";
-import { useChatStore } from "@/stores/chatStore.js";
-import { useOracleStore } from "@/stores/oracleStore.js";
 import { usePhotoStore } from "@/stores/photoStore.js";
 import { useUserPrefsStore } from "@/stores/userPrefsStore.js";
 import HexTopbar from "@/components/hex/HexTopbar.vue";
 import HexModePicker from "@/components/hex/HexModePicker.vue";
 import HexLeftToolbar from "@/components/hex/HexLeftToolbar.vue";
-import HexRightPanel from "@/components/hex/HexRightPanel.vue";
+import SessionRightPanel from "@/components/common/SessionRightPanel.vue";
+import SessionToasts from "@/components/common/SessionToasts.vue";
+import { useSessionServices } from "@/composables/useSessionServices.js";
+import HexInspectorSection from "@/components/hex/HexInspectorSection.vue";
 import HexGrid from "@/components/hex/HexGrid.vue";
 import MapImageSettings from "@/components/hex/MapImageSettings.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
-import DiceRollToast      from "@/components/dungeon/DiceRollToast.vue";
-import LuckTokenToast     from "@/components/common/LuckTokenToast.vue";
-import QuestCompleteToast from "@/components/common/QuestCompleteToast.vue";
-import LootDealToast      from "@/components/common/LootDealToast.vue";
-import ChatToast from "@/components/common/ChatToast.vue";
 import JoinToast from "@/components/common/JoinToast.vue";
 import PartyFollowBanner from "@/components/common/PartyFollowBanner.vue";
 import PhotoBroadcastModal from "@/components/common/PhotoBroadcastModal.vue";
 import WelcomeModal from "@/components/common/WelcomeModal.vue";
 import CharacterDrawer from "@/components/common/CharacterDrawer.vue";
-import DungeonPartyPanel from "@/components/dungeon/DungeonPartyPanel.vue";
+import DungeonPartyPanel from "@/components/common/DungeonPartyPanel.vue";
 import PartyNotebook       from "@/components/common/PartyNotebook.vue";
 
 import HexBottomBar from "@/components/hex/HexBottomBar.vue";
@@ -260,22 +251,12 @@ const authStore = useAuthStore();
 const sessionStore = useSessionStore();
 const mapStore = useMapStore();
 const hexStore = useHexStore();
-const diceStore = useDiceStore();
-const chatStore = useChatStore();
-const oracleStore = useOracleStore();
-const characterStore = useCharacterStore();
 const photoStore = usePhotoStore();
 const prefs = useUserPrefsStore();
 
-const modeKey = computed(() => `hex_mode_${sessionId}`);
+const { joinSession, initServices, cleanupServices } = useSessionServices(sessionId);
 
-function syncOracleStore() {
-    if (sessionStore.playMode === "gm_less") {
-        oracleStore.init(sessionId);
-    } else {
-        oracleStore.cleanup();
-    }
-}
+const modeKey = computed(() => `hex_mode_${sessionId}`);
 
 function loadMode() {
     if (sessionStore.isGM) {
@@ -405,18 +386,9 @@ async function bootstrapMaps() {
 }
 
 onMounted(async () => {
-    await prefs.load();
-    if (sessionStore.sessionId !== sessionId) {
-        await sessionStore.joinSession(sessionId);
-    }
+    await joinSession();
     await bootstrapMaps();
-
-    diceStore.init(sessionId);
-    chatStore.init(sessionId);
-    syncOracleStore();
-    characterStore.loadAll(sessionId);
-    sessionStore.initPresence(sessionId);
-    photoStore.init(sessionId);
+    initServices();
 
     if (!authStore.user?.user_metadata?.welcome_seen) showWelcome.value = true;
 
@@ -428,14 +400,9 @@ onMounted(async () => {
     window.addEventListener("keydown", onKeyDown);
 });
 
-watch(() => sessionStore.playMode, syncOracleStore);
-
 onUnmounted(() => {
     hexStore.cleanup();
-    characterStore.cleanup();
-    chatStore.cleanup();
-    oracleStore.cleanup();
-    mapStore.cleanup();
+    cleanupServices();
     sessionStore.cleanup();
     window.removeEventListener("keydown", onKeyDown);
 });

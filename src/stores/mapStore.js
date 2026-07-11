@@ -3,11 +3,12 @@ import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { uploadSessionImage } from '@/lib/sessionImage.js'
+import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
+import { MAP_IMAGE_FIELD_MAP, assignDbFields } from '@/lib/mapImageFields.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const URL_EXPIRY_SECONDS = 86400
 
 export const useMapStore = defineStore('map', () => {
   const maps   = ref([])
@@ -75,43 +76,9 @@ export const useMapStore = defineStore('map', () => {
     return chain
   }
 
-  const activeMapImageUrl = ref(null)
-  const _urlTimers = {}
-  const _urlRenewals = {}
+  const { url: activeMapImageUrl, refresh: _refreshActiveUrl, cleanup: _cleanupUrl } = createSignedMapUrl()
 
-  async function _refreshUrl(path, targetRef, key) {
-    if (_urlTimers[key]) { clearTimeout(_urlTimers[key]); delete _urlTimers[key] }
-    delete _urlRenewals[key]
-    if (!path) { targetRef.value = null; return }
-    const { data, error } = await supabase.storage
-      .from('session-maps')
-      .createSignedUrl(path, URL_EXPIRY_SECONDS)
-    if (error) {
-      if (error.message === 'Object not found') {
-        targetRef.value = null
-      } else {
-        console.error('refreshSignedUrl:', error.message)
-      }
-      return
-    }
-    targetRef.value = data.signedUrl
-    const renewalMs = URL_EXPIRY_SECONDS * 0.9 * 1000
-    _urlRenewals[key] = { path, targetRef, at: Date.now() + renewalMs }
-    _urlTimers[key] = setTimeout(() => _refreshUrl(path, targetRef, key), renewalMs)
-  }
-
-  // Background tabs throttle timers, so a long-hidden tab can outlive its signed
-  // URLs; renew any overdue ones as soon as the tab is visible again.
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return
-      for (const [key, renewal] of Object.entries(_urlRenewals)) {
-        if (Date.now() >= renewal.at) _refreshUrl(renewal.path, renewal.targetRef, key)
-      }
-    })
-  }
-
-  watch(() => activeMap.value?.map_image_path, p => _refreshUrl(p, activeMapImageUrl, 'active'), { immediate: false })
+  watch(() => activeMap.value?.map_image_path, p => _refreshActiveUrl(p), { immediate: false })
 
   const mapType          = computed(() => activeMap.value?.map_type           ?? 'hex')
   const mapHexWidth      = computed(() => activeMap.value?.map_hex_width      ?? 96)
@@ -158,7 +125,7 @@ export const useMapStore = defineStore('map', () => {
     localStorage.removeItem(`map_view_${sessionId}`)
 
     const activeImgPath = activeMap.value?.map_image_path
-    if (activeImgPath) _refreshUrl(activeImgPath, activeMapImageUrl, 'active')
+    if (activeImgPath) _refreshActiveUrl(activeImgPath)
 
     if (mapChannel) realtime.removeChannel(mapChannel)
     let subscribedRefreshed = false
@@ -192,10 +159,7 @@ export const useMapStore = defineStore('map', () => {
   function cleanup() {
     _initGeneration += 1
     if (mapChannel) { realtime.removeChannel(mapChannel); mapChannel = null }
-    Object.values(_urlTimers).forEach(clearTimeout)
-    Object.keys(_urlTimers).forEach(k => delete _urlTimers[k])
-    Object.keys(_urlRenewals).forEach(k => delete _urlRenewals[k])
-    activeMapImageUrl.value = null
+    _cleanupUrl()
     maps.value = []
     _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
@@ -257,14 +221,14 @@ export const useMapStore = defineStore('map', () => {
   function applyLocalPatch(patch) {
     const map = activeMap.value
     if (!map) return
-    const dbPatch = {}
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation = patch.mapImageRotation
-    if (patch.mapGridRotation  !== undefined) dbPatch.map_grid_rotation  = patch.mapGridRotation
-    if (patch.mapHexWidth      !== undefined) dbPatch.map_hex_width      = patch.mapHexWidth
-    if (patch.mapHexHeight     !== undefined) dbPatch.map_hex_height     = patch.mapHexHeight
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
-    if (patch.mapGridCols      !== undefined) dbPatch.map_grid_cols      = patch.mapGridCols
-    if (patch.mapGridRows      !== undefined) dbPatch.map_grid_rows      = patch.mapGridRows
+    const dbPatch = assignDbFields({}, patch, MAP_IMAGE_FIELD_MAP)
+    assignDbFields(dbPatch, patch, {
+      mapGridRotation: 'map_grid_rotation',
+      mapHexWidth:     'map_hex_width',
+      mapHexHeight:    'map_hex_height',
+      mapGridCols:     'map_grid_cols',
+      mapGridRows:     'map_grid_rows',
+    })
     _localOverrides[map.id] = { ...(_localOverrides[map.id] ?? {}), ...dbPatch }
     _overrideAt[map.id] = Date.now()
     maps.value = maps.value.map(m => (m.id === map.id ? { ...m, ...dbPatch } : m))
@@ -274,23 +238,19 @@ export const useMapStore = defineStore('map', () => {
     const map = activeMap.value
     if (!map) return false
 
-    const dbPatch = {}
-    if (patch.mapType          !== undefined) dbPatch.map_type           = patch.mapType
-    if (patch.mapImagePath     !== undefined) dbPatch.map_image_path     = patch.mapImagePath
-    if (patch.mapHexWidth      !== undefined) dbPatch.map_hex_width      = patch.mapHexWidth
-    if (patch.mapHexHeight     !== undefined) dbPatch.map_hex_height     = patch.mapHexHeight
-    if (patch.mapImageRotation !== undefined) dbPatch.map_image_rotation = patch.mapImageRotation
-    if (patch.mapGridRotation  !== undefined) dbPatch.map_grid_rotation  = patch.mapGridRotation
-    if (patch.mapImageOffsetX  !== undefined) dbPatch.map_image_offset_x = patch.mapImageOffsetX
-    if (patch.mapImageOffsetY  !== undefined) dbPatch.map_image_offset_y = patch.mapImageOffsetY
-    if (patch.mapGridOffsetX   !== undefined) dbPatch.map_grid_offset_x  = patch.mapGridOffsetX
-    if (patch.mapGridOffsetY   !== undefined) dbPatch.map_grid_offset_y  = patch.mapGridOffsetY
-    if (patch.mapOffsetLocked  !== undefined) dbPatch.map_offset_locked  = patch.mapOffsetLocked
-    if (patch.mapScale         !== undefined) dbPatch.map_scale          = patch.mapScale
-    if (patch.mapScaleUnit     !== undefined) dbPatch.map_scale_unit     = patch.mapScaleUnit
-    if (patch.mapImageScale    !== undefined) dbPatch.map_image_scale    = patch.mapImageScale
-    if (patch.mapGridCols      !== undefined) dbPatch.map_grid_cols      = patch.mapGridCols
-    if (patch.mapGridRows      !== undefined) dbPatch.map_grid_rows      = patch.mapGridRows
+    const dbPatch = assignDbFields({}, patch, MAP_IMAGE_FIELD_MAP)
+    assignDbFields(dbPatch, patch, {
+      mapType:         'map_type',
+      mapHexWidth:     'map_hex_width',
+      mapHexHeight:    'map_hex_height',
+      mapGridRotation: 'map_grid_rotation',
+      mapGridOffsetX:  'map_grid_offset_x',
+      mapGridOffsetY:  'map_grid_offset_y',
+      mapScale:        'map_scale',
+      mapScaleUnit:    'map_scale_unit',
+      mapGridCols:     'map_grid_cols',
+      mapGridRows:     'map_grid_rows',
+    })
 
     try {
       await apiClient.patch(`/maps/${map.id}`, dbPatch, 'update_map_settings')
@@ -331,22 +291,7 @@ export const useMapStore = defineStore('map', () => {
 
   async function uploadMapImage(file) {
     const sessionStore = useSessionStore()
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('Only JPEG, PNG, and WebP images are allowed.')
-    if (file.size > MAX_IMAGE_BYTES) throw new Error('Image must be under 10 MB.')
-    await new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file)
-      const img = new Image()
-      img.onload  = () => { URL.revokeObjectURL(url); resolve() }
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File could not be decoded as an image.')) }
-      img.src = url
-    })
-    const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
-    const path = `${sessionStore.sessionId}/${crypto.randomUUID()}.${extMap[file.type]}`
-    const { error } = await supabase.storage
-      .from('session-maps')
-      .upload(path, file, { contentType: file.type, upsert: false })
-    if (error) throw new Error(error.message)
-    return path
+    return uploadSessionImage(file, { sessionId: sessionStore.sessionId, maxBytes: MAX_IMAGE_BYTES })
   }
 
   return {

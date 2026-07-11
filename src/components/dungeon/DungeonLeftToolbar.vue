@@ -82,23 +82,8 @@
 
     <div class="ds-tool-group">
       <span class="ds-tool-label">Party</span>
-      <button
-        class="ds-tool"
-        :aria-pressed="partyVisible ? 'true' : 'false'"
-        @click="toggleParty()"
-      >
-        <component :is="PartyIcon" :size="18" />
-        <span class="ds-tip">Party panel</span>
-      </button>
-      <button
-        class="ds-tool"
-        :aria-pressed="vaultVisible ? 'true' : 'false'"
-        data-testid="dungeon-vault-toggle"
-        @click="toggleVault()"
-      >
-        <component :is="VaultIcon" :size="18" />
-        <span class="ds-tip">Party vault</span>
-      </button>
+      <ToolbarToggleButton kind="party" />
+      <ToolbarToggleButton kind="vault" testid="dungeon-vault-toggle" />
     </div>
 
     <div v-if="sessionStore.isGM" class="ds-tool-group">
@@ -125,14 +110,7 @@
     </div>
 
     <div class="ds-tool-group">
-      <button
-        class="ds-tool"
-        :aria-pressed="!soundEnabled ? 'true' : 'false'"
-        @click="toggleSound()"
-      >
-        <component :is="SoundIcon" :size="18" />
-        <span class="ds-tip">{{ soundEnabled ? 'Mute sounds' : 'Unmute sounds' }}</span>
-      </button>
+      <ToolbarToggleButton kind="sound" />
     </div>
 
   </aside>
@@ -148,24 +126,17 @@
 </template>
 
 <script setup>
-import { h, reactive } from 'vue'
+import { h } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
-import { computed } from 'vue'
-import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
-import { usePartyPanel } from '@/composables/usePartyPanel.js'
-import { soundEnabled, toggleSound } from '@/lib/soundSettings.js'
+import { useToolTooltip } from '@/composables/useToolTooltip.js'
+import ToolbarToggleButton from '@/components/common/ToolbarToggleButton.vue'
 
 const dungeonStore = useD()
 const sessionStore = useSessionStore()
 const { confirm } = useConfirmDialog()
-const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook()
-const { visible: partyVisible, toggle: toggleParty } = usePartyPanel()
-const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault')
-function toggleVault() {
-  if (vaultVisible.value) { toggleInventory() } else { openNotebook('vault') }
-}
+const { tip, onHover, onLeave } = useToolTooltip()
 
 defineProps({
   mapSettingsOpen: { type: Boolean, default: false },
@@ -183,14 +154,8 @@ const WandIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24
 const MoveIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'},[h('path',{d:'M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3'})]) }
 const TrashIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'})]) }
 const UndoIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polyline',{points:'9 14 4 9 9 4'}),h('path',{d:'M20 20v-7a4 4 0 0 0-4-4H4'})]) }
-const PartyIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2'}),h('circle',{cx:9,cy:7,r:4}),h('path',{d:'M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75'})]) }
-const VaultIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M3 9h18M3 9V7a1 1 0 011-1h16a1 1 0 011 1v2M3 9v9a1 1 0 001 1h16a1 1 0 001-1V9'}),h('path',{d:'M10 13h4'})]) }
 const MapImageIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('rect',{x:3,y:3,width:18,height:18,rx:2}),h('path',{d:'M3 9l5-5 4 4 4-4 5 5'}),h('circle',{cx:16,cy:15,r:2})]) }
 const FogBrushIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 15.25'}),h('path',{d:'M8 16h.01M12 19h.01M16 16h.01'})]) }
-
-const SoundIcon   = { render: () => soundEnabled.value
-  ? h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M11 5L6 9H2v6h4l5 4V5z'}),h('path',{d:'M15.54 8.46a5 5 0 010 7.07'}),h('path',{d:'M19.07 4.93a10 10 0 010 14.14'})])
-  : h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M11 5L6 9H2v6h4l5 4V5z'}),h('line',{x1:23,y1:9,x2:17,y2:15}),h('line',{x1:17,y1:9,x2:23,y2:15})]) }
 
 const selectionTools = [
   { mode: 'select',   icon: CursorIcon,   label: 'Select',   key: 'V' },
@@ -204,27 +169,6 @@ const drawingTools = [
   { mode: 'door',     icon: DoorIcon,     label: 'Door',     key: 'D' },
 ]
 
-const tip = reactive({ show: false, x: 0, y: 0, html: '' })
-let _lastBtn = null
-
-function onHover(e) {
-  const btn = e.target.closest('.ds-tool')
-  if (btn === _lastBtn) return
-  _lastBtn = btn
-  if (!btn) { tip.show = false; return }
-  const tipEl = btn.querySelector('.ds-tip')
-  if (!tipEl) { tip.show = false; return }
-  const rect = btn.getBoundingClientRect()
-  tip.x = rect.right + 10
-  tip.y = rect.top + rect.height / 2
-  tip.html = tipEl.innerHTML
-  tip.show = true
-}
-
-function onLeave() {
-  _lastBtn = null
-  tip.show = false
-}
 
 function deleteSelected() {
   if (!dungeonStore.selectedElement) return
