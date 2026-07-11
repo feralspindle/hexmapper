@@ -57,11 +57,7 @@
         <DungeonContentsBar />
 
         <ConfirmDialog />
-        <DiceRollToast />
-        <LuckTokenToast />
-        <QuestCompleteToast />
-        <LootDealToast />
-        <ChatToast bottom-class="bottom-20" />
+        <SessionToasts chat-bottom-class="bottom-20" />
       </div>
 
       <SessionRightPanel :inspector="DungeonInspector" :selected="dungeonStore.selectedElement" />
@@ -92,14 +88,11 @@ import { useRoute } from 'vue-router'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useMapStore } from '@/stores/mapStore.js'
-import { useDiceStore } from '@/stores/diceStore.js'
-import { useChatStore } from '@/stores/chatStore.js'
-import { useOracleStore } from '@/stores/oracleStore.js'
-import { useCharacterStore } from '@/stores/characterStore.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 import { usePhotoStore } from '@/stores/photoStore.js'
 import { useItemDrag } from '@/composables/useItemDrag.js'
+import { useSessionServices } from '@/composables/useSessionServices.js'
 import { activeNavDropdown } from '@/composables/useNavDropdown.js'
 
 import DungeonTopbar           from '@/components/dungeon/DungeonTopbar.vue'
@@ -115,12 +108,8 @@ import PartyNotebook       from '@/components/common/PartyNotebook.vue'
 
 import CharacterDrawer     from '@/components/common/CharacterDrawer.vue'
 import ConfirmDialog       from '@/components/common/ConfirmDialog.vue'
-import DiceRollToast       from '@/components/common/DiceRollToast.vue'
-import LuckTokenToast      from '@/components/common/LuckTokenToast.vue'
-import QuestCompleteToast  from '@/components/common/QuestCompleteToast.vue'
-import LootDealToast       from '@/components/common/LootDealToast.vue'
-import ChatToast           from '@/components/common/ChatToast.vue'
 import PhotoBroadcastModal from '@/components/common/PhotoBroadcastModal.vue'
+import SessionToasts       from '@/components/common/SessionToasts.vue'
 
 const route     = useRoute()
 const sessionId = route.params.sessionId
@@ -129,21 +118,11 @@ const dungeonId = route.params.dungeonId
 const dungeonStore   = useD()
 const sessionStore   = useSessionStore()
 const mapStore       = useMapStore()
-const diceStore      = useDiceStore()
-const chatStore      = useChatStore()
-const oracleStore    = useOracleStore()
-const characterStore = useCharacterStore()
 const prefs          = useUserPrefsStore()
 const activityStore  = useActivityStore()
 const photoStore     = usePhotoStore()
 
-function syncOracleStore() {
-  if (sessionStore.playMode === 'gm_less') {
-    oracleStore.init(sessionId)
-  } else {
-    oracleStore.cleanup()
-  }
-}
+const { joinSession, initServices, cleanupServices } = useSessionServices(sessionId)
 
 const canvasComp  = ref(null)
 const topbarEl    = ref(null)
@@ -194,33 +173,19 @@ onMounted(async () => {
   window.addEventListener('resize', measureTopbar)
   window.addEventListener('keydown', onKeyDown)
 
-  await prefs.load()
-
-  if (!sessionStore.sessionId) {
-    await sessionStore.joinSession(sessionId)
-  }
+  await joinSession()
   await mapStore.init(sessionId)
   await dungeonStore.init(sessionId, dungeonId)
-  diceStore.init(sessionId)
-  chatStore.init(sessionId)
-  syncOracleStore()
-  characterStore.loadAll(sessionId)
-  sessionStore.initPresence(sessionId)
-  photoStore.init(sessionId)
+  initServices()
   activityStore.init(sessionId, dungeonId)
 })
-
-watch(() => sessionStore.playMode, syncOracleStore)
 
 onUnmounted(() => {
   window.removeEventListener('resize', measureTopbar)
   window.removeEventListener('keydown', onKeyDown)
   dungeonStore.cleanup()
   activityStore.cleanup()
-  mapStore.cleanup()
-  characterStore.cleanup()
-  chatStore.cleanup()
-  oracleStore.cleanup()
+  cleanupServices()
   sessionStore.cleanupPresence()
 })
 
