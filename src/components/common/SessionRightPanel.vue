@@ -2,21 +2,21 @@
   <aside class="ds-right-panel">
     <div class="ds-panel-tabs">
       <button class="ds-panel-tab" :class="{ active: activeTab === 0 }" @click="activeTab = 0">Dice &amp; Chat</button>
-      <button v-if="showOracle" class="ds-panel-tab" :class="{ active: activeTab === 1 }" @click="activeTab = 1">Oracle</button>
+      <button v-if="isSoloOrCoop" class="ds-panel-tab" :class="{ active: activeTab === 1 }" @click="activeTab = 1">Oracle</button>
       <button class="ds-panel-tab" :class="{ active: activeTab === 2 }" @click="activeTab = 2">Inspect &amp; Photos</button>
     </div>
 
     <div v-show="activeTab === 0" class="ds-tab-pane">
       <DungeonDiceSection ref="diceSectionRef" />
       <DiceStatsPanel />
-      <TravelSection v-if="showTravel" />
-      <InitiativeSection />
-      <CrawlTracker />
-      <LightsSection />
+      <TravelSection v-if="showTravel && isSoloOrCoop" />
+      <InitiativeSection v-if="isSoloOrCoop" />
+      <CrawlTracker v-if="isSoloOrCoop" />
+      <LightsSection v-if="isSoloOrCoop" />
       <DungeonSessionSection />
     </div>
 
-    <div v-if="showOracle" v-show="activeTab === 1" class="ds-tab-pane">
+    <div v-if="isSoloOrCoop" v-show="activeTab === 1" class="ds-tab-pane">
       <OraclePanel />
     </div>
 
@@ -55,9 +55,9 @@ const sessionStore   = useSessionStore()
 const activeTab      = ref(0)
 const inspectorRef   = ref(null)
 const diceSectionRef = ref(null)
-const showOracle     = computed(() => sessionStore.playMode === 'gm_less')
+const isSoloOrCoop   = computed(() => sessionStore.playMode === 'gm_less')
 
-watch(showOracle, (visible) => {
+watch(isSoloOrCoop, (visible) => {
   if (!visible && activeTab.value === 1) activeTab.value = 0
 })
 

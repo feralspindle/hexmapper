@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { shallowMount } from '@vue/test-utils'
 import SessionRightPanel from './SessionRightPanel.vue'
+import TravelSection from './TravelSection.vue'
+import InitiativeSection from './InitiativeSection.vue'
+import CrawlTracker from './CrawlTracker.vue'
+import LightsSection from './LightsSection.vue'
 
 const mocks = vi.hoisted(() => ({
   diceStore: {
@@ -60,6 +64,28 @@ describe('SessionRightPanel', () => {
     mocks.sessionStore.isGM = false
     const playerWrapper = mountPanel()
     expect(playerWrapper.text()).not.toContain('Oracle')
+  })
+
+  test('shows initiative, crawl, and lights only in solo/co-op mode', () => {
+    const gmWrapper = mountPanel()
+    expect(gmWrapper.findComponent(InitiativeSection).exists()).toBe(false)
+    expect(gmWrapper.findComponent(CrawlTracker).exists()).toBe(false)
+    expect(gmWrapper.findComponent(LightsSection).exists()).toBe(false)
+
+    mocks.sessionStore.playMode = 'gm_less'
+    const soloWrapper = mountPanel()
+    expect(soloWrapper.findComponent(InitiativeSection).exists()).toBe(true)
+    expect(soloWrapper.findComponent(CrawlTracker).exists()).toBe(true)
+    expect(soloWrapper.findComponent(LightsSection).exists()).toBe(true)
+  })
+
+  test('travel needs both show-travel and solo/co-op mode', () => {
+    const gmWrapper = mountPanel({ showTravel: true })
+    expect(gmWrapper.findComponent(TravelSection).exists()).toBe(false)
+
+    mocks.sessionStore.playMode = 'gm_less'
+    expect(mountPanel({ showTravel: false }).findComponent(TravelSection).exists()).toBe(false)
+    expect(mountPanel({ showTravel: true }).findComponent(TravelSection).exists()).toBe(true)
   })
 
   test('a new selection switches to the inspect tab', async () => {
