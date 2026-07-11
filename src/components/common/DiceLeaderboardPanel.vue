@@ -20,10 +20,13 @@
             </div>
 
             <div class="lb-chips">
-                <div class="lb-luck-chip" :class="player.avgZ >= 0 ? 'pos' : 'neg'">
+                <div class="lb-luck-chip" :class="player.avgZ >= 0 ? 'pos' : 'neg'" :title="luckTitle(player)">
                     <div class="lb-luck-top">
+                        <span class="lb-luck-lead">
+                            <span class="lb-luck-pct">{{ ordinal(player.avgPercentile) }}</span>
+                            <span class="lb-luck-unit">pct</span>
+                        </span>
                         <span class="lb-luck-z">{{ formatZ(player.avgZ) }}</span>
-                        <span class="lb-luck-pct">{{ ordinal(player.avgPercentile) }}</span>
                     </div>
                     <div class="lb-luck-bar">
                         <span :style="{ width: barWidth(player) }" />
@@ -61,6 +64,10 @@ function isOnline(userId) {
 
 function barWidth(player) {
     return `${Math.max(2, Math.min(100, player.avgPercentile))}%`
+}
+
+function luckTitle(player) {
+    return `averages to the ${ordinal(player.avgPercentile)} percentile (${formatZ(player.avgZ)} vs the expected roll)`
 }
 </script>
 
@@ -164,13 +171,27 @@ function barWidth(player) {
     gap: 6px;
     line-height: 1;
 }
-.lb-luck-z {
+.lb-luck-lead {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    min-width: 0;
+}
+.lb-luck-pct {
     font-size: 16px;
     font-weight: 700;
 }
-.lb-luck-pct {
+.lb-luck-unit {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+.lb-luck-z {
     font-size: 11px;
     opacity: 0.7;
+    flex: 0 0 auto;
 }
 .lb-luck-bar {
     height: 4px;
