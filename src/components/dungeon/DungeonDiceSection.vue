@@ -432,7 +432,7 @@ const diceStore = useDiceStore();
 const macroStore = useMacroStore();
 const { gmName } = useGMLabel();
 const { timeAgo } = useTimeAgo();
-const historyRolls = computed(() => diceStore.rollsWithStreaks ?? diceStore.rolls);
+const historyRolls = computed(() => diceStore.rollsWithStreaks);
 
 onMounted(() => macroStore.init());
 
@@ -565,17 +565,17 @@ function formatAverage(value) {
 }
 
 function streakLabel(entry) {
-    return `${entry.streak?.kind === "hot" ? "Hot" : "Cold"} x${entry.streak?.count ?? 0}`;
+    return `${entry.streak.kind === "hot" ? "Hot" : "Cold"} x${entry.streak.count}`;
 }
 
 function streakTitle(entry) {
-    const direction = entry.streak?.kind === "hot" ? "above" : "below";
-    let title = `${entry.streak?.count ?? 0} ${direction} average rolls in a row`;
-    const average = formatAverage(entry.averageComparison?.average);
-    const delta = formatAverage(Math.abs(entry.averageComparison?.delta ?? 0));
-    if (average != null) {
-        title += ` (avg ${average}, rolled ${entry.total}`;
-        if (delta != null && Number(delta) > 0) title += `, ${delta} ${direction}`;
+    const direction = entry.streak.kind === "hot" ? "above" : "below";
+    let title = `${entry.streak.count} ${direction}-average rolls in a row`;
+    const mean = Number(entry.stats?.mean);
+    if (Number.isFinite(mean)) {
+        const delta = Math.abs(entry.total - mean);
+        title += ` (avg ${formatAverage(mean)}, rolled ${entry.total}`;
+        if (delta > 0) title += `, ${formatAverage(delta)} ${direction}`;
         title += ")";
     }
     return title;
@@ -618,9 +618,9 @@ function scrollToTop() {
 }
 
 watch(
-    () => historyRolls.value[0],
-    (r) => {
-        if (!r) return;
+    () => historyRolls.value[0]?.id,
+    (id) => {
+        if (!id) return;
         if (!isAtTop.value) hasUnseen.value = true;
     },
 );

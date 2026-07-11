@@ -1,85 +1,54 @@
-const DICE_PATTERN = /^d(\d+)$/
 const MIN_STREAK = 3
 
-function finiteNumber(value) {
-  const number = Number(value)
-  return Number.isFinite(number) ? number : null
-}
-
-function rollAverage(roll) {
-  const statsMean = finiteNumber(roll?.stats?.mean)
-  if (statsMean != null) return statsMean
-
-  let diceAverage = 0
-  let diceCount = 0
-
-  for (const [die, rawCount] of Object.entries(roll?.pending ?? {})) {
-    const count = finiteNumber(rawCount)
-    if (count == null || count <= 0) continue
-
-    const match = DICE_PATTERN.exec(die)
-    if (!match) continue
-
-    const sides = finiteNumber(match[1])
-    if (sides == null || sides < 1) continue
-
-    diceAverage += count * ((sides + 1) / 2)
-    diceCount += count
-  }
-
-  if (!diceCount) return null
-
-  return diceAverage + (finiteNumber(roll?.modifier) ?? 0)
-}
-
-export function rollAverageComparison(roll) {
-  const average = rollAverage(roll)
-  const total = finiteNumber(roll?.total)
-  if (average == null || total == null) {
-    return { average, delta: null, direction: 'neutral' }
-  }
-
-  const delta = total - average
-  if (delta > 0) return { average, delta, direction: 'high' }
-  if (delta < 0) return { average, delta, direction: 'low' }
-  return { average, delta, direction: 'neutral' }
+// direction of a roll relative to its theoretical distribution, read from the
+// server-computed stats (ttrpg-dice-engine DistributionPosition). the server
+// already bands outcomes within half a point of the mean as 'average', so a
+// 10 or 11 on a d20 is average, not hot or cold.
+//
+// returns 'high' | 'low' | 'average' | null. null means the roll carries no
+// luck information — no stats (legacy row, engine failure) or a deterministic
+// roll like flat d1 damage (std_dev 0) — and should leave streaks untouched.
+function rollDirection(roll) {
+  const stats = roll?.stats
+  if (!stats || typeof stats !== 'object') return null
+  if (!(Number(stats.std_dev) > 0)) return null
+  if (stats.category === 'above') return 'high'
+  if (stats.category === 'below') return 'low'
+  if (stats.category === 'average') return 'average'
+  return null
 }
 
 export function withRollStreaks(rolls, minStreak = MIN_STREAK) {
   const newestFirst = Array.isArray(rolls) ? rolls : []
   const userStreaks = new Map()
-  const chronological = [...newestFirst].reverse()
-  const enriched = []
+  const enriched = new Array(newestFirst.length)
 
-  for (const roll of chronological) {
-    const comparison = rollAverageComparison(roll)
-    const userKey = roll?.user_id ?? roll?.display_name ?? 'unknown'
-    const previous = userStreaks.get(userKey) ?? { direction: null, count: 0 }
-    let next = { direction: null, count: 0 }
+  // walk oldest to newest so each roll extends its user's running streak
+  for (let i = newestFirst.length - 1; i >= 0; i--) {
+    const roll = newestFirst[i]
+    const direction = rollDirection(roll)
+    const previous = userStreaks.get(roll?.user_id) ?? { direction: null, count: 0 }
 
-    if (comparison.direction === 'high' || comparison.direction === 'low') {
+    let next = previous
+    if (direction === 'high' || direction === 'low') {
       next = {
-        direction: comparison.direction,
-        count: previous.direction === comparison.direction ? previous.count + 1 : 1,
+        direction,
+        count: previous.direction === direction ? previous.count + 1 : 1,
       }
+    } else if (direction === 'average') {
+      // an average roll is real evidence of unremarkable luck: it ends a streak
+      next = { direction: null, count: 0 }
     }
+    userStreaks.set(roll?.user_id, next)
 
-    userStreaks.set(userKey, next)
-
-    const streak = next.count >= minStreak
-      ? {
-          kind: next.direction === 'high' ? 'hot' : 'cold',
-          direction: next.direction,
-          count: next.count,
-        }
+    // only rolls that extended the streak wear the badge — a skipped roll
+    // keeps the streak alive but is not itself hot or cold
+    const streak = (direction === 'high' || direction === 'low') && next.count >= minStreak
+      ? { kind: direction === 'high' ? 'hot' : 'cold', count: next.count }
       : null
 
-    enriched.push({
-      ...roll,
-      averageComparison: comparison,
-      streak,
-    })
+    enriched[i] = streak ? { ...roll, streak } : roll
   }
 
-  return enriched.reverse()
+  return enriched
 }
