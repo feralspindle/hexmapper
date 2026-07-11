@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useMapStore } from '@/stores/mapStore.js'
 import { useDiceStore } from '@/stores/diceStore.js'
+import { useDiceStatsStore } from '@/stores/diceStatsStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useOracleStore } from '@/stores/oracleStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
@@ -19,6 +20,7 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
   const sessionStore = useSessionStore()
   const mapStore = useMapStore()
   const diceStore = useDiceStore()
+  const diceStatsStore = useDiceStatsStore()
   const chatStore = useChatStore()
   const oracleStore = useOracleStore()
   const characterStore = useCharacterStore()
@@ -44,6 +46,7 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
 
   function initServices() {
     diceStore.init(sessionId)
+    diceStatsStore.init(sessionId)
     chatStore.init(sessionId)
     syncOracleStore()
     characterStore.loadAll(sessionId)
