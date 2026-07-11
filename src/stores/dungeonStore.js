@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch, toRaw } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
+import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
@@ -44,21 +45,9 @@ export const useD = defineStore('dungeon', () => {
   let _dungeonId = null
   let _initGeneration = 0
 
-  const _pendingWrites = new Map()
-  const _pendingDungeonFields = new Map()
+  const _pendingWrites = pendingKeys()
+  const _pendingDungeonFields = pendingKeys()
   const _pendingFogOps = new Map()
-
-  function _beginPending(map, keys) {
-    for (const key of keys) map.set(key, (map.get(key) ?? 0) + 1)
-  }
-
-  function _endPending(map, keys) {
-    for (const key of keys) {
-      const count = map.get(key) ?? 0
-      if (count <= 1) map.delete(key)
-      else map.set(key, count - 1)
-    }
-  }
 
   const _logUndoError = (label) => (err) =>
     console.error(`undo ${label}:`, err instanceof ApiError ? err.message : err)
@@ -94,10 +83,10 @@ export const useD = defineStore('dungeon', () => {
       case 'update_room': {
         const r = rooms.value.get(action.roomId)
         if (r) rooms.value.set(action.roomId, { ...r, ...action.patch })
-        _beginPending(_pendingWrites, [`room:${action.roomId}`])
+        _pendingWrites.begin([`room:${action.roomId}`])
         await apiClient.patch(`/dungeon-rooms/${action.roomId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_room')
           .catch(_logUndoError('update_room'))
-          .finally(() => _endPending(_pendingWrites, [`room:${action.roomId}`]))
+          .finally(() => _pendingWrites.end([`room:${action.roomId}`]))
         break
       }
       case 'delete_corridor': {
@@ -114,10 +103,10 @@ export const useD = defineStore('dungeon', () => {
       case 'update_corridor': {
         const c = corridors.value.get(action.corridorId)
         if (c) corridors.value.set(action.corridorId, { ...c, ...action.patch })
-        _beginPending(_pendingWrites, [`corridor:${action.corridorId}`])
+        _pendingWrites.begin([`corridor:${action.corridorId}`])
         await apiClient.patch(`/dungeon-corridors/${action.corridorId}`, { ...action.patch, source_client: CLIENT_ID }, 'undo_update_corridor')
           .catch(_logUndoError('update_corridor'))
-          .finally(() => _endPending(_pendingWrites, [`corridor:${action.corridorId}`]))
+          .finally(() => _pendingWrites.end([`corridor:${action.corridorId}`]))
         break
       }
     }
@@ -209,11 +198,11 @@ export const useD = defineStore('dungeon', () => {
     }
 
     const fields = Object.keys(dbPatch)
-    _beginPending(_pendingDungeonFields, fields)
+    _pendingDungeonFields.begin(fields)
     try {
       await apiClient.patch(`/dungeons/${id}`, dbPatch, 'update_dungeon_config')
     } catch (err) { console.error('updateDungeon:', err instanceof ApiError ? err.message : err); return false }
-    finally { _endPending(_pendingDungeonFields, fields) }
+    finally { _pendingDungeonFields.end(fields) }
     return true
   }
 
@@ -599,7 +588,7 @@ export const useD = defineStore('dungeon', () => {
     const optimistic = { ...existing, ...patch }
     rooms.value.set(id, optimistic)
 
-    _beginPending(_pendingWrites, [`room:${id}`])
+    _pendingWrites.begin([`room:${id}`])
     try {
       await apiClient.patch(`/dungeon-rooms/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_room')
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
@@ -608,7 +597,7 @@ export const useD = defineStore('dungeon', () => {
       if (toRaw(rooms.value.get(id)) === optimistic) rooms.value.set(id, existing)
       console.error('updateRoom error:', error instanceof ApiError ? error.message : error)
     } finally {
-      _endPending(_pendingWrites, [`room:${id}`])
+      _pendingWrites.end([`room:${id}`])
     }
   }
 
@@ -653,7 +642,7 @@ export const useD = defineStore('dungeon', () => {
     const optimistic = { ...existing, ...patch }
     corridors.value.set(id, optimistic)
 
-    _beginPending(_pendingWrites, [`corridor:${id}`])
+    _pendingWrites.begin([`corridor:${id}`])
     try {
       await apiClient.patch(`/dungeon-corridors/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_corridor')
       const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
@@ -662,7 +651,7 @@ export const useD = defineStore('dungeon', () => {
       if (toRaw(corridors.value.get(id)) === optimistic) corridors.value.set(id, existing)
       console.error('updateCorridor error:', error instanceof ApiError ? error.message : error)
     } finally {
-      _endPending(_pendingWrites, [`corridor:${id}`])
+      _pendingWrites.end([`corridor:${id}`])
     }
   }
 
@@ -768,11 +757,11 @@ export const useD = defineStore('dungeon', () => {
     if (!dungeon.value?.id) return
     dungeon.value = { ...dungeon.value, ...patch }
     const fields = Object.keys(patch)
-    _beginPending(_pendingDungeonFields, fields)
+    _pendingDungeonFields.begin(fields)
     try {
       await apiClient.patch(`/dungeons/${dungeon.value.id}`, patch, 'update_torch')
     } catch (err) { console.error('updateTorch error:', err instanceof ApiError ? err.message : err) }
-    finally { _endPending(_pendingDungeonFields, fields) }
+    finally { _pendingDungeonFields.end(fields) }
   }
 
   async function torchStart() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accessTokenNeedsRefresh, connectionWasStable, snapshotRefreshDelay } from './realtimeProtocol.js'
+import { accessTokenNeedsRefresh, connectionWasStable, pendingKeys, snapshotRefreshDelay } from './realtimeProtocol.js'
 
 const NOW_MS = 1_750_000_000_000
 const NOW_S = NOW_MS / 1000
@@ -53,5 +53,32 @@ describe('snapshotRefreshDelay', () => {
 
   it('waits the full interval when called back-to-back, coalescing a reconnect storm', () => {
     expect(snapshotRefreshDelay(NOW_MS, NOW_MS, 10_000)).toBe(10_000)
+  })
+})
+
+describe('pendingKeys', () => {
+  it('holds a key pending until every overlapping write releases it', () => {
+    const pending = pendingKeys()
+    pending.begin(['name'])
+    pending.begin(['name'])
+    pending.end(['name'])
+    expect(pending.has('name')).toBe(true)
+    pending.end(['name'])
+    expect(pending.has('name')).toBe(false)
+  })
+
+  it('tracks keys independently and clears them all at once', () => {
+    const pending = pendingKeys()
+    pending.begin(['a', 'b'])
+    pending.end(['a'])
+    expect([...pending.keys()]).toEqual(['b'])
+    pending.clear()
+    expect(pending.has('b')).toBe(false)
+  })
+
+  it('releasing a key that was never begun is a no-op', () => {
+    const pending = pendingKeys()
+    pending.end(['ghost'])
+    expect(pending.has('ghost')).toBe(false)
   })
 })

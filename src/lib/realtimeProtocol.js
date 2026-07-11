@@ -73,6 +73,29 @@ export function snapshotRefreshDelay(lastStartedAtMs, nowMs, minIntervalMs) {
   return elapsed >= minIntervalMs ? 0 : minIntervalMs - elapsed
 }
 
+// counted set of keys whose optimistic writes are still in flight. while a
+// key is pending, realtime echoes for it (ours or another client's) carry a
+// value staler than what we've already applied locally, so stores skip them.
+// counts (not booleans) so overlapping writes to one key release correctly
+export function pendingKeys() {
+  const counts = new Map()
+  return {
+    begin(keys) {
+      for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1)
+    },
+    end(keys) {
+      for (const key of keys) {
+        const count = counts.get(key) ?? 0
+        if (count <= 1) counts.delete(key)
+        else counts.set(key, count - 1)
+      }
+    },
+    has(key) { return counts.has(key) },
+    keys() { return counts.keys() },
+    clear() { counts.clear() },
+  }
+}
+
 export function mergeRealtimeSnapshot(snapshot, liveRows, limit) {
   const rows = new Map(snapshot.map(row => [row.id, row]))
   for (const row of liveRows) rows.set(row.id, { ...rows.get(row.id), ...row })
