@@ -515,113 +515,87 @@ export const useD = defineStore('dungeon', () => {
     )
   }
 
-  async function addRoom(roomData) {
-    const tempId = crypto.randomUUID()
-    const optimistic = { id: tempId, ...roomData, source_client: CLIENT_ID }
-    rooms.value.set(tempId, optimistic)
+  // rooms and corridors are the same optimistic collection: temp-id insert then
+  // reconcile, toRaw-guarded rollback on a failed patch, backup-restore on a
+  // failed delete, each step mirrored into the undo stack. they differ only in
+  // endpoint, undo id field, and the activity label.
+  function _elementOps({ collection, path, entity, idKey, addLabel, deleteLabel, nameOf }) {
+    const Entity = entity[0].toUpperCase() + entity.slice(1)
 
-    let data
-    try {
-      data = await apiClient.post('/dungeon-rooms', { ...roomData, source_client: CLIENT_ID }, 'create_room')
-    } catch (error) {
-      rooms.value.delete(tempId)
-      console.error('addRoom error:', error instanceof ApiError ? error.message : error)
-      return
+    async function add(elementData) {
+      const tempId = crypto.randomUUID()
+      const optimistic = { id: tempId, ...elementData, source_client: CLIENT_ID }
+      collection.value.set(tempId, optimistic)
+
+      let data
+      try {
+        data = await apiClient.post(path, { ...elementData, source_client: CLIENT_ID }, `create_${entity}`)
+      } catch (error) {
+        collection.value.delete(tempId)
+        console.error(`add${Entity} error:`, error instanceof ApiError ? error.message : error)
+        return
+      }
+
+      collection.value.delete(tempId)
+      if (!collection.value.has(data.id)) collection.value.set(data.id, data)
+      useActivityStore().record(addLabel, nameOf(data))
+      pushUndo({ type: `delete_${entity}`, [idKey]: data.id })
     }
 
-    rooms.value.delete(tempId)
-    if (!rooms.value.has(data.id)) rooms.value.set(data.id, data)
-    useActivityStore().record('added room', data.name ?? 'Unnamed Room')
-    pushUndo({ type: 'delete_room', roomId: data.id })
-  }
+    async function update(id, patch) {
+      const existing = collection.value.get(id)
+      if (!existing) return
+      const optimistic = { ...existing, ...patch }
+      collection.value.set(id, optimistic)
 
-  async function updateRoom(id, patch) {
-    const existing = rooms.value.get(id)
-    if (!existing) return
-    const optimistic = { ...existing, ...patch }
-    rooms.value.set(id, optimistic)
-
-    _pendingWrites.begin([`room:${id}`])
-    try {
-      await apiClient.patch(`/dungeon-rooms/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_room')
-      const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
-      pushUndo({ type: 'update_room', roomId: id, patch: revert })
-    } catch (error) {
-      if (toRaw(rooms.value.get(id)) === optimistic) rooms.value.set(id, existing)
-      console.error('updateRoom error:', error instanceof ApiError ? error.message : error)
-    } finally {
-      _pendingWrites.end([`room:${id}`])
-    }
-  }
-
-  async function deleteRoom(id) {
-    const backup = rooms.value.get(id)
-    rooms.value.delete(id)
-    if (selectedElement.value?.id === id) selectedElement.value = null
-
-    try {
-      await apiClient.delete(`/dungeon-rooms/${id}`, 'delete_room')
-      useActivityStore().record('deleted room', backup?.name ?? 'Unnamed Room')
-      pushUndo({ type: 'insert_room', data: backup })
-    } catch (error) {
-      if (backup && !rooms.value.has(id)) rooms.value.set(id, backup)
-      console.error('deleteRoom error:', error instanceof ApiError ? error.message : error)
-    }
-  }
-
-  async function addCorridor(corridorData) {
-    const tempId = crypto.randomUUID()
-    const optimistic = { id: tempId, ...corridorData, source_client: CLIENT_ID }
-    corridors.value.set(tempId, optimistic)
-
-    let data
-    try {
-      data = await apiClient.post('/dungeon-corridors', { ...corridorData, source_client: CLIENT_ID }, 'create_corridor')
-    } catch (error) {
-      corridors.value.delete(tempId)
-      console.error('addCorridor error:', error instanceof ApiError ? error.message : error)
-      return
+      _pendingWrites.begin([`${entity}:${id}`])
+      try {
+        await apiClient.patch(`${path}/${id}`, { ...patch, source_client: CLIENT_ID }, `update_${entity}`)
+        const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
+        pushUndo({ type: `update_${entity}`, [idKey]: id, patch: revert })
+      } catch (error) {
+        if (toRaw(collection.value.get(id)) === optimistic) collection.value.set(id, existing)
+        console.error(`update${Entity} error:`, error instanceof ApiError ? error.message : error)
+      } finally {
+        _pendingWrites.end([`${entity}:${id}`])
+      }
     }
 
-    corridors.value.delete(tempId)
-    if (!corridors.value.has(data.id)) corridors.value.set(data.id, data)
-    useActivityStore().record('added corridor', '')
-    pushUndo({ type: 'delete_corridor', corridorId: data.id })
-  }
+    async function remove(id) {
+      const backup = collection.value.get(id)
+      collection.value.delete(id)
+      if (selectedElement.value?.id === id) selectedElement.value = null
 
-  async function updateCorridor(id, patch) {
-    const existing = corridors.value.get(id)
-    if (!existing) return
-    const optimistic = { ...existing, ...patch }
-    corridors.value.set(id, optimistic)
-
-    _pendingWrites.begin([`corridor:${id}`])
-    try {
-      await apiClient.patch(`/dungeon-corridors/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_corridor')
-      const revert = Object.fromEntries(Object.keys(patch).map(k => [k, existing[k] ?? null]))
-      pushUndo({ type: 'update_corridor', corridorId: id, patch: revert })
-    } catch (error) {
-      if (toRaw(corridors.value.get(id)) === optimistic) corridors.value.set(id, existing)
-      console.error('updateCorridor error:', error instanceof ApiError ? error.message : error)
-    } finally {
-      _pendingWrites.end([`corridor:${id}`])
+      try {
+        await apiClient.delete(`${path}/${id}`, `delete_${entity}`)
+        useActivityStore().record(deleteLabel, nameOf(backup))
+        pushUndo({ type: `insert_${entity}`, data: backup })
+      } catch (error) {
+        if (backup && !collection.value.has(id)) collection.value.set(id, backup)
+        console.error(`delete${Entity} error:`, error instanceof ApiError ? error.message : error)
+      }
     }
+
+    return { add, update, remove }
   }
 
-  async function deleteCorridor(id) {
-    const backup = corridors.value.get(id)
-    corridors.value.delete(id)
-    if (selectedElement.value?.id === id) selectedElement.value = null
+  const _roomOps = _elementOps({
+    collection: rooms, path: '/dungeon-rooms', entity: 'room', idKey: 'roomId',
+    addLabel: 'added room', deleteLabel: 'deleted room',
+    nameOf: (el) => el?.name ?? 'Unnamed Room',
+  })
+  const _corridorOps = _elementOps({
+    collection: corridors, path: '/dungeon-corridors', entity: 'corridor', idKey: 'corridorId',
+    addLabel: 'added corridor', deleteLabel: 'deleted corridor',
+    nameOf: () => '',
+  })
 
-    try {
-      await apiClient.delete(`/dungeon-corridors/${id}`, 'delete_corridor')
-      useActivityStore().record('deleted corridor', '')
-      pushUndo({ type: 'insert_corridor', data: backup })
-    } catch (error) {
-      if (backup && !corridors.value.has(id)) corridors.value.set(id, backup)
-      console.error('deleteCorridor error:', error instanceof ApiError ? error.message : error)
-    }
-  }
+  const addRoom = _roomOps.add
+  const updateRoom = _roomOps.update
+  const deleteRoom = _roomOps.remove
+  const addCorridor = _corridorOps.add
+  const updateCorridor = _corridorOps.update
+  const deleteCorridor = _corridorOps.remove
 
   function addDoor(roomId, doorData) {
     const room = rooms.value.get(roomId)
