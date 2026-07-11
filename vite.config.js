@@ -9,6 +9,12 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  // without this esbuild minifies media queries to range syntax
+  // (@media (width<=900px)), which safari below 16.4 ignores outright -
+  // every responsive breakpoint silently no-ops on older iphones/ipads
+  build: {
+    cssTarget: ['safari13', 'chrome87', 'firefox78'],
+  },
   test: {
     globals: true,
     environment: 'jsdom',
