@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useDiceStore } from '@/stores/diceStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
-import { splitTonight, rankPlayers, rankSkills, bestPlayerPerSkill } from '@/lib/diceStats.js'
+import { splitTonight, rankPlayers, rankSkills, bestPlayerPerSkill, longestStreaks } from '@/lib/diceStats.js'
 
 // deep history for the leaderboard, well past diceStore's 60-roll feed. a table
 // that ever passes this means all-time quietly becomes "last 1000".
@@ -60,6 +60,8 @@ export const useDiceStatsStore = defineStore('diceStats', () => {
   const skillsAllTime      = computed(() => rankSkills(split.value.all))
   const bestAtTonight      = computed(() => bestPlayerPerSkill(split.value.tonight))
   const bestAtAllTime      = computed(() => bestPlayerPerSkill(split.value.all))
+  const streaksTonight     = computed(() => longestStreaks(split.value.tonight))
+  const streaksAllTime     = computed(() => longestStreaks(split.value.all))
 
   return {
     rolls,
@@ -71,5 +73,7 @@ export const useDiceStatsStore = defineStore('diceStats', () => {
     skillsAllTime,
     bestAtTonight,
     bestAtAllTime,
+    streaksTonight,
+    streaksAllTime,
   }
 })

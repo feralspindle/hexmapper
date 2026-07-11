@@ -22,6 +22,20 @@
             </template>
         </div>
 
+        <div v-if="streaks.hot || streaks.cold" class="dstat-block">
+            <div class="dstat-title">Longest streaks</div>
+            <div v-if="streaks.hot" class="dstat-line">
+                <span class="dstat-tag pos">hot</span>
+                <span class="dstat-name">{{ gmName(streaks.hot.userId, streaks.hot.displayName) }}</span>
+                <span class="dstat-z pos">×{{ streaks.hot.count }}</span>
+            </div>
+            <div v-if="streaks.cold" class="dstat-line">
+                <span class="dstat-tag neg">cold</span>
+                <span class="dstat-name">{{ gmName(streaks.cold.userId, streaks.cold.displayName) }}</span>
+                <span class="dstat-z neg">×{{ streaks.cold.count }}</span>
+            </div>
+        </div>
+
         <div v-if="bestAt.length" class="dstat-block">
             <div class="dstat-title">Best at each skill</div>
             <div v-for="entry in bestAt" :key="entry.label ?? '_'" class="dstat-line">
@@ -36,15 +50,18 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useDiceStatsStore } from '@/stores/diceStatsStore.js'
+import { useGMLabel } from '@/composables/useGMLabel.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { formatZ } from '@/lib/diceStats.js'
 
 const statsStore = useDiceStatsStore()
+const { gmName } = useGMLabel()
 
 const range = ref('tonight')
 
 const skills = computed(() => range.value === 'tonight' ? statsStore.skillsTonight : statsStore.skillsAllTime)
 const bestAt = computed(() => range.value === 'tonight' ? statsStore.bestAtTonight : statsStore.bestAtAllTime)
+const streaks = computed(() => range.value === 'tonight' ? statsStore.streaksTonight : statsStore.streaksAllTime)
 
 const best = computed(() => skills.value[0])
 const worst = computed(() => skills.value[skills.value.length - 1])

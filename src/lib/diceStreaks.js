@@ -1,4 +1,4 @@
-const MIN_STREAK = 3
+export const MIN_STREAK = 3
 
 // direction of a roll relative to its theoretical distribution, read from the
 // server-computed stats (ttrpg-dice-engine DistributionPosition). the server
@@ -8,7 +8,7 @@ const MIN_STREAK = 3
 // returns 'high' | 'low' | 'average' | null. null means the roll carries no
 // luck information — no stats (legacy row, engine failure) or a deterministic
 // roll like flat d1 damage (std_dev 0) — and should leave streaks untouched.
-function rollDirection(roll) {
+export function rollDirection(roll) {
   const stats = roll?.stats
   if (!stats || typeof stats !== 'object') return null
   if (!(Number(stats.std_dev) > 0)) return null

@@ -1,3 +1,5 @@
+import { rollDirection, MIN_STREAK } from '@/lib/diceStreaks.js'
+
 const GAP_HOURS = 4
 const MS_PER_HOUR = 3600 * 1000
 
@@ -143,4 +145,39 @@ export function bestPlayerPerSkill(rolls) {
   }
 
   return result.sort((a, b) => b.avgZ - a.avgZ)
+}
+
+// the longest run of consecutive above-average (hot) and below-average (cold)
+// rolls any single player put together, using the same direction rules as the
+// per-roll streak badges: an average roll breaks a run, a statless roll is
+// skipped without breaking it. only runs that reached a real streak (minStreak)
+// are reported. returns { hot, cold }, each { userId, displayName, count } or null.
+export function longestStreaks(rolls, minStreak = MIN_STREAK) {
+  const source = Array.isArray(rolls) ? rolls : []
+  const running = new Map()
+  let hot = null
+  let cold = null
+
+  // walk oldest to newest so each roll extends its user's running run
+  for (let i = source.length - 1; i >= 0; i--) {
+    const roll = source[i]
+    const direction = rollDirection(roll)
+    const previous = running.get(roll?.user_id) ?? { direction: null, count: 0 }
+
+    let next = previous
+    if (direction === 'high' || direction === 'low') {
+      next = { direction, count: previous.direction === direction ? previous.count + 1 : 1 }
+    } else if (direction === 'average') {
+      next = { direction: null, count: 0 }
+    }
+    running.set(roll?.user_id, next)
+
+    if (next.count >= minStreak) {
+      const entry = { userId: roll.user_id, displayName: roll.display_name, count: next.count }
+      if (direction === 'high' && (!hot || entry.count > hot.count)) hot = entry
+      if (direction === 'low' && (!cold || entry.count > cold.count)) cold = entry
+    }
+  }
+
+  return { hot, cold }
 }
