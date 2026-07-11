@@ -83,7 +83,7 @@
         <ChatToast bottom-class="bottom-20" />
       </div>
 
-      <DungeonRightPanel />
+      <SessionRightPanel :inspector="DungeonInspector" :selected="dungeonStore.selectedElement" />
     </div>
 
 
@@ -126,7 +126,8 @@ import DungeonLeftToolbar      from '@/components/dungeon/DungeonLeftToolbar.vue
 import DungeonCanvas           from '@/components/dungeon/DungeonCanvas.vue'
 import DungeonContentsBar      from '@/components/dungeon/DungeonContentsBar.vue'
 import DungeonMapImageSettings from '@/components/dungeon/DungeonMapImageSettings.vue'
-import DungeonRightPanel   from '@/components/dungeon/DungeonRightPanel.vue'
+import SessionRightPanel   from '@/components/common/SessionRightPanel.vue'
+import DungeonInspector    from '@/components/dungeon/DungeonInspector.vue'
 import DungeonPartyPanel   from '@/components/common/DungeonPartyPanel.vue'
 import PartyNotebook       from '@/components/common/PartyNotebook.vue'
 

@@ -183,7 +183,7 @@
                 <PartyFollowBanner />
             </div>
 
-            <HexRightPanel />
+            <SessionRightPanel :inspector="HexInspectorSection" :selected="hexStore.selectedHex" />
         </div>
 
         <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
@@ -219,7 +219,8 @@ import { useUserPrefsStore } from "@/stores/userPrefsStore.js";
 import HexTopbar from "@/components/hex/HexTopbar.vue";
 import HexModePicker from "@/components/hex/HexModePicker.vue";
 import HexLeftToolbar from "@/components/hex/HexLeftToolbar.vue";
-import HexRightPanel from "@/components/hex/HexRightPanel.vue";
+import SessionRightPanel from "@/components/common/SessionRightPanel.vue";
+import HexInspectorSection from "@/components/hex/HexInspectorSection.vue";
 import HexGrid from "@/components/hex/HexGrid.vue";
 import MapImageSettings from "@/components/hex/MapImageSettings.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
