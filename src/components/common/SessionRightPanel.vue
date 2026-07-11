@@ -8,6 +8,7 @@
 
     <div v-show="activeTab === 0" class="ds-tab-pane">
       <DungeonDiceSection ref="diceSectionRef" />
+      <DiceStatsPanel />
       <TravelSection v-if="showTravel" />
       <InitiativeSection />
       <CrawlTracker />
@@ -29,6 +30,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import DungeonDiceSection    from '@/components/common/DungeonDiceSection.vue'
+import DiceStatsPanel        from '@/components/common/DiceStatsPanel.vue'
 import DungeonPhotosSection  from '@/components/common/DungeonPhotosSection.vue'
 import DungeonSessionSection from '@/components/common/DungeonSessionSection.vue'
 import TravelSection         from '@/components/common/TravelSection.vue'

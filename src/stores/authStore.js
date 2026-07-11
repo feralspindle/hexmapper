@@ -7,6 +7,7 @@ import { useSessionStore }   from '@/stores/sessionStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useHexStore }       from '@/stores/hexStore.js'
 import { useDiceStore }      from '@/stores/diceStore.js'
+import { useDiceStatsStore } from '@/stores/diceStatsStore.js'
 import { useChatStore }      from '@/stores/chatStore.js'
 import { useNotesStore }     from '@/stores/notesStore.js'
 import { usePhotoStore }     from '@/stores/photoStore.js'
@@ -18,6 +19,7 @@ function cleanupAllStores() {
   try { useCharacterStore().cleanup() } catch { /* */ }
   try { useHexStore().cleanup()       } catch { /* */ }
   try { useDiceStore().cleanup()      } catch { /* */ }
+  try { useDiceStatsStore().cleanup() } catch { /* */ }
   try { useChatStore().cleanup()      } catch { /* */ }
   try { useNotesStore().cleanup()     } catch { /* */ }
   try { usePhotoStore().cleanup()     } catch { /* */ }
