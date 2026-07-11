@@ -6,7 +6,7 @@ import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { uploadSessionImage } from '@/lib/sessionImage.js'
 import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
-import { useAuthStore } from '@/stores/authStore.js'
+import { createPresenceChannel } from '@/lib/presenceChannel.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 
 const CLIENT_ID = crypto.randomUUID()
@@ -38,6 +38,7 @@ export const useD = defineStore('dungeon', () => {
   let fogChannel = null
   let undoChannel = null
   let _stopAuthWatch = null
+  let _trackPresence = null
   let _undoing = false
   let _dungeonId = null
   let _initGeneration = 0
@@ -323,6 +324,7 @@ export const useD = defineStore('dungeon', () => {
 
   function _removeChannels() {
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
+    _trackPresence = null
     if (dungeonChannel)  { realtime.removeChannel(dungeonChannel); dungeonChannel = null }
     if (roomChannel)     { realtime.removeChannel(roomChannel); roomChannel = null }
     if (corridorChannel) { realtime.removeChannel(corridorChannel); corridorChannel = null }
@@ -469,50 +471,19 @@ export const useD = defineStore('dungeon', () => {
       )
       .subscribe()
 
-    const authStore = useAuthStore()
-
-    const syncViewers = () => {
-      const state = presenceChannel.presenceState()
-      const latest = Object.values(state).map(entries => entries.at(-1)).filter(Boolean)
-      const byUser = new Map()
-      for (const p of latest) byUser.set(p.user_id ?? p._clientId, p)
-      viewers.value = [...byUser.values()]
-    }
-
-    presenceChannel = realtime.channel(`dungeon:${dungeonId}:presence`, {
+    const presence = createPresenceChannel({
+      channelName: `dungeon:${dungeonId}:presence`,
       sessionId,
-      config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
+      clientId: CLIENT_ID,
+      members: viewers,
+      extraFields: () => ({
+        editing_id:   selectedElement.value?.id ?? null,
+        editing_type: selectedElement.value?.type ?? null,
+      }),
     })
-      .on('presence', { event: 'sync' }, syncViewers)
-      .on('presence', { event: 'join' }, syncViewers)
-      .on('presence', { event: 'leave' }, syncViewers)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({
-            user_id:      authStore.user?.id ?? null,
-            _clientId:    CLIENT_ID,
-            display_name: authStore.displayName ?? 'Adventurer',
-            avatar_url:   authStore.avatarUrl ?? null,
-            editing_id:   selectedElement.value?.id ?? null,
-            editing_type: selectedElement.value?.type ?? null,
-          })
-        }
-      })
-
-    _stopAuthWatch = watch(
-      () => authStore.user?.id,
-      (userId, prev) => {
-        if (!userId || userId === prev || !presenceChannel) return
-        presenceChannel.track({
-          user_id:      userId,
-          _clientId:    CLIENT_ID,
-          display_name: authStore.displayName ?? 'Adventurer',
-          avatar_url:   authStore.avatarUrl ?? null,
-          editing_id:   selectedElement.value?.id ?? null,
-          editing_type: selectedElement.value?.type ?? null,
-        })
-      },
-    )
+    presenceChannel = presence.channel
+    _trackPresence = presence.track
+    _stopAuthWatch = presence.stopAuthWatch
   }
 
   // rooms and corridors are the same optimistic collection: temp-id insert then
@@ -651,25 +622,12 @@ export const useD = defineStore('dungeon', () => {
 
   function selectElement(type, id, extra = {}) {
     selectedElement.value = { type, id, ...extra }
-    _trackPresence()
+    _trackPresence?.()
   }
 
   function deselect() {
     selectedElement.value = null
-    _trackPresence()
-  }
-
-  function _trackPresence() {
-    if (!presenceChannel) return
-    const authStore = useAuthStore()
-    presenceChannel.track({
-      user_id:      authStore.user?.id ?? null,
-      _clientId:    CLIENT_ID,
-      display_name: authStore.displayName ?? 'Adventurer',
-      avatar_url:   authStore.avatarUrl ?? null,
-      editing_id:   selectedElement.value?.id ?? null,
-      editing_type: selectedElement.value?.type ?? null,
-    })
+    _trackPresence?.()
   }
 
   function beginRoomEdit(id, fields) {

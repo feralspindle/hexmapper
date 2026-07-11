@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
 import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { createPresenceChannel } from '@/lib/presenceChannel.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import router from '@/router/index.js'
 
@@ -247,56 +248,25 @@ export const useSessionStore = defineStore('session', () => {
     if (_stopAuthWatch) { _stopAuthWatch(); _stopAuthWatch = null }
 
     let _ready = false
-
-    const channel = realtime
-      .channel(`session:${id}:presence`, {
-        sessionId: id,
-        config: { presence: { key: authStore.user?.id ?? CLIENT_ID } },
-      })
-
-    presenceChannel = channel
-
-    const trackPresence = () => channel.track({
-      user_id:      authStore.user?.id ?? null,
-      _clientId:    CLIENT_ID,
-      display_name: authStore.displayName ?? 'Adventurer',
-      avatar_url:   authStore.avatarUrl ?? null,
-    })
-
-    const syncUsers = () => {
-      const state = channel.presenceState()
-      const latest = Object.values(state).map(e => e.at(-1)).filter(Boolean)
-      const byUser = new Map()
-      for (const p of latest) byUser.set(p.user_id ?? p._clientId, p)
-      onlineUsers.value = [...byUser.values()]
-    }
-
-    channel
-      .on('presence', { event: 'sync' }, () => { syncUsers(); _ready = true })
-      .on('presence', { event: 'join' }, ({ newPresences }) => {
-        syncUsers()
+    const presence = createPresenceChannel({
+      channelName: `session:${id}:presence`,
+      sessionId: id,
+      clientId: CLIENT_ID,
+      members: onlineUsers,
+      onSync: () => { _ready = true },
+      onJoin: (newPresences) => {
         if (!_ready) return
         for (const p of newPresences) {
           if (p.user_id && p.user_id === authStore.user?.id) continue
           latestJoin.value = { ...p, _ts: Date.now() }
         }
-      })
-      .on('presence', { event: 'leave' }, syncUsers)
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED') return
-        trackPresence()
-      })
-
-    _stopAuthWatch = watch(
-      () => authStore.user?.id,
-      (userId, prev) => {
-        if (!userId || userId === prev || !presenceChannel) return
-        trackPresence()
       },
-    )
+    })
+    presenceChannel = presence.channel
+    _stopAuthWatch = presence.stopAuthWatch
 
     const handlePageHide = () => { if (presenceChannel) presenceChannel.untrack() }
-    const handlePageShow = () => { if (presenceChannel) trackPresence() }
+    const handlePageShow = () => { if (presenceChannel) presence.track() }
     window.addEventListener('pagehide', handlePageHide)
     window.addEventListener('pageshow', handlePageShow)
     _stopPageHide = () => {
