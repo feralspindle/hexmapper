@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
@@ -9,106 +9,73 @@ import { useActivityStore } from '@/stores/activityStore.js'
 export const useNotesStore = defineStore('notes', () => {
   const notes = ref([])
   const loading = ref(false)
-  let channel = null
-  let currentContextKey = null
+  const session = createSessionChannel()
+  let _ctx = null
   let _pendingInit = null
 
-  async function refresh() {
-    const ctx = channel?._ctx
-    const key = currentContextKey
-    if (!ctx || !key) return
+  async function refresh(generation = session.generation) {
+    const ctx = _ctx
+    if (!ctx || !session.key) return
     const query = ctx.type === 'hex'
       ? supabase.from('hex_notes').select('*').eq('hex_cell_id', ctx.hexCellId)
       : supabase.from('dungeon_element_notes').select('*').eq('element_id', ctx.elementId)
     const { data } = await query.order('created_at', { ascending: true })
-    if (data && currentContextKey === key) notes.value = data
+    if (data && session.isCurrent(generation)) notes.value = data
+  }
+
+  async function _init(key, ctx, { table, filter, channelName }) {
+    if (key === session.key) {
+      if (_pendingInit) await _pendingInit
+      return
+    }
+    cleanup()
+
+    const generation = session.begin(key)
+    _ctx = ctx
+    _pendingInit = (async () => {
+      try {
+        loading.value = true
+        const { data } = await supabase
+          .from(table)
+          .select('*')
+          .eq(...filter)
+          .order('created_at', { ascending: true })
+        loading.value = false
+        if (!session.isCurrent(generation)) return
+        if (data) notes.value = data
+
+        session.open(channelName, { sessionId: ctx.sessionId, refresh }, ch => ch
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table,
+            filter: `${filter[0]}=eq.${filter[1]}`,
+          }, handleRealtimeEvent))
+      } finally {
+        if (session.isCurrent(generation)) _pendingInit = null
+      }
+    })()
+    await _pendingInit
   }
 
   async function initForHex(hexCellId, sessionId) {
-    const key = hexCellId ? `hex:${hexCellId}` : null
-    if (key && key === currentContextKey) {
-      if (_pendingInit) await _pendingInit
+    if (!hexCellId) {
+      cleanup()
       return
     }
-    cleanup()
-    if (!hexCellId) return
-
-    currentContextKey = key
-    _pendingInit = (async () => {
-      try {
-        loading.value = true
-        const { data } = await supabase
-          .from('hex_notes')
-          .select('*')
-          .eq('hex_cell_id', hexCellId)
-          .order('created_at', { ascending: true })
-        loading.value = false
-        if (currentContextKey !== key) return
-        if (data) notes.value = data
-
-        let subscribedRefreshed = false
-        channel = realtime
-          .channel(`notes:hex:${hexCellId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'hex_notes',
-            filter: `hex_cell_id=eq.${hexCellId}`,
-          }, handleRealtimeEvent)
-          .subscribe(status => {
-            if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-            subscribedRefreshed = true
-            void refresh()
-          })
-        channel._ctx = { type: 'hex', hexCellId, sessionId }
-      } finally {
-        if (currentContextKey === key) _pendingInit = null
-      }
-    })()
-    await _pendingInit
+    await _init(`hex:${hexCellId}`, { type: 'hex', hexCellId, sessionId }, {
+      table: 'hex_notes',
+      filter: ['hex_cell_id', hexCellId],
+      channelName: `notes:hex:${hexCellId}:${crypto.randomUUID()}`,
+    })
   }
 
   async function initForDungeonElement(elementId, elementType, sessionId) {
-    const key = `dungeon:${elementId}`
-    if (key === currentContextKey) {
-      if (_pendingInit) await _pendingInit
-      return
-    }
-    cleanup()
-
-    currentContextKey = key
-    _pendingInit = (async () => {
-      try {
-        loading.value = true
-        const { data } = await supabase
-          .from('dungeon_element_notes')
-          .select('*')
-          .eq('element_id', elementId)
-          .order('created_at', { ascending: true })
-        loading.value = false
-        if (currentContextKey !== key) return
-        if (data) notes.value = data
-
-        let subscribedRefreshed = false
-        channel = realtime
-          .channel(`notes:dungeon:${elementId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'dungeon_element_notes',
-            filter: `element_id=eq.${elementId}`,
-          }, handleRealtimeEvent)
-          .subscribe(status => {
-            if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-            subscribedRefreshed = true
-            void refresh()
-          })
-        channel._ctx = { type: 'dungeon', elementId, elementType, sessionId }
-      } finally {
-        if (currentContextKey === key) _pendingInit = null
-      }
-    })()
-    await _pendingInit
+    await _init(`dungeon:${elementId}`, { type: 'dungeon', elementId, elementType, sessionId }, {
+      table: 'dungeon_element_notes',
+      filter: ['element_id', elementId],
+      channelName: `notes:dungeon:${elementId}:${crypto.randomUUID()}`,
+    })
   }
 
   function handleRealtimeEvent({ eventType, new: row, old }) {
@@ -124,7 +91,7 @@ export const useNotesStore = defineStore('notes', () => {
 
   async function addNote(body) {
     const authStore = useAuthStore()
-    const ctx = channel?._ctx
+    const ctx = _ctx
     if (!ctx || !body.trim()) return
 
     const optimisticId = crypto.randomUUID()
@@ -172,7 +139,7 @@ export const useNotesStore = defineStore('notes', () => {
       n.id === id ? { ...n, body: body.trim(), updated_at: new Date().toISOString() } : n,
     )
 
-    const isHex = channel?._ctx?.type === 'hex'
+    const isHex = _ctx?.type === 'hex'
     try {
       if (isHex) {
         await apiClient.patch(`/hex-notes/${id}`, { body: body.trim() })
@@ -189,7 +156,7 @@ export const useNotesStore = defineStore('notes', () => {
     const backup = notes.value.find(n => n.id === id)
     notes.value = notes.value.filter(n => n.id !== id)
 
-    const isHex = channel?._ctx?.type === 'hex'
+    const isHex = _ctx?.type === 'hex'
     try {
       if (isHex) {
         await apiClient.delete(`/hex-notes/${id}`)
@@ -203,12 +170,9 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   function cleanup() {
-    if (channel) {
-      realtime.removeChannel(channel)
-      channel = null
-    }
+    session.close()
     notes.value = []
-    currentContextKey = null
+    _ctx = null
     _pendingInit = null
   }
 

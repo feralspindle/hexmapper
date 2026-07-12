@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { uploadSessionImage } from '@/lib/sessionImage.js'
 import { createSignedMapUrl } from '@/lib/signedMapUrl.js'
@@ -15,9 +15,7 @@ export const useMapStore = defineStore('map', () => {
   const loading = ref(false)
   const loadError = ref(null)
 
-  let mapChannel = null
-  let _currentSessionId = null
-  let _initGeneration = 0
+  const session = createSessionChannel()
   const _localOverrides = {}
   const _overrideAt = {}
   const OVERRIDE_MAX_AGE_MS = 10000
@@ -98,24 +96,23 @@ export const useMapStore = defineStore('map', () => {
   const mapGridCols      = computed(() => activeMap.value?.map_grid_cols      ?? null)
   const mapGridRows      = computed(() => activeMap.value?.map_grid_rows      ?? null)
 
-  async function refresh() {
-    const sessionId = _currentSessionId
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
     if (!sessionId) return
     const { data: mapRows, error } = await supabase
       .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
-    if (error || !mapRows || _currentSessionId !== sessionId) return
+    if (error || !mapRows || !session.isCurrent(generation)) return
     maps.value = mapRows.map(row => _mergeLocalOverrides(row))
   }
 
   async function init(sessionId) {
-    const generation = ++_initGeneration
-    _currentSessionId = sessionId
+    const generation = session.begin(sessionId)
     loading.value = true
 
     const { data: mapRows, error } = await supabase
       .from('maps').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
 
-    if (generation !== _initGeneration) return !error
+    if (!session.isCurrent(generation)) return !error
 
     loadError.value = error ?? null
     if (!error && mapRows) maps.value = mapRows
@@ -127,10 +124,7 @@ export const useMapStore = defineStore('map', () => {
     const activeImgPath = activeMap.value?.map_image_path
     if (activeImgPath) _refreshActiveUrl(activeImgPath)
 
-    if (mapChannel) realtime.removeChannel(mapChannel)
-    let subscribedRefreshed = false
-    mapChannel = realtime
-      .channel(`session:${sessionId}:maps`, { sessionId, onReconnect: () => refresh() })
+    session.open(`session:${sessionId}:maps`, { sessionId, refresh }, ch => ch
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'maps', filter: `session_id=eq.${sessionId}` },
@@ -146,22 +140,15 @@ export const useMapStore = defineStore('map', () => {
             maps.value = maps.value.filter(m => m.id !== old.id)
           }
         },
-      )
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        void refresh()
-      })
+      ))
 
     return !error
   }
 
   function cleanup() {
-    _initGeneration += 1
-    if (mapChannel) { realtime.removeChannel(mapChannel); mapChannel = null }
+    session.close()
     _cleanupUrl()
     maps.value = []
-    _currentSessionId = null
     Object.keys(_localOverrides).forEach(k => delete _localOverrides[k])
     Object.keys(_overrideAt).forEach(k => delete _overrideAt[k])
   }
@@ -170,7 +157,7 @@ export const useMapStore = defineStore('map', () => {
     let data
     try {
       data = await apiClient.post('/maps', {
-        session_id:    _currentSessionId,
+        session_id:    session.key,
         name,
         map_type:      'hex',
         parent_map_id: activeMap.value?.id ?? null,
@@ -187,7 +174,7 @@ export const useMapStore = defineStore('map', () => {
   async function createMap({ name = 'New Map', mapType = 'hex' } = {}) {
     let data
     try {
-      data = await apiClient.post('/maps', { session_id: _currentSessionId, name, map_type: mapType }, 'create_map')
+      data = await apiClient.post('/maps', { session_id: session.key, name, map_type: mapType }, 'create_map')
     } catch (error) { console.error('createMap:', error instanceof ApiError ? error.message : error); return null }
     if (!maps.value.find(m => m.id === data.id)) {
       maps.value = [...maps.value, data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))

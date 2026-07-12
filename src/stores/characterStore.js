@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playLuckSound } from '@/lib/diceSound.js'
@@ -39,6 +39,7 @@ export const useCharacterStore = defineStore('character', () => {
   const _saveTimers = new Map()
   const _savesInFlight = new Map()
   const _broadcastTimers = new Map()
+  const session = createSessionChannel()
   let _realtimeChannel = null
 
   const characters = ref([])
@@ -89,6 +90,7 @@ export const useCharacterStore = defineStore('character', () => {
     const authStore = useAuthStore()
     if (!authStore.user?.id || !sessionId) return
 
+    const generation = session.begin(sessionId)
     currentSessionId.value = sessionId
     loading.value = true
 
@@ -97,6 +99,7 @@ export const useCharacterStore = defineStore('character', () => {
       supabase.from('session_members').select('user_id, active_character_id, display_name').eq('session_id', sessionId),
     ])
 
+    if (!session.isCurrent(generation)) return
     loading.value = false
 
     if (charsResult.error) { console.error('characterStore.loadAll:', charsResult.error.message); return }
@@ -119,8 +122,8 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
-  async function refresh() {
-    const sessionId = currentSessionId.value
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
     if (!sessionId) return
 
     const [charsResult, membersResult] = await Promise.all([
@@ -128,7 +131,7 @@ export const useCharacterStore = defineStore('character', () => {
       supabase.from('session_members').select('user_id, active_character_id, display_name').eq('session_id', sessionId),
     ])
 
-    if (currentSessionId.value !== sessionId) return
+    if (!session.isCurrent(generation)) return
 
     if (!charsResult.error && charsResult.data) {
       const local = new Map(characters.value.map(c => [c.id, c]))
@@ -565,10 +568,7 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   function _subscribeRealtime(sessionId) {
-    if (_realtimeChannel) realtime.removeChannel(_realtimeChannel)
-    let subscribedRefreshed = false
-    _realtimeChannel = realtime
-      .channel(`characters:${sessionId}`, { sessionId, onReconnect: () => refresh() })
+    _realtimeChannel = session.open(`characters:${sessionId}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -670,12 +670,7 @@ export const useCharacterStore = defineStore('character', () => {
         if (idx !== -1) memberSelections.value[idx] = entry
         else memberSelections.value = [...memberSelections.value, entry]
         await _fetchMissingChars([characterId])
-      })
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        void refresh()
-      })
+      }))
   }
 
   async function _saveCharacter(charId) {
@@ -734,7 +729,8 @@ export const useCharacterStore = defineStore('character', () => {
     _saveTimers.clear()
     for (const timer of _broadcastTimers.values()) clearTimeout(timer)
     _broadcastTimers.clear()
-    if (_realtimeChannel) { realtime.removeChannel(_realtimeChannel); _realtimeChannel = null }
+    session.close()
+    _realtimeChannel = null
     characters.value = []
     activeId.value = null
     currentSessionId.value = null

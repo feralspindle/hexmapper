@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 // server holds the anchors (elapsed_ms + started_at), every client derives the
@@ -18,8 +18,7 @@ export const useLightStore = defineStore('light', () => {
   const error = ref(null)
   const now = ref(Date.now())
 
-  let channel = null
-  let _sessionId = null
+  const session = createSessionChannel()
   let _ticker = null
   // one expire report per source per page load; the server is idempotent
   // anyway, this just avoids hammering it from the 500ms tick
@@ -30,35 +29,10 @@ export const useLightStore = defineStore('light', () => {
   )
 
   async function init(sessionId) {
-    if (_sessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    _sessionId = sessionId
-    await refresh()
-    _subscribe(sessionId)
-    _ticker = setInterval(_tick, 500)
-  }
-
-  async function refresh() {
-    if (!_sessionId) return
-    try {
-      sources.value = (await apiClient.get(`/light-sources?session_id=${_sessionId}`)) ?? []
-    } catch (err) {
-      _fail('refresh', err)
-    }
-  }
-
-  function cleanup() {
-    if (channel) { realtime.removeChannel(channel); channel = null }
-    if (_ticker) { clearInterval(_ticker); _ticker = null }
-    _sessionId = null
-    sources.value = []
-    error.value = null
-    _reported.clear()
-  }
-
-  function _subscribe(sessionId) {
-    channel = realtime
-      .channel(`lights:${sessionId}`, { sessionId, onReconnect: () => refresh() })
+    const generation = session.begin(sessionId)
+    session.open(`lights:${sessionId}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -74,8 +48,29 @@ export const useLightStore = defineStore('light', () => {
         const idx = sources.value.findIndex(s => s.id === row.id)
         if (idx === -1) sources.value = [...sources.value, row]
         else sources.value = sources.value.map(s => (s.id === row.id ? row : s))
-      })
-      .subscribe()
+      }))
+    await refresh(generation)
+    _ticker = setInterval(_tick, 500)
+  }
+
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
+    if (!sessionId) return
+    try {
+      const rows = (await apiClient.get(`/light-sources?session_id=${sessionId}`)) ?? []
+      if (!session.isCurrent(generation)) return
+      sources.value = rows
+    } catch (err) {
+      _fail('refresh', err)
+    }
+  }
+
+  function cleanup() {
+    session.close()
+    if (_ticker) { clearInterval(_ticker); _ticker = null }
+    sources.value = []
+    error.value = null
+    _reported.clear()
   }
 
   // remaining ms for a real_time source, remaining rounds for a rounds source
@@ -117,10 +112,10 @@ export const useLightStore = defineStore('light', () => {
   }
 
   async function createSource(payload) {
-    if (!_sessionId) return null
+    if (!session.key) return null
     try {
       const row = await apiClient.post('/light-sources', {
-        session_id: _sessionId,
+        session_id: session.key,
         ...payload,
       }, 'light_create')
       _apply(row)

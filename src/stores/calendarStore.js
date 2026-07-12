@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { pendingKeys } from '@/lib/realtimeProtocol.js'
 
@@ -21,9 +21,7 @@ export const useCalendarStore = defineStore('calendar', () => {
   const settings = ref({ ...DEFAULT_SETTINGS })
   const days     = ref([])
 
-  let settingsChannel = null
-  let daysChannel     = null
-  let _sessionId      = null
+  const session = createSessionChannel()
   let _settingsLoaded = false
   const _fetchedYears = new Set()
 
@@ -40,53 +38,52 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function init(sessionId) {
-    if (_sessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    _sessionId = sessionId
-    await _loadSettings(sessionId)
-    await _loadDays(sessionId, settings.value.current_year)
+    const generation = session.begin(sessionId)
+    await _loadSettings(sessionId, generation)
+    await _loadDays(sessionId, settings.value.current_year, generation)
+    if (!session.isCurrent(generation)) return
     _subscribeSettings(sessionId)
     _subscribeDays(sessionId)
   }
 
-  async function refresh() {
-    const sessionId = _sessionId
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
     if (!sessionId) return
-    await _loadSettings(sessionId)
+    await _loadSettings(sessionId, generation)
     for (const year of [..._fetchedYears]) {
       const { data, error } = await supabase
         .from('party_calendar_days')
         .select('*')
         .eq('session_id', sessionId)
         .eq('year', year)
-      if (error || _sessionId !== sessionId) return
+      if (error || !session.isCurrent(generation)) return
       days.value = [...days.value.filter(d => d.year !== year), ...(data ?? [])]
     }
   }
 
   function cleanup() {
-    if (settingsChannel) { realtime.removeChannel(settingsChannel); settingsChannel = null }
-    if (daysChannel)     { realtime.removeChannel(daysChannel);     daysChannel     = null }
-    _sessionId = null
+    session.close()
     _settingsLoaded = false
     settings.value = { ...DEFAULT_SETTINGS }
     days.value = []
     _fetchedYears.clear()
   }
 
-  async function _loadSettings(sessionId) {
+  async function _loadSettings(sessionId, generation = session.generation) {
     const { data, error } = await supabase
       .from('party_calendar_settings')
       .select('*')
       .eq('session_id', sessionId)
       .maybeSingle()
     if (error) { console.error('calendarStore._loadSettings:', error.message); return }
-    if (_sessionId !== sessionId) return
+    if (!session.isCurrent(generation)) return
     if (data) settings.value = { ...DEFAULT_SETTINGS, ...data }
     _settingsLoaded = true
   }
 
-  async function _loadDays(sessionId, year) {
+  async function _loadDays(sessionId, year, generation = session.generation) {
     if (_fetchedYears.has(year)) return
     const { data, error } = await supabase
       .from('party_calendar_days')
@@ -94,6 +91,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       .eq('session_id', sessionId)
       .eq('year', year)
     if (error) { console.error('calendarStore._loadDays:', error.message); return }
+    if (!session.isCurrent(generation)) return
     _fetchedYears.add(year)
     if (data) {
       for (const d of data) {
@@ -103,13 +101,11 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function ensureYear(year) {
-    if (_sessionId) await _loadDays(_sessionId, year)
+    if (session.key) await _loadDays(session.key, year)
   }
 
   function _subscribeSettings(sessionId) {
-    let subscribedRefreshed = false
-    settingsChannel = realtime
-      .channel(`calendar:settings:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
+    session.open(`calendar:settings:${sessionId}:${crypto.randomUUID()}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_calendar_settings',
         filter: `session_id=eq.${sessionId}`,
@@ -118,17 +114,11 @@ export const useCalendarStore = defineStore('calendar', () => {
           if (_settingsWrites.has(SETTINGS_KEY)) return
           settings.value = { ...DEFAULT_SETTINGS, ...e.new }
         }
-      })
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        void refresh()
-      })
+      }))
   }
 
   function _subscribeDays(sessionId) {
-    daysChannel = realtime
-      .channel(`calendar:days:${sessionId}:${crypto.randomUUID()}`, { sessionId })
+    session.open(`calendar:days:${sessionId}:${crypto.randomUUID()}`, { sessionId }, ch => ch
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_calendar_days',
         filter: `session_id=eq.${sessionId}`,
@@ -144,8 +134,7 @@ export const useCalendarStore = defineStore('calendar', () => {
         } else if (e.eventType === 'DELETE') {
           days.value = days.value.filter(d => d.id !== e.old.id)
         }
-      })
-      .subscribe()
+      }))
   }
 
   async function upsertDay(year, month, day, patch) {
@@ -153,9 +142,9 @@ export const useCalendarStore = defineStore('calendar', () => {
     if (idx !== -1) {
       Object.assign(days.value[idx], patch)
     } else {
-      days.value.push({ session_id: _sessionId, year, month, day, weather: null, notes: '', ...patch, id: null })
+      days.value.push({ session_id: session.key, year, month, day, weather: null, notes: '', ...patch, id: null })
     }
-    const sessionId = _sessionId
+    const sessionId = session.key
     const key = _dayKey(year, month, day)
     _dayWrites.begin([key])
     // chain writes to the same day so they commit in order
@@ -167,7 +156,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       const data = await write
       // only the last outstanding write applies its response - earlier ones
       // are stale once another optimistic edit has happened
-      if (data && _dayWrites.count(key) === 1 && _sessionId === sessionId) {
+      if (data && _dayWrites.count(key) === 1 && session.key === sessionId) {
         const i = days.value.findIndex(d => d.year === year && d.month === month && d.day === day)
         if (i !== -1) days.value[i] = data; else days.value.push(data)
       }
@@ -185,7 +174,7 @@ export const useCalendarStore = defineStore('calendar', () => {
       return
     }
     Object.assign(settings.value, patch)
-    const sessionId = _sessionId
+    const sessionId = session.key
     _settingsWrites.begin([SETTINGS_KEY])
     // each put sends the whole settings blob, so chain them: an earlier put
     // committing after a later one would silently persist stale settings. the
@@ -199,7 +188,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     _settingsQueue = write.then(() => {}, () => {})
     try {
       const data = await write
-      if (data && _settingsWrites.count(SETTINGS_KEY) === 1 && _sessionId === sessionId) {
+      if (data && _settingsWrites.count(SETTINGS_KEY) === 1 && session.key === sessionId) {
         settings.value = { ...DEFAULT_SETTINGS, ...data }
       }
     } catch (error) {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 
@@ -14,27 +14,26 @@ export const usePhotoStore = defineStore('photo', () => {
   const currentBroadcast = ref(null)
   const loading          = ref(false)
   const uploading        = ref(false)
-  let channel            = null
-  let currentSessionId   = null
+  const session = createSessionChannel()
 
-  async function refresh() {
-    const sessionId = currentSessionId
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
     if (!sessionId) return
-    await Promise.all([_loadPhotos(sessionId), _loadBroadcastHistory(sessionId)])
+    await Promise.all([_loadPhotos(sessionId, generation), _loadBroadcastHistory(sessionId, generation)])
   }
 
   async function init(sessionId) {
-    if (currentSessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    currentSessionId = sessionId
+    const generation = session.begin(sessionId)
 
     loading.value = true
-    await Promise.all([_loadPhotos(sessionId), _loadBroadcastHistory(sessionId)])
+    await Promise.all([_loadPhotos(sessionId, generation), _loadBroadcastHistory(sessionId, generation)])
     loading.value = false
 
-    let subscribedRefreshed = false
-    channel = realtime
-      .channel(`photo_broadcasts:${sessionId}`, { sessionId, onReconnect: () => refresh() })
+    if (!session.isCurrent(generation)) return
+
+    session.open(`photo_broadcasts:${sessionId}`, { sessionId, refresh }, ch => ch
       .on(
         'postgres_changes',
         {
@@ -48,22 +47,17 @@ export const usePhotoStore = defineStore('photo', () => {
           currentBroadcast.value = resolved
           _addToBroadcastHistory(resolved)
         },
-      )
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        void refresh()
-      })
+      ))
   }
 
-  async function _loadBroadcastHistory(sessionId) {
+  async function _loadBroadcastHistory(sessionId, generation = session.generation) {
     const { data, error } = await supabase
       .from('photo_broadcasts')
       .select('id, photo_url, photo_name, created_at')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
     if (error) { console.error('photoStore._loadBroadcastHistory:', error.message); return }
-    if (currentSessionId !== sessionId) return
+    if (!session.isCurrent(generation)) return
     const seen = new Set()
     broadcastHistory.value = (data ?? []).filter(row => {
       if (seen.has(row.photo_url)) return false
@@ -79,14 +73,14 @@ export const usePhotoStore = defineStore('photo', () => {
     ]
   }
 
-  async function _loadPhotos(sessionId) {
+  async function _loadPhotos(sessionId, generation = session.generation) {
     const { data, error } = await supabase
       .from('reference_photos')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
     if (error) { console.error('photoStore._loadPhotos:', error.message); return }
-    if (currentSessionId !== sessionId) return
+    if (!session.isCurrent(generation)) return
     photos.value = (data ?? []).map(_withUrl)
   }
 
@@ -119,7 +113,7 @@ export const usePhotoStore = defineStore('photo', () => {
     if (!ALLOWED_TYPES.includes(mimeType)) throw new Error('Unsupported file type')
     const ext = EXT_MAP[mimeType] ?? 'jpg'
 
-    const storagePath = `${currentSessionId}/${crypto.randomUUID()}.${ext}`
+    const storagePath = `${session.key}/${crypto.randomUUID()}.${ext}`
 
     uploading.value = true
     try {
@@ -129,7 +123,7 @@ export const usePhotoStore = defineStore('photo', () => {
       if (uploadErr) throw uploadErr
 
       const data = await apiClient.post('/reference-photos', {
-        session_id:   currentSessionId,
+        session_id:   session.key,
         name:         (name ?? '').trim() || file.name.replace(/\.[^.]+$/, ''),
         storage_path: storagePath,
       })
@@ -158,7 +152,7 @@ export const usePhotoStore = defineStore('photo', () => {
     if (!authStore.user?.id) return
     try {
       await apiClient.post('/photo-broadcasts', {
-        session_id: currentSessionId,
+        session_id: session.key,
         photo_id:   photo.id,
         photo_url:  photo.storage_path,
         photo_name: photo.name,
@@ -173,11 +167,10 @@ export const usePhotoStore = defineStore('photo', () => {
   }
 
   function cleanup() {
-    if (channel) { realtime.removeChannel(channel); channel = null }
+    session.close()
     photos.value           = []
     broadcastHistory.value = []
     currentBroadcast.value = null
-    currentSessionId       = null
   }
 
   return {
