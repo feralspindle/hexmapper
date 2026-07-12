@@ -507,8 +507,8 @@ export const useCharacterStore = defineStore('character', () => {
   function adjustLuck(delta) {
     if (!character.value) return
     const luck = character.value.luckTokens ?? { current: 1, max: 3 }
-    // no upper clamp, luck tokens can pile up past max (issue #58)
-    updateField('luckTokens', { ...luck, current: Math.max(0, luck.current + delta) })
+    const capped = Math.min(luck.max, Math.max(0, luck.current + delta))
+    updateField('luckTokens', { ...luck, current: capped })
   }
 
   function updateFieldForChar(id, field, value) {
