@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 const HISTORY_LIMIT = 80
@@ -34,22 +34,19 @@ export const useOracleStore = defineStore('oracle', () => {
     return map
   })
 
-  let _sessionId = null
-  let tablesChannel = null
-  let rowsChannel = null
-  let rollsChannel = null
+  const session = createSessionChannel()
 
   async function init(sessionId) {
-    if (_sessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    _sessionId = sessionId
+    const generation = session.begin(sessionId)
     loading.value = true
     error.value = null
     try {
-      await Promise.all([loadTables(sessionId), loadRolls(sessionId)])
-      if (_sessionId !== sessionId) return
+      await Promise.all([loadTables(sessionId, generation), loadRolls(sessionId, generation)])
+      if (!session.isCurrent(generation)) return
       await loadRows()
-      if (_sessionId !== sessionId) return
+      if (!session.isCurrent(generation)) return
       subscribe(sessionId)
     } catch (err) {
       error.value = err instanceof ApiError ? err.message : String(err)
@@ -58,19 +55,19 @@ export const useOracleStore = defineStore('oracle', () => {
     }
   }
 
-  async function refresh() {
-    const sessionId = _sessionId
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
     if (!sessionId) return
     try {
-      await Promise.all([loadTables(sessionId), loadRolls(sessionId)])
-      if (_sessionId !== sessionId) return
+      await Promise.all([loadTables(sessionId, generation), loadRolls(sessionId, generation)])
+      if (!session.isCurrent(generation)) return
       await loadRows()
     } catch (err) {
       console.error('oracleStore.refresh:', err instanceof ApiError ? err.message : err)
     }
   }
 
-  async function loadTables(sessionId = _sessionId) {
+  async function loadTables(sessionId = session.key, generation = session.generation) {
     if (!sessionId) return
     const { data, error: loadError } = await supabase
       .from('oracle_tables')
@@ -79,7 +76,7 @@ export const useOracleStore = defineStore('oracle', () => {
       .order('updated_at', { ascending: false })
 
     if (loadError) throw loadError
-    if (_sessionId !== sessionId) return
+    if (!session.isCurrent(generation)) return
     tables.value = data ?? []
   }
 
@@ -100,7 +97,7 @@ export const useOracleStore = defineStore('oracle', () => {
     rows.value = data ?? []
   }
 
-  async function loadRolls(sessionId = _sessionId) {
+  async function loadRolls(sessionId = session.key, generation = session.generation) {
     if (!sessionId) return
     const { data, error: loadError } = await supabase
       .from('oracle_rolls')
@@ -110,13 +107,12 @@ export const useOracleStore = defineStore('oracle', () => {
       .limit(HISTORY_LIMIT)
 
     if (loadError) throw loadError
-    if (_sessionId !== sessionId) return
+    if (!session.isCurrent(generation)) return
     rolls.value = data ?? []
   }
 
   function subscribe(sessionId) {
-    tablesChannel = realtime
-      .channel(`oracle:tables:${sessionId}`, { sessionId, onReconnect: () => refresh() })
+    session.open(`oracle:tables:${sessionId}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -133,11 +129,9 @@ export const useOracleStore = defineStore('oracle', () => {
         }
         tables.value = [...tables.value].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
         await loadRows()
-      })
-      .subscribe()
+      }))
 
-    rowsChannel = realtime
-      .channel(`oracle:rows:${sessionId}`, { sessionId })
+    session.open(`oracle:rows:${sessionId}`, { sessionId }, ch => ch
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -152,11 +146,9 @@ export const useOracleStore = defineStore('oracle', () => {
         } else {
           upsertById(rows, event.new)
         }
-      })
-      .subscribe()
+      }))
 
-    rollsChannel = realtime
-      .channel(`oracle:rolls:${sessionId}`, { sessionId })
+    session.open(`oracle:rolls:${sessionId}`, { sessionId }, ch => ch
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -165,15 +157,14 @@ export const useOracleStore = defineStore('oracle', () => {
       }, ({ new: row }) => {
         if (rolls.value.some(roll => roll.id === row.id)) return
         rolls.value = [row, ...rolls.value].slice(0, HISTORY_LIMIT)
-      })
-      .subscribe()
+      }))
   }
 
   async function createTable({ name, description = '', mode = 'weighted' }) {
-    if (!_sessionId) return
+    if (!session.key) return
     return run(async () => {
       const data = await apiClient.post('/oracle-tables', {
-        session_id: _sessionId,
+        session_id: session.key,
         name,
         description,
         mode,
@@ -223,10 +214,10 @@ export const useOracleStore = defineStore('oracle', () => {
   }
 
   async function installPack(packId) {
-    if (!_sessionId) return
+    if (!session.key) return
     return run(async () => {
       const data = await apiClient.post('/oracle-packs/install', {
-        session_id: _sessionId,
+        session_id: session.key,
         pack_id: packId,
       }, 'oracle_pack_install')
       // one install creates a lot of tables and rows, cheaper to refetch than
@@ -249,11 +240,11 @@ export const useOracleStore = defineStore('oracle', () => {
   }
 
   async function roll(payload) {
-    if (!_sessionId || rolling.value) return
+    if (!session.key || rolling.value) return
     rolling.value = true
     return run(async () => {
       const data = await apiClient.post('/oracle-rolls', {
-        session_id: _sessionId,
+        session_id: session.key,
         ...payload,
       }, `oracle_roll_${payload.kind}`)
       if (!rolls.value.some(roll => roll.id === data.id)) {
@@ -286,10 +277,7 @@ export const useOracleStore = defineStore('oracle', () => {
   }
 
   function cleanup() {
-    if (tablesChannel) { realtime.removeChannel(tablesChannel); tablesChannel = null }
-    if (rowsChannel) { realtime.removeChannel(rowsChannel); rowsChannel = null }
-    if (rollsChannel) { realtime.removeChannel(rollsChannel); rollsChannel = null }
-    _sessionId = null
+    session.close()
     tables.value = []
     rows.value = []
     rolls.value = []

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { mergeRealtimeSnapshot } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
@@ -16,11 +16,11 @@ export const useDiceStore = defineStore('dice', () => {
   const pendingRoll = ref(null)
   const latestRoll  = ref(null)
   const rollsWithStreaks = computed(() => withRollStreaks(rolls.value))
-  let channel = null
-  let currentSessionId = null
-  let loadGeneration = 0
+  const session = createSessionChannel()
 
-  async function refreshHistory(sessionId, generation = loadGeneration) {
+  async function refreshHistory(generation = session.generation) {
+    const sessionId = session.key
+    if (!sessionId) return
     const { data } = await supabase
       .from('dice_rolls')
       .select('*')
@@ -28,7 +28,7 @@ export const useDiceStore = defineStore('dice', () => {
       .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT)
 
-    if (currentSessionId !== sessionId || generation !== loadGeneration || !data) return
+    if (!session.isCurrent(generation) || !data) return
 
     rolls.value = mergeRealtimeSnapshot(data, rolls.value, HISTORY_LIMIT)
 
@@ -40,7 +40,7 @@ export const useDiceStore = defineStore('dice', () => {
         .in('roll_id', rollIds)
         .order('created_at', { ascending: true })
 
-      if (currentSessionId === sessionId && generation === loadGeneration && anns) {
+      if (session.isCurrent(generation) && anns) {
         const map = { ...annotations.value }
         for (const annotation of anns) {
           const existing = map[annotation.roll_id] ?? []
@@ -54,14 +54,11 @@ export const useDiceStore = defineStore('dice', () => {
   }
 
   async function init(sessionId) {
-    if (currentSessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    currentSessionId = sessionId
-    const generation = loadGeneration
-    let subscribedRefreshed = false
+    const generation = session.begin(sessionId)
 
-    channel = realtime
-      .channel(`dice:${sessionId}`, { sessionId, onReconnect: () => refreshHistory(sessionId, generation) })
+    session.open(`dice:${sessionId}`, { sessionId, refresh: refreshHistory }, ch => ch
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dice_rolls', filter: `session_id=eq.${sessionId}` },
@@ -84,14 +81,9 @@ export const useDiceStore = defineStore('dice', () => {
             [row.roll_id]: [...existing, row],
           }
         },
-      )
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        refreshHistory(sessionId, generation)
-      })
+      ))
 
-    return refreshHistory(sessionId, generation)
+    return refreshHistory(generation)
   }
 
   async function rollDice(pending, modifier, label = null, characterId = null) {
@@ -105,7 +97,7 @@ export const useDiceStore = defineStore('dice', () => {
 
     try {
       const data = await apiClient.post('/dice-rolls', {
-        session_id:   currentSessionId,
+        session_id:   session.key,
         pending,
         modifier:     modifier ?? 0,
         label:        label ?? null,
@@ -126,13 +118,13 @@ export const useDiceStore = defineStore('dice', () => {
 
   async function addAnnotation(rollId, body) {
     const authStore = useAuthStore()
-    if (!body.trim() || !currentSessionId) return
+    if (!body.trim() || !session.key) return
 
     const tempId = `pending-${crypto.randomUUID()}`
     const tempAnn = {
       id:           tempId,
       roll_id:      rollId,
-      session_id:   currentSessionId,
+      session_id:   session.key,
       user_id:      authStore.user?.id,
       display_name: authStore.displayName,
       body:         body.trim(),
@@ -145,7 +137,7 @@ export const useDiceStore = defineStore('dice', () => {
     try {
       const data = await apiClient.post('/dice-roll-annotations', {
         roll_id:    rollId,
-        session_id: currentSessionId,
+        session_id: session.key,
         body:       body.trim(),
       }, 'add_annotation')
       annotations.value = {
@@ -162,16 +154,11 @@ export const useDiceStore = defineStore('dice', () => {
   }
 
   function cleanup() {
-    loadGeneration += 1
-    if (channel) {
-      realtime.removeChannel(channel)
-      channel = null
-    }
+    session.close()
     rolls.value       = []
     annotations.value = {}
     pendingRoll.value = null
     latestRoll.value  = null
-    currentSessionId  = null
   }
 
   return { rolls, rollsWithStreaks, annotations, pendingRoll, latestRoll, init, rollDice, addAnnotation, cleanup }

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useCalendarStore } from '@/stores/calendarStore.js'
 
@@ -10,36 +10,13 @@ export const useJournalStore = defineStore('journal', () => {
   const entries = ref([])
   const error = ref(null)
 
-  let channel = null
-  let _sessionId = null
+  const session = createSessionChannel()
 
   async function init(sessionId) {
-    if (_sessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    _sessionId = sessionId
-    await refresh()
-    _subscribe(sessionId)
-  }
-
-  async function refresh() {
-    if (!_sessionId) return
-    try {
-      entries.value = (await apiClient.get(`/journal-entries?session_id=${_sessionId}`)) ?? []
-    } catch (err) {
-      _fail('refresh', err)
-    }
-  }
-
-  function cleanup() {
-    if (channel) { realtime.removeChannel(channel); channel = null }
-    _sessionId = null
-    entries.value = []
-    error.value = null
-  }
-
-  function _subscribe(sessionId) {
-    channel = realtime
-      .channel(`journal:${sessionId}`, { sessionId, onReconnect: () => refresh() })
+    const generation = session.begin(sessionId)
+    session.open(`journal:${sessionId}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -51,8 +28,26 @@ export const useJournalStore = defineStore('journal', () => {
           return
         }
         _apply(payload.new)
-      })
-      .subscribe()
+      }))
+    await refresh(generation)
+  }
+
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
+    if (!sessionId) return
+    try {
+      const rows = (await apiClient.get(`/journal-entries?session_id=${sessionId}`)) ?? []
+      if (!session.isCurrent(generation)) return
+      entries.value = rows
+    } catch (err) {
+      _fail('refresh', err)
+    }
+  }
+
+  function cleanup() {
+    session.close()
+    entries.value = []
+    error.value = null
   }
 
   function _gameDate() {
@@ -66,21 +61,21 @@ export const useJournalStore = defineStore('journal', () => {
   }
 
   async function addProse(body) {
-    if (!_sessionId || !body?.trim()) return null
+    if (!session.key || !body?.trim()) return null
     return _create({ kind: 'prose', body: body.trim() })
   }
 
   // pin = {source: 'oracle'|'dice', label, text, detail?} - a snapshot, not a
   // reference, so the journal survives history trimming
   async function pin(pinPayload) {
-    if (!_sessionId) return null
+    if (!session.key) return null
     return _create({ kind: 'pin', pin: pinPayload })
   }
 
   async function _create(payload) {
     try {
       const row = await apiClient.post('/journal-entries', {
-        session_id: _sessionId,
+        session_id: session.key,
         game_date: _gameDate(),
         ...payload,
       }, `journal_${payload.kind}`)
