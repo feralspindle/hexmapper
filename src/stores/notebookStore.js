@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
 import { useAuthStore } from '@/stores/authStore.js'
@@ -13,10 +13,8 @@ export const useNotebookStore = defineStore('notebook', () => {
   const notes     = ref([])
   const editingBy = ref({}) // { 'quest:id': string[], 'note:id': string[] }
 
-  let questsChannel = null
-  let notesChannel  = null
-  let editChannel   = null
-  let _sessionId    = null
+  const session = createSessionChannel()
+  let editChannel = null
 
   const _editByUser  = {}   // { key: { userId: name } }  — internal dedup map
   const _staleTimers = {}   // clear stale indicators if 'done' is never received (tab close)
@@ -46,8 +44,7 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   function _subscribeEditing(sessionId) {
-    editChannel = realtime
-      .channel(`notebook:editing:${sessionId}`, { sessionId })
+    editChannel = session.open(`notebook:editing:${sessionId}`, { sessionId }, ch => ch
       .on('broadcast', { event: 'editing' }, ({ payload }) => {
         const authStore = useAuthStore()
         if (payload.user_id === (authStore.user?.id ?? CLIENT_ID)) return
@@ -57,8 +54,7 @@ export const useNotebookStore = defineStore('notebook', () => {
         const authStore = useAuthStore()
         if (payload.user_id === (authStore.user?.id ?? CLIENT_ID)) return
         _applyDone(payload.kind, payload.id, payload.user_id)
-      })
-      .subscribe()
+      }))
   }
 
   function setEditing(kind, id) {
@@ -81,27 +77,25 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   async function init(sessionId) {
-    if (_sessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    _sessionId = sessionId
-    await Promise.all([_loadQuests(sessionId), _loadNotes(sessionId)])
-    if (_sessionId !== sessionId) return
+    const generation = session.begin(sessionId)
+    await Promise.all([_loadQuests(sessionId, generation), _loadNotes(sessionId, generation)])
+    if (!session.isCurrent(generation)) return
     _subscribeQuests(sessionId)
     _subscribeNotes(sessionId)
     _subscribeEditing(sessionId)
   }
 
-  async function refresh() {
-    const sessionId = _sessionId
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
     if (!sessionId) return
-    await Promise.all([_loadQuests(sessionId), _loadNotes(sessionId)])
+    await Promise.all([_loadQuests(sessionId, generation), _loadNotes(sessionId, generation)])
   }
 
   function cleanup() {
-    if (questsChannel) { realtime.removeChannel(questsChannel); questsChannel = null }
-    if (notesChannel)  { realtime.removeChannel(notesChannel);  notesChannel  = null }
-    if (editChannel)   { realtime.removeChannel(editChannel);   editChannel   = null }
-    _sessionId = null
+    session.close()
+    editChannel = null
     quests.value    = []
     notes.value     = []
     editingBy.value = {}
@@ -109,29 +103,27 @@ export const useNotebookStore = defineStore('notebook', () => {
     for (const k of Object.keys(_staleTimers)) { clearTimeout(_staleTimers[k]); delete _staleTimers[k] }
   }
 
-  async function _loadQuests(sessionId) {
+  async function _loadQuests(sessionId, generation = session.generation) {
     const { data } = await supabase
       .from('party_quests')
       .select('*')
       .eq('session_id', sessionId)
       .order('display_order', { ascending: true })
       .order('created_at',    { ascending: true })
-    if (data && _sessionId === sessionId) quests.value = data
+    if (data && session.isCurrent(generation)) quests.value = data
   }
 
-  async function _loadNotes(sessionId) {
+  async function _loadNotes(sessionId, generation = session.generation) {
     const { data } = await supabase
       .from('party_session_notes')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
-    if (data && _sessionId === sessionId) notes.value = data
+    if (data && session.isCurrent(generation)) notes.value = data
   }
 
   function _subscribeQuests(sessionId) {
-    let subscribedRefreshed = false
-    questsChannel = realtime
-      .channel(`notebook:quests:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
+    session.open(`notebook:quests:${sessionId}:${crypto.randomUUID()}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_quests',
         filter: `session_id=eq.${sessionId}`,
@@ -150,17 +142,11 @@ export const useNotebookStore = defineStore('notebook', () => {
         } else if (e.eventType === 'DELETE') {
           quests.value = quests.value.filter(q => q.id !== e.old.id)
         }
-      })
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        void refresh()
-      })
+      }))
   }
 
   function _subscribeNotes(sessionId) {
-    notesChannel = realtime
-      .channel(`notebook:notes:${sessionId}:${crypto.randomUUID()}`, { sessionId })
+    session.open(`notebook:notes:${sessionId}:${crypto.randomUUID()}`, { sessionId }, ch => ch
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'party_session_notes',
         filter: `session_id=eq.${sessionId}`,
@@ -175,14 +161,13 @@ export const useNotebookStore = defineStore('notebook', () => {
         } else if (e.eventType === 'DELETE') {
           notes.value = notes.value.filter(n => n.id !== e.old.id)
         }
-      })
-      .subscribe()
+      }))
   }
 
   async function addQuest() {
     try {
       const data = await apiClient.post('/party-quests', {
-        session_id:    _sessionId,
+        session_id:    session.key,
         display_order: quests.value.length,
         source_client: CLIENT_ID,
       })
@@ -215,7 +200,7 @@ export const useNotebookStore = defineStore('notebook', () => {
   async function addNote() {
     try {
       const data = await apiClient.post('/party-session-notes', {
-        session_id:    _sessionId,
+        session_id:    session.key,
         source_client: CLIENT_ID,
       })
       if (data) notes.value.unshift(data)

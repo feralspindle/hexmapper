@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
@@ -29,21 +29,22 @@ export const useVaultStore = defineStore('vault', () => {
   // never reused, so tombstones only need to live until cleanup().
   const _deletedLootIds = new Set()
 
-  let lootChannel       = null
-  let itemsChannel      = null
-  let containersChannel = null
-  let ledgerChannel     = null
-  let toastChannel      = null
-  let _sessionId        = null
+  const session = createSessionChannel()
+  let toastChannel = null
 
   const bankItems = computed(() => items.value.filter(i => !i.container_id))
 
   async function init(sessionId) {
-    if (_sessionId === sessionId) return
+    if (session.key === sessionId) return
     cleanup()
-    _sessionId = sessionId
-    await Promise.all([_loadLoot(sessionId), _loadItems(sessionId), _loadContainers(sessionId), _loadLedger(sessionId)])
-    if (_sessionId !== sessionId) return
+    const generation = session.begin(sessionId)
+    await Promise.all([
+      _loadLoot(sessionId, generation),
+      _loadItems(sessionId, generation),
+      _loadContainers(sessionId, generation),
+      _loadLedger(sessionId, generation),
+    ])
+    if (!session.isCurrent(generation)) return
     _subscribeLoot(sessionId)
     _subscribeItems(sessionId)
     _subscribeContainers(sessionId)
@@ -51,19 +52,20 @@ export const useVaultStore = defineStore('vault', () => {
     _subscribeToasts(sessionId)
   }
 
-  async function refresh() {
-    const sessionId = _sessionId
+  async function refresh(generation = session.generation) {
+    const sessionId = session.key
     if (!sessionId) return
-    await Promise.all([_loadLoot(sessionId), _loadItems(sessionId), _loadContainers(sessionId), _loadLedger(sessionId)])
+    await Promise.all([
+      _loadLoot(sessionId, generation),
+      _loadItems(sessionId, generation),
+      _loadContainers(sessionId, generation),
+      _loadLedger(sessionId, generation),
+    ])
   }
 
   function cleanup() {
-    if (lootChannel)       { realtime.removeChannel(lootChannel);       lootChannel       = null }
-    if (itemsChannel)      { realtime.removeChannel(itemsChannel);      itemsChannel      = null }
-    if (containersChannel) { realtime.removeChannel(containersChannel); containersChannel = null }
-    if (ledgerChannel)     { realtime.removeChannel(ledgerChannel);     ledgerChannel     = null }
-    if (toastChannel)      { realtime.removeChannel(toastChannel);      toastChannel      = null }
-    _sessionId       = null
+    session.close()
+    toastChannel     = null
     loot.value       = []
     items.value      = []
     containers.value = []
@@ -71,40 +73,41 @@ export const useVaultStore = defineStore('vault', () => {
     _deletedLootIds.clear()
   }
 
-  async function _loadLoot(sessionId) {
+  async function _loadLoot(sessionId, generation = session.generation) {
     const { data } = await supabase
       .from('party_vault_loot')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data && _sessionId === sessionId) loot.value = data.filter(l => !_deletedLootIds.has(l.id))
+    if (data && session.isCurrent(generation)) loot.value = data.filter(l => !_deletedLootIds.has(l.id))
   }
 
-  async function _loadItems(sessionId) {
+  async function _loadItems(sessionId, generation = session.generation) {
     const { data } = await supabase
       .from('party_vault_items')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data && _sessionId === sessionId) items.value = data
+    if (data && session.isCurrent(generation)) items.value = data
   }
 
-  async function _loadContainers(sessionId) {
+  async function _loadContainers(sessionId, generation = session.generation) {
     const { data } = await supabase
       .from('party_vault_containers')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data && _sessionId === sessionId) containers.value = data
+    if (data && session.isCurrent(generation)) containers.value = data
   }
 
   function _subscribeToasts(sessionId) {
-    toastChannel = realtime
-      .channel(`vault:toasts:${sessionId}`, { sessionId, config: { broadcast: { self: true } } })
-      .on('broadcast', { event: 'loot_toast' }, ({ payload }) => {
+    toastChannel = session.open(
+      `vault:toasts:${sessionId}`,
+      { sessionId, config: { broadcast: { self: true } } },
+      ch => ch.on('broadcast', { event: 'loot_toast' }, ({ payload }) => {
         useLootToast().push(payload)
-      })
-      .subscribe()
+      }),
+    )
   }
 
   function broadcastLootToast(data) {
@@ -112,9 +115,7 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   function _subscribeLoot(sessionId) {
-    let subscribedRefreshed = false
-    lootChannel = realtime
-      .channel(`vault:loot:${sessionId}:${crypto.randomUUID()}`, { sessionId, onReconnect: () => refresh() })
+    session.open(`vault:loot:${sessionId}:${crypto.randomUUID()}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_loot', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
@@ -128,17 +129,11 @@ export const useVaultStore = defineStore('vault', () => {
           _deletedLootIds.add(e.old.id)
           loot.value = loot.value.filter(l => l.id !== e.old.id)
         }
-      })
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        void refresh()
-      })
+      }))
   }
 
   function _subscribeItems(sessionId) {
-    itemsChannel = realtime
-      .channel(`vault:items:${sessionId}:${crypto.randomUUID()}`, { sessionId })
+    session.open(`vault:items:${sessionId}:${crypto.randomUUID()}`, { sessionId }, ch => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_items', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
@@ -149,13 +144,11 @@ export const useVaultStore = defineStore('vault', () => {
         } else if (e.eventType === 'DELETE') {
           items.value = items.value.filter(i => i.id !== e.old.id)
         }
-      })
-      .subscribe()
+      }))
   }
 
   function _subscribeContainers(sessionId) {
-    containersChannel = realtime
-      .channel(`vault:containers:${sessionId}:${crypto.randomUUID()}`, { sessionId })
+    session.open(`vault:containers:${sessionId}:${crypto.randomUUID()}`, { sessionId }, ch => ch
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_vault_containers', filter: `session_id=eq.${sessionId}` }, e => {
         if (e.new?.source_client === CLIENT_ID || e.old?.source_client === CLIENT_ID) return
         if (e.eventType === 'INSERT') {
@@ -167,34 +160,31 @@ export const useVaultStore = defineStore('vault', () => {
           containers.value = containers.value.filter(c => c.id !== e.old.id)
           items.value = items.value.map(i => i.container_id === e.old.id ? { ...i, container_id: null } : i)
         }
-      })
-      .subscribe()
+      }))
   }
 
-  async function _loadLedger(sessionId) {
+  async function _loadLedger(sessionId, generation = session.generation) {
     const { data } = await supabase
       .from('party_bank_ledger')
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
       .limit(100)
-    if (data && _sessionId === sessionId) ledger.value = data
+    if (data && session.isCurrent(generation)) ledger.value = data
   }
 
   function _subscribeLedger(sessionId) {
-    ledgerChannel = realtime
-      .channel(`vault:ledger:${sessionId}:${crypto.randomUUID()}`, { sessionId })
+    session.open(`vault:ledger:${sessionId}:${crypto.randomUUID()}`, { sessionId }, ch => ch
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'party_bank_ledger', filter: `session_id=eq.${sessionId}` }, e => {
         if (!ledger.value.find(l => l.id === e.new.id)) ledger.value = [e.new, ...ledger.value]
-      })
-      .subscribe()
+      }))
   }
 
   async function _addLedgerEntry({ description, goldChange = 0, silverChange = 0, copperChange = 0 }) {
     const characterStore = useCharacterStore()
     try {
       const data = await apiClient.post('/vault-ledger', {
-        session_id:     _sessionId,
+        session_id:     session.key,
         description,
         character_name: characterStore.character?.name ?? null,
         gold_change:    goldChange,
@@ -238,7 +228,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function addLoot(name, quantity = 1, notes = '', lootType = 'item', currency = null) {
     try {
       const data = await apiClient.post('/vault-loot', {
-        session_id:    _sessionId,
+        session_id:    session.key,
         name:          name.trim(),
         quantity,
         notes,
@@ -309,7 +299,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function _addVaultItem(containerId, name, quantity, notes = '', slots = 0, itemType = 'sundry', currency = null) {
     try {
       const data = await apiClient.post('/vault-items', {
-        session_id:    _sessionId,
+        session_id:    session.key,
         container_id:  containerId || null,
         name,
         quantity,
@@ -439,7 +429,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function addContainer(name, gearSlots) {
     try {
       const data = await apiClient.post('/vault-containers', {
-        session_id:    _sessionId,
+        session_id:    session.key,
         name:          name.trim(),
         gear_slots:    gearSlots,
         source_client: CLIENT_ID,

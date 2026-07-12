@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { pendingKeys } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { createPresenceChannel } from '@/lib/presenceChannel.js'
@@ -37,7 +38,7 @@ export const useSessionStore = defineStore('session', () => {
   const joinedSessions = ref([])
   const sessionsLoading = ref(false)
 
-  let sessionChannel  = null
+  const configChannel = createSessionChannel()
   let presenceChannel = null
   let _stopAuthWatch  = null
   let _stopPageHide   = null
@@ -68,15 +69,14 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function _subscribeToSession(id) {
-    if (sessionChannel) realtime.removeChannel(sessionChannel)
-    sessionChannel = realtime
-      .channel(`session:${id}:config`, {
-        sessionId: id,
-        onReconnect: async () => {
-          const { data } = await supabase.from('sessions').select('*').eq('id', id).maybeSingle()
-          if (data) _applySessionRow(data)
-        },
-      })
+    const generation = configChannel.begin(id)
+    configChannel.open(`session:${id}:config`, {
+      sessionId: id,
+      refresh: async () => {
+        const { data } = await supabase.from('sessions').select('*').eq('id', id).maybeSingle()
+        if (data && configChannel.isCurrent(generation)) _applySessionRow(data)
+      },
+    }, ch => ch
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${id}` },
@@ -95,8 +95,7 @@ export const useSessionStore = defineStore('session', () => {
           if (fresh('crawl_round'))      crawlRound.value     = row.crawl_round ?? 0
           if (fresh('crawl_check_every')) crawlCheckEvery.value = row.crawl_check_every ?? 3
         },
-      )
-      .subscribe()
+      ))
   }
 
   async function fetchUserSessions() {
@@ -371,7 +370,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function cleanup() {
-    if (sessionChannel) { realtime.removeChannel(sessionChannel); sessionChannel = null }
+    configChannel.close()
     cleanupPresence()
     sessionId.value      = null
     sessionName.value    = 'Untitled Campaign'

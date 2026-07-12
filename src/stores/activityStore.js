@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
-import { realtime } from '@/lib/realtime.js'
+import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { mergeRealtimeSnapshot } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 
@@ -9,12 +9,10 @@ const FEED_LIMIT = 100
 
 export const useActivityStore = defineStore('activity', () => {
   const activities = ref([])
-  let channel = null
-  let _dungeonId = null
-  let _initGeneration = 0
+  const session = createSessionChannel()
 
-  async function refresh(generation = _initGeneration) {
-    const dungeonId = _dungeonId
+  async function refresh(generation = session.generation) {
+    const dungeonId = session.key
     if (!dungeonId) return
     const { data } = await supabase
       .from('dungeon_activity')
@@ -22,19 +20,15 @@ export const useActivityStore = defineStore('activity', () => {
       .eq('dungeon_id', dungeonId)
       .order('created_at', { ascending: false })
       .limit(FEED_LIMIT)
-    if (!data || _dungeonId !== dungeonId || generation !== _initGeneration) return
+    if (!data || !session.isCurrent(generation)) return
     activities.value = mergeRealtimeSnapshot(data, activities.value, FEED_LIMIT)
   }
 
   async function init(sessionId, dungeonId) {
-    const generation = ++_initGeneration
-    _dungeonId = dungeonId
+    const generation = session.begin(dungeonId)
     activities.value = []
-    if (channel) { realtime.removeChannel(channel); channel = null }
 
-    let subscribedRefreshed = false
-    channel = realtime
-      .channel(`dungeon:${dungeonId}:activity`, { sessionId, onReconnect: () => refresh(generation) })
+    session.open(`dungeon:${dungeonId}:activity`, { sessionId, refresh }, ch => ch
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dungeon_activity', filter: `dungeon_id=eq.${dungeonId}` },
@@ -43,23 +37,18 @@ export const useActivityStore = defineStore('activity', () => {
             activities.value = [row, ...activities.value].slice(0, FEED_LIMIT)
           }
         },
-      )
-      .subscribe(status => {
-        if (status !== 'SUBSCRIBED' || subscribedRefreshed) return
-        subscribedRefreshed = true
-        void refresh(generation)
-      })
+      ))
 
     return refresh(generation)
   }
 
   async function record(verb, what) {
-    if (!_dungeonId) return
+    if (!session.key) return
 
     let data
     try {
       data = await apiClient.post('/dungeon-activity', {
-        dungeon_id: _dungeonId,
+        dungeon_id: session.key,
         verb,
         what: what ?? '',
       })
@@ -74,10 +63,8 @@ export const useActivityStore = defineStore('activity', () => {
   }
 
   function cleanup() {
-    _initGeneration += 1
-    if (channel) { realtime.removeChannel(channel); channel = null }
+    session.close()
     activities.value = []
-    _dungeonId = null
   }
 
   return { activities, init, refresh, record, cleanup }
