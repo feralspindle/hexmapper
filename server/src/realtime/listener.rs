@@ -9,12 +9,18 @@ use crate::state::AppState;
 
 pub fn spawn_event_listener(database_url: String, state: AppState) {
     tokio::spawn(async move {
+        // Carrying the cursor across restarts lets the next listen() resume via
+        // catch_up instead of re-seeding at max(id), so a listener blip no longer
+        // needs disconnect_all() — clients keep their sockets and the missed
+        // events are dispatched on recovery. Broadcasts and presence never flow
+        // through this listener, so nothing else is lost during the gap.
+        let mut resume_from: Option<i64> = None;
         loop {
-            match listen(&database_url, &state).await {
+            match listen(&database_url, &state, &mut resume_from).await {
                 Ok(()) => tracing::warn!("realtime event listener ended"),
                 Err(error) => tracing::error!(%error, "realtime event listener failed"),
             }
-            state.realtime().disconnect_all().await;
+            metrics::counter!("realtime_listener_restarts_total").increment(1);
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
     });
@@ -23,8 +29,8 @@ pub fn spawn_event_listener(database_url: String, state: AppState) {
 const EVENT_BURST: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id = $1 or id > $2 order by id";
 const EVENTS_AFTER: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id > $1 order by id";
 
-/// Retries transient query failures so one DB blip doesn't tear down every
-/// realtime client (the caller's error path is `disconnect_all`).
+/// Retries transient query failures before surfacing them; the caller's error
+/// path restarts the listener and replays from the resume cursor.
 async fn retry_query<T, Fut>(
     mut run: impl FnMut() -> Fut,
     what: &'static str,
@@ -142,14 +148,29 @@ impl BurstCursor {
     }
 }
 
-async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error> {
+async fn listen(
+    database_url: &str,
+    state: &AppState,
+    resume_from: &mut Option<i64>,
+) -> Result<(), sqlx::Error> {
     let mut listener = PgListener::connect(database_url).await?;
     listener.listen("hexmap_events").await?;
-    let initial: i64 = retry_query(
-        || sqlx::query_scalar("select coalesce(max(id), 0) from events").fetch_one(state.pool()),
-        "max_event_id",
-    )
-    .await?;
+    let initial: i64 = match *resume_from {
+        // a previous listen() dispatched through this id; deliver everything
+        // that committed while the listener was down before taking NOTIFYs
+        Some(last_seen) => catch_up(state, last_seen).await?,
+        None => {
+            retry_query(
+                || {
+                    sqlx::query_scalar("select coalesce(max(id), 0) from events")
+                        .fetch_one(state.pool())
+                },
+                "max_event_id",
+            )
+            .await?
+        }
+    };
+    *resume_from = Some(initial);
     let mut cursor = BurstCursor::new(initial);
     loop {
         // `try_recv` returns Ok(None) when the connection dropped and was silently
@@ -185,12 +206,16 @@ async fn listen(database_url: &str, state: &AppState) -> Result<(), sqlx::Error>
                     cursor.note_dispatched(row.id, id);
                     dispatch_row(state, row).await?;
                 }
+                // Under-advance on mid-burst failure is fine: a restart re-sends
+                // the tail of the burst and clients apply row upserts by id.
+                *resume_from = Some(cursor.last_seen);
             }
             None => {
                 metrics::counter!("realtime_listener_reconnects_total").increment(1);
                 tracing::warn!("realtime listener reconnected; scanning for missed events");
                 let last_seen = catch_up(state, cursor.last_seen).await?;
                 cursor.reset(last_seen);
+                *resume_from = Some(last_seen);
             }
         }
     }
