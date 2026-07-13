@@ -20,6 +20,7 @@ export const REALTIME_TABLES = {
   party_calendar_settings: 'party_calendar_settings',
   party_quest: 'party_quests',
   party_session_note: 'party_session_notes',
+  party_vault_activity: 'party_vault_activity',
   party_vault_container: 'party_vault_containers',
   party_vault_item: 'party_vault_items',
   party_vault_loot: 'party_vault_loot',

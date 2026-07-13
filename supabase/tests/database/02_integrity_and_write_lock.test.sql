@@ -175,8 +175,8 @@ select is(
       and policyname in ('es_lock_no_insert', 'es_lock_no_update', 'es_lock_no_delete')
       and permissive = 'RESTRICTIVE'
   ),
-  28::bigint,
-  'all 28 event-sourced projections have restrictive client write locks'
+  29::bigint,
+  'all 29 event-sourced projections have restrictive client write locks'
 );
 
 select is(
@@ -187,7 +187,7 @@ select is(
       and policyname in ('es_lock_no_insert', 'es_lock_no_update', 'es_lock_no_delete')
       and permissive = 'RESTRICTIVE'
   ),
-  84::bigint,
+  87::bigint,
   'every event-sourced projection blocks insert, update, and delete'
 );
 

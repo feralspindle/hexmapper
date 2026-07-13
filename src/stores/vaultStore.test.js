@@ -50,10 +50,11 @@ describe('vaultStore', () => {
       addGearItem: vi.fn(),
       addGearItemToChar: vi.fn(),
       updateFieldForChar: vi.fn(),
+      deleteGearItem: vi.fn(),
     }
   })
 
-  test('init loads loot, items, containers, and ledger, and opens five channels', async () => {
+  test('init loads loot, items, containers, and ledger, and opens six channels', async () => {
     kit.responses.party_vault_loot = { data: [lootItem()], error: null }
     kit.responses.party_vault_items = { data: [{ id: 'i1', container_id: null }], error: null }
     kit.responses.party_vault_containers = { data: [{ id: 'c1', name: 'Mule' }], error: null }
@@ -65,7 +66,7 @@ describe('vaultStore', () => {
     expect(store.items).toHaveLength(1)
     expect(store.containers).toHaveLength(1)
     expect(store.ledger).toHaveLength(1)
-    expect(kit.channels).toHaveLength(5)
+    expect(kit.channels).toHaveLength(6)
   })
 
   test('bankItems only includes items outside containers', async () => {
@@ -186,7 +187,7 @@ describe('vaultStore', () => {
     test.each([
       ['a Ruby gem stack', { name: 'Ruby', quantity: 25 }, 3],
       ['coins', { name: 'Gold coins', loot_type: 'coins', currency: 'gold', quantity: 250 }, 3],
-      ['ordinary items', { name: 'Arrows', quantity: 20 }, 20],
+      ['ordinary items', { name: 'Arrows', quantity: 20 }, 1],
     ])('%s take the right number of slots', async (_label, item, expectedSlots) => {
       kit.api['post /vault-items'] = body => ({ id: 'vi1', ...body })
       const store = useVaultStore()
@@ -358,6 +359,162 @@ describe('vaultStore', () => {
     expect(store.containers).toEqual([])
   })
 
+  describe('vault ↔ gear transfers', () => {
+    const storedItem = (overrides = {}) => ({
+      id: 'i1',
+      session_id: 's1',
+      container_id: 'c1',
+      name: 'Rope',
+      quantity: 1,
+      slots: 1,
+      item_type: 'sundry',
+      currency: null,
+      ...overrides,
+    })
+
+    test('taking a stored item adds it to gear and deletes the row', async () => {
+      kit.responses.party_vault_containers = { data: [{ id: 'c1', name: 'Mule' }], error: null }
+      const store = useVaultStore()
+      await store.init('s1')
+      store.items.push(storedItem())
+
+      await store.takeVaultItem(store.items[0])
+
+      expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Rope', slots: 1, quantity: 1, type: 'sundry' })
+      expect(kit.apiClient.delete).toHaveBeenCalledWith('/vault-items/i1')
+      expect(store.items).toEqual([])
+      expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-activity', expect.objectContaining({
+        verb: 'took',
+        what: 'Rope from Mule',
+        character_name: 'Hero',
+      }))
+    })
+
+    test('taking part of a stack shrinks it in place', async () => {
+      const store = useVaultStore()
+      await store.init('s1')
+      store.items.push(storedItem({ quantity: 5 }))
+
+      await store.takeVaultItem(store.items[0], 2)
+
+      expect(kit.character.addGearItem).toHaveBeenCalledWith({ name: 'Rope', slots: 1, quantity: 2, type: 'sundry' })
+      expect(kit.apiClient.patch).toHaveBeenCalledWith('/vault-items/i1', expect.objectContaining({ quantity: 3 }))
+      expect(kit.apiClient.delete).not.toHaveBeenCalled()
+      expect(store.items[0]).toMatchObject({ id: 'i1', quantity: 3 })
+    })
+
+    test('taking a currency item pays coins instead of gear', async () => {
+      const store = useVaultStore()
+      await store.init('s1')
+      store.items.push(storedItem({ name: 'Gold Coins', currency: 'gold', quantity: 40 }))
+
+      await store.takeVaultItem(store.items[0], 40)
+
+      expect(kit.character.adjustMoney).toHaveBeenCalledWith('gold', 40)
+      expect(kit.character.addGearItem).not.toHaveBeenCalled()
+    })
+
+    test('taking without an active character is a no-op', async () => {
+      kit.character.character = null
+      const store = useVaultStore()
+      await store.init('s1')
+      store.items.push(storedItem())
+
+      await store.takeVaultItem(store.items[0])
+
+      expect(kit.character.addGearItem).not.toHaveBeenCalled()
+      expect(store.items).toHaveLength(1)
+    })
+
+    test('stashing gear creates a vault item then removes the gear', async () => {
+      kit.api['post /vault-items'] = body => ({ id: 'vi9', ...body })
+      kit.responses.party_vault_containers = { data: [{ id: 'c1', name: 'Mule' }], error: null }
+      const store = useVaultStore()
+      await store.init('s1')
+
+      await store.stashGearItem({ instanceId: 'g1', name: 'Rope', quantity: 2, slots: 1, type: 'sundry' }, 'c1')
+
+      expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-items', expect.objectContaining({
+        container_id: 'c1',
+        name: 'Rope',
+        quantity: 2,
+        slots: 1,
+        item_type: 'sundry',
+      }))
+      expect(kit.character.deleteGearItem).toHaveBeenCalledWith('g1')
+      expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-activity', expect.objectContaining({
+        verb: 'stored',
+        what: 'Rope ×2 in Mule',
+      }))
+    })
+
+    test('stashing gear keeps the gear when the vault write fails', async () => {
+      kit.api['post /vault-items'] = new Error('boom')
+      const store = useVaultStore()
+      await store.init('s1')
+
+      await store.stashGearItem({ instanceId: 'g1', name: 'Rope', quantity: 1, slots: 1, type: 'sundry' }, 'c1')
+
+      expect(kit.character.deleteGearItem).not.toHaveBeenCalled()
+    })
+
+    test('moving a stored item patches its container and logs the move', async () => {
+      kit.responses.party_vault_containers = { data: [{ id: 'c1', name: 'Mule' }, { id: 'c2', name: 'Cart' }], error: null }
+      const store = useVaultStore()
+      await store.init('s1')
+      store.items.push(storedItem())
+
+      await store.moveVaultItem(store.items[0], 'c2')
+
+      expect(kit.apiClient.patch).toHaveBeenCalledWith('/vault-items/i1', expect.objectContaining({ container_id: 'c2' }))
+      expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-activity', expect.objectContaining({
+        verb: 'moved',
+        what: 'Rope from Mule to Cart',
+      }))
+    })
+  })
+
+  describe('activity log', () => {
+    test('claiming loot records an activity entry', async () => {
+      const store = useVaultStore()
+      await store.init('s1')
+      store.loot.push(lootItem({ quantity: 2 }))
+
+      await store.claimLoot(store.loot[0])
+
+      expect(kit.apiClient.post).toHaveBeenCalledWith('/vault-activity', expect.objectContaining({
+        session_id: 's1',
+        verb: 'claimed',
+        what: 'Longsword ×2 from loot',
+        character_name: 'Hero',
+      }))
+    })
+
+    test('splitting item loot logs one split entry, not one per share', async () => {
+      kit.api['post /vault-loot'] = body => lootItem({ id: `share-${body.notes}`, ...body })
+      const store = useVaultStore()
+      await store.init('s1')
+      store.loot.push(lootItem({ name: 'Arrows', quantity: 4 }))
+
+      await store.splitLoot(store.loot[0], [{ id: 'c1', data: { name: 'A' } }, { id: 'c2', data: { name: 'B' } }])
+
+      const activityCalls = kit.apiClient.post.mock.calls.filter(([path]) => path === '/vault-activity')
+      expect(activityCalls).toHaveLength(1)
+      expect(activityCalls[0][1]).toMatchObject({ verb: 'split', what: 'Arrows ×4 between 2 players' })
+    })
+
+    test('realtime activity inserts prepend to the feed', async () => {
+      const store = useVaultStore()
+      await store.init('s1')
+      store.activity.push({ id: 'a1' })
+
+      const activityChannel = kit.channels.find(c => c.name.startsWith('vault:activity:'))
+      activityChannel.emitPostgres('party_vault_activity', 'INSERT', { id: 'a2', verb: 'took', what: 'Rope from Mule' })
+
+      expect(store.activity.map(a => a.id)).toEqual(['a2', 'a1'])
+    })
+  })
+
   test('loot toast broadcasts loop back to the local toast queue (self-receive)', async () => {
     const store = useVaultStore()
     await store.init('s1')
@@ -385,7 +542,7 @@ describe('vaultStore', () => {
     await first
 
     const liveChannels = kit.channels.filter(c => !c.removed)
-    expect(liveChannels).toHaveLength(5)
+    expect(liveChannels).toHaveLength(6)
     expect(liveChannels.every(c => c.name.includes(':s2'))).toBe(true)
   })
 

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::authz;
-use crate::domains::vault::{container_projection, item_projection, ledger_projection, loot_projection};
+use crate::domains::vault::{activity_projection, container_projection, item_projection, ledger_projection, loot_projection};
 use crate::error::AppError;
 use crate::retry_tx;
 use crate::state::AppState;
@@ -209,6 +209,45 @@ pub async fn delete_item(
         item_projection::delete(&mut tx, id, &metadata).await
     })?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ---- activity log --------------------------------------------------------
+
+const ACTIVITY_MAX_LEN: usize = 500;
+
+#[derive(Debug, Deserialize)]
+pub struct RecordVaultActivityRequest {
+    pub session_id: Uuid,
+    pub verb: String,
+    #[serde(default)]
+    pub what: String,
+    pub character_name: Option<String>,
+}
+
+pub async fn record_activity(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(req): Json<RecordVaultActivityRequest>,
+) -> Result<Json<Value>, AppError> {
+    let verb = req.verb.trim();
+    if verb.is_empty() {
+        return Err(AppError::BadRequest("activity verb cannot be empty".to_string()));
+    }
+    if verb.chars().count() > ACTIVITY_MAX_LEN || req.what.chars().count() > ACTIVITY_MAX_LEN {
+        return Err(AppError::BadRequest(format!("activity fields cannot exceed {ACTIVITY_MAX_LEN} characters")));
+    }
+    if !authz::is_session_member(state.pool(), auth.user_id, req.session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let display_name = authz::resolve_display_name(state.pool(), auth.user_id).await?;
+    let metadata = auth.metadata();
+    let row = retry_tx!(state.pool(), |tx| {
+        activity_projection::create(
+            &mut tx, Uuid::new_v4(), req.session_id, auth.user_id, &display_name,
+            req.character_name.as_deref(), verb, &req.what, &metadata,
+        ).await
+    })?;
+    Ok(Json(row))
 }
 
 // ---- bank ledger ---------------------------------------------------------
