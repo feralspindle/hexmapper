@@ -59,8 +59,57 @@ jobs:
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           rsync -avz --delete -e "ssh -i ~/.ssh/id_ed25519" dist/ "$USER@$HOST:/opt/hexmap/www/"
 
-  e2e-staging:
+  # A push touching both frontend and server/migration paths triggers this
+  # workflow AND deploy-server, and this one's post-deploy E2E used to race the
+  # slower server deploy - freshly merged specs ran against the old backend and
+  # failed (first hit: PR #141). Wait for the sibling deploy-server run on this
+  # commit before testing. Waiting on the whole run (not just its deploy job)
+  # also keeps the two E2E calls from overlapping, since test-e2e.yml's
+  # concurrency group cancels in-progress runs.
+  wait-for-server-deploy:
     needs: build-and-ship
+    if: github.ref_name == 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for deploy-server on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          # a push-triggered run for this sha exists as soon as the push lands,
+          # unless deploy-server was path-filtered out entirely (then no run
+          # object is ever created), so a short probe is enough to tell the two
+          # cases apart
+          run_id=""
+          for i in 1 2 3; do
+            run_id=$(gh run list -R "$REPO" --workflow=deploy-server.yml --commit "$SHA" \
+              --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$run_id" ] && break
+            sleep 10
+          done
+          if [ -z "$run_id" ]; then
+            echo "no deploy-server run for $SHA - frontend-only push, nothing to wait for"
+            exit 0
+          fi
+          echo "waiting for deploy-server run $run_id"
+          while true; do
+            status=$(gh run view -R "$REPO" "$run_id" --json status,conclusion --jq '"\(.status) \(.conclusion)"')
+            echo "  deploy-server: $status"
+            case "$status" in
+              "completed success") exit 0 ;;
+              completed*)
+                echo "::error::deploy-server run $run_id finished '$status' - E2E would test against a stale backend, fix that deploy first"
+                exit 1 ;;
+            esac
+            sleep 30
+          done
+
+  e2e-staging:
+    needs: wait-for-server-deploy
     if: github.ref_name == 'staging'
     uses: ./.github/workflows/test-e2e.yml
     secrets: inherit
