@@ -504,7 +504,7 @@
             <span class="pv-section-title">Group Storage</span>
             <span v-if="vaultStore.containers.length" class="pv-badge">{{ vaultStore.containers.length }}</span>
           </button>
-          <button class="pv-add-btn" @click="toggleAddContainer">+ Add</button>
+          <button class="pv-add-btn" data-testid="vault-add-container" @click="toggleAddContainer">+ Add</button>
         </div>
 
         <template v-if="storageOpen">
@@ -514,13 +514,14 @@
               v-model="newContainerName"
               class="pv-input"
               placeholder="Name (e.g. Donkey Cart)…"
+              data-testid="vault-container-name"
               @keydown.enter="submitNewContainer"
               @keydown.escape="cancelAddContainer"
             />
             <div class="pv-form-row">
               <label class="pv-form-label">Slots</label>
               <input v-model.number="newContainerSlots" type="number" min="1" class="pv-input pv-input--qty" @keydown.enter="submitNewContainer" />
-              <button class="pv-submit-btn" @click="submitNewContainer">Add</button>
+              <button class="pv-submit-btn" data-testid="vault-container-submit" @click="submitNewContainer">Add</button>
               <button class="pv-cancel-btn" @click="cancelAddContainer">✕</button>
             </div>
           </div>
@@ -612,11 +613,11 @@
                       <option value="weapon">Weapon</option>
                       <option value="armor">Armor</option>
                     </select>
-                    <button class="pv-submit-btn" @click="saveEditItem(item.id)">Save</button>
+                    <button class="pv-submit-btn" @click="saveEditItem(item)">Save</button>
                     <button class="pv-cancel-btn" @click="editingItemId = null">✕</button>
                   </div>
                 </div>
-                <div v-else class="pv-gear-item">
+                <div v-else class="pv-gear-item" data-testid="vault-stored-item">
                   <div class="pv-gear-main">
                     <div class="pv-gear-name">{{ item.name }}</div>
                     <div class="pv-gear-sub">
@@ -624,17 +625,71 @@
                     </div>
                   </div>
                   <span class="pv-gear-badge" :class="item.item_type ?? 'sundry'">{{ item.item_type ?? 'sundry' }}</span>
+                  <button
+                    class="pv-gear-edit-btn"
+                    :disabled="!characterStore.character"
+                    :title="characterStore.character ? 'Take to my gear' : 'Select a character first'"
+                    data-testid="vault-item-take"
+                    @click="onTakeClick(item)"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                  </button>
+                  <button
+                    v-if="vaultStore.containers.length > 1"
+                    class="pv-gear-edit-btn"
+                    title="Move to another container"
+                    data-testid="vault-item-move"
+                    @click="onMoveClick(item)"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M5 12h14"/>
+                      <path d="M12 5l7 7-7 7"/>
+                    </svg>
+                  </button>
                   <button class="pv-gear-edit-btn" title="Edit" @click="startEditItem(item)">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                       <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                     </svg>
                   </button>
-                  <button class="pv-storage-remove" title="Remove" @click="vaultStore.removeVaultItem(item.id)">
+                  <button class="pv-storage-remove" title="Remove" @click="vaultStore.removeStoredItem(item)">
                     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                       <path d="M18 6L6 18M6 6l12 12"/>
                     </svg>
                   </button>
+                </div>
+
+                <div v-if="takingItemId === item.id" class="pv-split-row">
+                  <span class="pv-split-info">Take</span>
+                  <input
+                    v-model.number="takeQty"
+                    type="number"
+                    min="1"
+                    :max="item.quantity"
+                    class="pv-input pv-input--qty"
+                    data-testid="vault-take-qty"
+                    @keydown.enter="confirmTake(item)"
+                    @keydown.escape="takingItemId = null"
+                  />
+                  <span class="pv-split-info">of {{ item.quantity }}</span>
+                  <button class="pv-split-confirm" :disabled="!takeQtyValid(item)" data-testid="vault-take-confirm" @click="confirmTake(item)">Take</button>
+                  <button class="pv-split-cancel" @click="takingItemId = null">✕</button>
+                </div>
+
+                <div v-if="movingItemId === item.id" class="pv-split-row pv-stash-row">
+                  <span class="pv-split-info">Move to:</span>
+                  <button
+                    v-for="c in vaultStore.containers.filter(c => c.id !== item.container_id)"
+                    :key="c.id"
+                    class="pv-stash-option"
+                    data-testid="vault-move-option"
+                    @click="doMoveItem(item, c.id)"
+                  >{{ c.name }}</button>
+                  <button class="pv-split-cancel" @click="movingItemId = null">✕</button>
                 </div>
               </template>
 
@@ -648,6 +703,24 @@
               </div>
             </template>
           </template>
+        </template>
+
+        <div class="pv-section-bar pv-section-bar--storage">
+          <button class="pv-section-toggle" @click="activityOpen = !activityOpen">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :style="activityOpen ? '' : 'transform:rotate(-90deg)'">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+            <span class="pv-section-title">Activity</span>
+          </button>
+        </div>
+
+        <template v-if="activityOpen">
+          <div v-if="!vaultStore.activity.length" class="pv-empty">No activity yet</div>
+          <div v-for="entry in vaultStore.activity" :key="entry.id" class="pv-ledger-entry" data-testid="vault-activity-entry">
+            <span class="pv-ledger-who">{{ entry.character_name || entry.display_name }}</span>
+            <span class="pv-ledger-desc">{{ entry.verb }} {{ entry.what }}</span>
+            <span class="pv-ledger-ts">{{ formatTs(entry.created_at) }}</span>
+          </div>
         </template>
 
       </template>
@@ -944,9 +1017,10 @@ function formatTs(ts) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ` · ${time}`
 }
 
-const lootOpen    = ref(true)
-const bankOpen    = ref(true)
-const storageOpen = ref(true)
+const lootOpen     = ref(true)
+const bankOpen     = ref(true)
+const storageOpen  = ref(true)
+const activityOpen = ref(true)
 
 
 const splittingId = ref(null)
@@ -1214,15 +1288,52 @@ function startEditItem(item) {
   editItemDraft.value = { name: item.name, qty: item.quantity ?? 1, slots: item.slots ?? 1, type: item.item_type ?? 'sundry' }
 }
 
-async function saveEditItem(id) {
+async function saveEditItem(item) {
   if (!editItemDraft.value.name.trim()) return
-  await vaultStore.updateVaultItem(id, {
+  await vaultStore.editVaultItem(item, {
     name:      editItemDraft.value.name.trim(),
     quantity:  editItemDraft.value.qty,
     slots:     editItemDraft.value.slots,
     item_type: editItemDraft.value.type,
   })
   editingItemId.value = null
+}
+
+
+const takingItemId = ref(null)
+const takeQty      = ref(1)
+const movingItemId = ref(null)
+
+function takeQtyValid(item) {
+  return Number.isInteger(takeQty.value) && takeQty.value >= 1 && takeQty.value <= item.quantity
+}
+
+function onTakeClick(item) {
+  movingItemId.value = null
+  if (item.quantity === 1) {
+    takingItemId.value = null
+    void vaultStore.takeVaultItem(item)
+    return
+  }
+  takingItemId.value = takingItemId.value === item.id ? null : item.id
+  if (takingItemId.value) takeQty.value = item.quantity
+}
+
+async function confirmTake(item) {
+  if (!takeQtyValid(item)) return
+  const qty = takeQty.value
+  takingItemId.value = null
+  await vaultStore.takeVaultItem(item, qty)
+}
+
+function onMoveClick(item) {
+  takingItemId.value = null
+  movingItemId.value = movingItemId.value === item.id ? null : item.id
+}
+
+async function doMoveItem(item, containerId) {
+  movingItemId.value = null
+  await vaultStore.moveVaultItem(item, containerId)
 }
 
 const GEM_NAMES = ['emerald', 'pearl', 'ruby', 'sapphire', 'diamond']
@@ -2293,6 +2404,8 @@ async function submitNewItem(containerId) {
   flex: 0 0 auto;
 }
 .pv-gear-edit-btn:hover { opacity: 1 !important; color: var(--ink); }
+.pv-gear-edit-btn:disabled { cursor: not-allowed; }
+.pv-gear-edit-btn:disabled:hover { opacity: 0.6 !important; color: var(--ink-mute); }
 .pv-gear-main { flex: 1; min-width: 0; }
 .pv-gear-name {
   font-family: var(--font-body);

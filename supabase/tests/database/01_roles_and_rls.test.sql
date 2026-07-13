@@ -109,6 +109,9 @@ values ('10000000-0000-0000-0000-000000000001', 'Gem');
 insert into public.party_bank_ledger (session_id, description)
 values ('10000000-0000-0000-0000-000000000001', 'Deposit');
 
+insert into public.party_vault_activity (session_id, user_id, verb, what)
+values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'stored', 'Rope in Chest');
+
 insert into public.party_calendar_settings (session_id)
 values ('10000000-0000-0000-0000-000000000001');
 

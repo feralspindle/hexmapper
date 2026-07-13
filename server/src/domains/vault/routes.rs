@@ -15,4 +15,5 @@ pub fn router() -> Router<AppState> {
         .route("/vault-items/{id}", patch(handlers::update_item))
         .route("/vault-items/{id}", delete(handlers::delete_item))
         .route("/vault-ledger", post(handlers::create_ledger_entry))
+        .route("/vault-activity", post(handlers::record_activity))
 }

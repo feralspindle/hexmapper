@@ -10,10 +10,17 @@ import { isGemItem } from '@/lib/gearSlots.js'
 
 const CLIENT_ID = crypto.randomUUID()
 
+// slots is stored per item, not per stack - container usage and gear both
+// multiply by quantity (gems and coins are slotted by name/currency instead,
+// so their value here is display-only)
 function _calcStashSlots(lootItem) {
   if (isGemItem(lootItem)) return Math.ceil((lootItem.quantity ?? 1) / 10)
   if (lootItem.loot_type === 'coins' || lootItem.currency) return Math.ceil((lootItem.quantity ?? 1) / 100)
-  return lootItem.quantity ?? 1
+  return 1
+}
+
+function _itemLabel(name, qty = 1) {
+  return qty > 1 ? `${name} ×${qty}` : name
 }
 
 export const useVaultStore = defineStore('vault', () => {
@@ -21,6 +28,7 @@ export const useVaultStore = defineStore('vault', () => {
   const items      = ref([])
   const containers = ref([])
   const ledger     = ref([])
+  const activity   = ref([])
 
   // Realtime can hand us a loot row after it was already deleted here: the
   // INSERT echo of a row this client just claimed, or a refresh snapshot
@@ -43,12 +51,14 @@ export const useVaultStore = defineStore('vault', () => {
       _loadItems(sessionId, generation),
       _loadContainers(sessionId, generation),
       _loadLedger(sessionId, generation),
+      _loadActivity(sessionId, generation),
     ])
     if (!session.isCurrent(generation)) return
     _subscribeLoot(sessionId)
     _subscribeItems(sessionId)
     _subscribeContainers(sessionId)
     _subscribeLedger(sessionId)
+    _subscribeActivity(sessionId)
     _subscribeToasts(sessionId)
   }
 
@@ -60,6 +70,7 @@ export const useVaultStore = defineStore('vault', () => {
       _loadItems(sessionId, generation),
       _loadContainers(sessionId, generation),
       _loadLedger(sessionId, generation),
+      _loadActivity(sessionId, generation),
     ])
   }
 
@@ -70,6 +81,7 @@ export const useVaultStore = defineStore('vault', () => {
     items.value      = []
     containers.value = []
     ledger.value     = []
+    activity.value   = []
     _deletedLootIds.clear()
   }
 
@@ -197,6 +209,37 @@ export const useVaultStore = defineStore('vault', () => {
     }
   }
 
+  async function _loadActivity(sessionId, generation = session.generation) {
+    const { data } = await supabase
+      .from('party_vault_activity')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    if (data && session.isCurrent(generation)) activity.value = data
+  }
+
+  function _subscribeActivity(sessionId) {
+    session.open(`vault:activity:${sessionId}:${crypto.randomUUID()}`, { sessionId }, ch => ch
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'party_vault_activity', filter: `session_id=eq.${sessionId}` }, e => {
+        if (!activity.value.find(a => a.id === e.new.id)) activity.value = [e.new, ...activity.value]
+      }))
+  }
+
+  function _logActivity(verb, what) {
+    const characterStore = useCharacterStore()
+    apiClient.post('/vault-activity', {
+      session_id:     session.key,
+      verb,
+      what,
+      character_name: characterStore.character?.name ?? null,
+    }).then(data => {
+      if (data && !activity.value.find(a => a.id === data.id)) activity.value = [data, ...activity.value]
+    }).catch(error => {
+      console.error('_logActivity:', error instanceof ApiError ? error.message : error)
+    })
+  }
+
   async function withdrawFromBank(item) {
     if (item.currency) {
       await _addLedgerEntry({ description: 'withdrew', [`${item.currency}Change`]: -item.quantity })
@@ -225,7 +268,7 @@ export const useVaultStore = defineStore('vault', () => {
     useCharacterStore().adjustMoney(currency, amount)
   }
 
-  async function addLoot(name, quantity = 1, notes = '', lootType = 'item', currency = null) {
+  async function addLoot(name, quantity = 1, notes = '', lootType = 'item', currency = null, log = true) {
     try {
       const data = await apiClient.post('/vault-loot', {
         session_id:    session.key,
@@ -237,6 +280,7 @@ export const useVaultStore = defineStore('vault', () => {
         source_client: CLIENT_ID,
       })
       if (data) loot.value.push(data)
+      if (data && log) _logActivity('added', `${_itemLabel(data.name, quantity)} to loot`)
       return data
     } catch (error) {
       console.error('addLoot failed:', error instanceof ApiError ? error.message : error)
@@ -277,6 +321,7 @@ export const useVaultStore = defineStore('vault', () => {
     if (lootItem.loot_type === 'coins' && currency) {
       characterStore.adjustMoney(currency, qty)
       broadcastLootToast({ type: 'coins', charName, currency, amount: qty })
+      _logActivity('claimed', `${qty} ${currency} from loot`)
     } else {
       characterStore.addGearItem({
         name:     lootItem.name,
@@ -285,6 +330,7 @@ export const useVaultStore = defineStore('vault', () => {
         type:     'sundry',
       })
       broadcastLootToast({ type: 'item', charName, itemName: lootItem.name, qty })
+      _logActivity('claimed', `${_itemLabel(lootItem.name, qty)} from loot`)
     }
     if (qty < lootItem.quantity) {
       // a partial claim shrinks the pile in place - one update event instead of
@@ -324,6 +370,7 @@ export const useVaultStore = defineStore('vault', () => {
     } else {
       broadcastLootToast({ type: 'item', charName: 'Party Bank', itemName: lootItem.name, qty: lootItem.quantity })
     }
+    _logActivity('deposited', `${_itemLabel(lootItem.name, lootItem.quantity)} to the bank`)
     await _removeLoot(lootItem.id)
   }
 
@@ -331,6 +378,7 @@ export const useVaultStore = defineStore('vault', () => {
     const containerName = containers.value.find(c => c.id === containerId)?.name ?? 'Storage'
     await _addVaultItem(containerId, lootItem.name, lootItem.quantity, lootItem.notes, _calcStashSlots(lootItem), 'sundry')
     broadcastLootToast({ type: 'item', charName: containerName, itemName: lootItem.name, qty: lootItem.quantity })
+    _logActivity('stored', `${_itemLabel(lootItem.name, lootItem.quantity)} in ${containerName}`)
     await _removeLoot(lootItem.id)
   }
 
@@ -356,6 +404,7 @@ export const useVaultStore = defineStore('vault', () => {
         characterStore.updateFieldForChar(char.id, inferredCurrency, current + amount)
         broadcastLootToast({ type: 'coins', charName: char.data?.name || 'Player', currency: inferredCurrency, amount })
       }
+      _logActivity('split', `${lootItem.quantity} ${inferredCurrency} between ${n} players`)
       await _removeLoot(lootItem.id)
       return
     }
@@ -367,8 +416,11 @@ export const useVaultStore = defineStore('vault', () => {
         perPerson + (bonusIds.has(char.id) ? 1 : 0),
         `${charName}'s share`,
         lootItem.loot_type ?? 'item',
+        null,
+        false,
       )
     }
+    _logActivity('split', `${_itemLabel(lootItem.name, lootItem.quantity)} between ${n} players`)
     await _removeLoot(lootItem.id)
   }
 
@@ -377,6 +429,8 @@ export const useVaultStore = defineStore('vault', () => {
     for (const { char, qty } of assignments) {
       characterStore.addGearItemToChar(char.id, { name: lootItem.name, slots: 1, quantity: qty, type: 'sundry' })
     }
+    const shares = assignments.map(({ char, qty }) => `${char.data?.name || 'Player'} ×${qty}`).join(', ')
+    _logActivity('assigned', `${lootItem.name} to ${shares}`)
     const totalAssigned = assignments.reduce((s, a) => s + a.qty, 0)
     if (totalAssigned < lootItem.quantity) {
       await _patchLoot(lootItem.id, { quantity: lootItem.quantity - totalAssigned })
@@ -392,6 +446,7 @@ export const useVaultStore = defineStore('vault', () => {
     } else {
       broadcastLootToast({ type: 'item', charName: 'Discarded', itemName: lootItem.name, qty: lootItem.quantity })
     }
+    _logActivity('discarded', _itemLabel(lootItem.name, lootItem.quantity))
     await _removeLoot(lootItem.id)
   }
 
@@ -404,7 +459,77 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   async function addToContainer(containerId, name, quantity = 1, slots = 0, itemType = 'sundry', notes = '') {
-    return _addVaultItem(containerId, name.trim(), quantity, notes, slots, itemType)
+    const data = await _addVaultItem(containerId, name.trim(), quantity, notes, slots, itemType)
+    if (data) _logActivity('added', `${_itemLabel(data.name, quantity)} to ${_containerName(containerId)}`)
+    return data
+  }
+
+  function _containerName(containerId) {
+    if (!containerId) return 'the bank'
+    return containers.value.find(c => c.id === containerId)?.name ?? 'storage'
+  }
+
+  async function takeVaultItem(item, qty = item.quantity) {
+    const characterStore = useCharacterStore()
+    if (!characterStore.character) return
+    qty = Math.min(Math.max(Math.floor(qty), 1), item.quantity)
+    const from = _containerName(item.container_id)
+    const authStore = useAuthStore()
+    const member = characterStore.memberSelections.find(m => m.user_id === authStore.user?.id)
+    const charName = member?.display_name || authStore.displayName || 'Adventurer'
+    if (item.currency) {
+      characterStore.adjustMoney(item.currency, qty)
+      broadcastLootToast({ type: 'coins', charName, currency: item.currency, amount: qty })
+      _logActivity('took', `${qty} ${item.currency} from ${from}`)
+    } else {
+      characterStore.addGearItem({
+        name:     item.name,
+        slots:    item.slots ?? 0,
+        quantity: qty,
+        type:     item.item_type ?? 'sundry',
+      })
+      broadcastLootToast({ type: 'item', charName, itemName: item.name, qty })
+      _logActivity('took', `${_itemLabel(item.name, qty)} from ${from}`)
+    }
+    if (qty < item.quantity) {
+      await updateVaultItem(item.id, { quantity: item.quantity - qty })
+    } else {
+      await removeVaultItem(item.id)
+    }
+  }
+
+  async function stashGearItem(gearItem, containerId) {
+    const characterStore = useCharacterStore()
+    const data = await _addVaultItem(
+      containerId,
+      gearItem.name,
+      gearItem.quantity ?? 1,
+      '',
+      gearItem.slots ?? 0,
+      gearItem.type ?? 'sundry',
+    )
+    if (!data) return
+    characterStore.deleteGearItem(gearItem.instanceId)
+    const containerName = _containerName(containerId)
+    broadcastLootToast({ type: 'item', charName: containerName, itemName: gearItem.name, qty: gearItem.quantity ?? 1 })
+    _logActivity('stored', `${_itemLabel(gearItem.name, gearItem.quantity ?? 1)} in ${containerName}`)
+  }
+
+  async function moveVaultItem(item, containerId) {
+    if (item.container_id === containerId) return
+    const from = _containerName(item.container_id)
+    await updateVaultItem(item.id, { container_id: containerId })
+    _logActivity('moved', `${_itemLabel(item.name, item.quantity)} from ${from} to ${_containerName(containerId)}`)
+  }
+
+  async function removeStoredItem(item) {
+    _logActivity('removed', `${_itemLabel(item.name, item.quantity)} from ${_containerName(item.container_id)}`)
+    await removeVaultItem(item.id)
+  }
+
+  async function editVaultItem(item, patch) {
+    await updateVaultItem(item.id, patch)
+    _logActivity('edited', `${patch.name ?? item.name} in ${_containerName(item.container_id)}`)
   }
 
   async function removeVaultItem(id) {
@@ -434,7 +559,10 @@ export const useVaultStore = defineStore('vault', () => {
         gear_slots:    gearSlots,
         source_client: CLIENT_ID,
       })
-      if (data) containers.value.push(data)
+      if (data) {
+        containers.value.push(data)
+        _logActivity('added storage', data.name)
+      }
       return data
     } catch (error) {
       console.error('addContainer:', error instanceof ApiError ? error.message : error)
@@ -442,10 +570,12 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   async function removeContainer(id) {
+    const name = containers.value.find(c => c.id === id)?.name
     items.value      = items.value.map(i => i.container_id === id ? { ...i, container_id: null } : i)
     containers.value = containers.value.filter(c => c.id !== id)
     try {
       await apiClient.delete(`/vault-containers/${id}`)
+      if (name) _logActivity('removed storage', name)
     } catch (error) {
       console.error('removeContainer:', error instanceof ApiError ? error.message : error)
     }
@@ -454,10 +584,11 @@ export const useVaultStore = defineStore('vault', () => {
   return {
     loot, items, containers, bankItems,
     init, refresh, cleanup,
-    ledger,
+    ledger, activity,
     addLoot, claimLoot, depositLoot, stashLoot, splitLoot, assignLoot, discardLoot,
     withdrawFromBank, withdrawCoins,
     addToBank, addToContainer, removeVaultItem, updateVaultItem,
+    takeVaultItem, stashGearItem, moveVaultItem, removeStoredItem, editVaultItem,
     addContainer, removeContainer,
     broadcastLootToast,
   }
