@@ -10,6 +10,8 @@
 //! schema, so point it ONLY at a throwaway database.
 
 use hexmap_server::domains::hex::projection;
+use hexmap_server::domains::notes::projection as notes_projection;
+use hexmap_server::events::NewEvent;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -17,6 +19,7 @@ use uuid::Uuid;
 
 const SCHEMA: &str = r#"
 drop table if exists events;
+drop table if exists hex_notes;
 drop table if exists hex_cells;
 drop table if exists maps;
 drop table if exists sessions;
@@ -53,6 +56,17 @@ create table hex_cells (
     gm_markers    text,
     explored      boolean not null default true,
     unique (map_id, q, r)
+);
+
+create table hex_notes (
+    id           uuid primary key,
+    hex_cell_id  uuid not null,
+    session_id   uuid not null,
+    user_id      uuid not null,
+    display_name text not null,
+    body         text not null,
+    created_at   timestamptz not null default now(),
+    updated_at   timestamptz not null default now()
 );
 
 create table events (
@@ -93,6 +107,24 @@ async fn upsert(pool: &PgPool, session_id: Uuid, body: Value) -> Value {
     row
 }
 
+async fn add_note(pool: &PgPool, session_id: Uuid, hex_cell_id: Uuid, body: &str) {
+    let mut tx = pool.begin().await.unwrap();
+    notes_projection::append_and_project(
+        &mut tx,
+        &NewEvent {
+            aggregate_type: "hex_note",
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(session_id),
+            event_type: "hex_note.created",
+            payload: json!({ "hex_cell_id": hex_cell_id, "body": body }),
+            metadata: json!({ "user_id": Uuid::new_v4(), "display_name": "Tester" }),
+        },
+    )
+    .await
+    .expect("append note");
+    tx.commit().await.unwrap();
+}
+
 #[tokio::test]
 async fn projection_redacts_for_players_and_replays_from_events() {
     let Some(pool) = setup().await else {
@@ -128,7 +160,7 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     .await;
     assert_eq!(revealed["terrain_type"], "water");
 
-    let _hidden = upsert(
+    let hidden = upsert(
         &pool,
         session_id,
         json!({
@@ -139,7 +171,13 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     )
     .await;
 
-    // GM sees both cells with full data.
+    let revealed_id = Uuid::parse_str(revealed["id"].as_str().unwrap()).unwrap();
+    let hidden_id = Uuid::parse_str(hidden["id"].as_str().unwrap()).unwrap();
+    add_note(&pool, session_id, revealed_id, "ford is passable in summer").await;
+    add_note(&pool, session_id, revealed_id, "innkeeper owes the party").await;
+    add_note(&pool, session_id, hidden_id, "ambush site").await;
+
+    // GM sees both cells with full data, including note counts.
     let gm_view = projection::list(&pool, session_id, Some(map_id), true)
         .await
         .unwrap();
@@ -147,8 +185,11 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert_eq!(gm_cells.len(), 2);
     assert!(gm_cells.iter().any(|c| c.get("gm_markers").is_some()));
     assert!(gm_cells.iter().any(|c| c.get("source_client").is_some()));
+    assert_eq!(gm_cells.iter().find(|c| c["q"] == 0).unwrap()["note_count"], 2);
+    assert_eq!(gm_cells.iter().find(|c| c["q"] == 1).unwrap()["note_count"], 1);
 
-    // Players see only the revealed cell, with server-only fields stripped.
+    // Players see only the revealed cell, with server-only fields stripped
+    // but the player-visible note count kept.
     let player_view = projection::list(&pool, session_id, Some(map_id), false)
         .await
         .unwrap();
@@ -157,6 +198,7 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert_eq!(player_cells[0]["q"], 0);
     assert!(player_cells[0].get("gm_markers").is_none());
     assert!(player_cells[0].get("source_client").is_none());
+    assert_eq!(player_cells[0]["note_count"], 2);
 
     // is_revealed is the player edit gate before reveal-all is enabled.
     assert!(projection::is_revealed(&pool, map_id, 0, 0).await.unwrap());
@@ -183,6 +225,7 @@ async fn projection_redacts_for_players_and_replays_from_events() {
     assert!(hidden_sentinel.get("terrain_type").is_none());
     assert!(hidden_sentinel.get("gm_markers").is_none());
     assert!(hidden_sentinel.get("source_client").is_none());
+    assert!(hidden_sentinel.get("note_count").is_none());
 
     // The edit gate follows the same rule: explicit hidden cells stay hidden,
     // but missing cells inherit reveal-all visibility.
@@ -238,6 +281,7 @@ async fn projection_redacts_for_players_and_replays_from_events() {
         assert_eq!(sentinel["revealed"], false);
         assert!(sentinel.get("terrain_type").is_none());
         assert!(sentinel.get("label").is_none());
+        assert!(sentinel.get("note_count").is_none());
     }
     assert!(!projection::is_revealed(&pool, map_id, 2, 0).await.unwrap());
 

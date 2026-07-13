@@ -136,6 +136,42 @@ test.describe.serial('hex map multiplayer sync', () => {
     }
   })
 
+  test('markers and note indicators show on revealed fog hexes for everyone', async ({ browser }) => {
+    const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
+      mode: 'fow',
+      name: uniqueCampaignName('E2E Fog Markers'),
+    })
+
+    try {
+      await prepareHexInteractions(room.gm.page)
+      await room.gm.page.getByTestId('hex-tool-reveal').click()
+      await hexCell(room.gm.page, 0, 0).click()
+      await expect(hexCell(room.player1.page, 0, 0)).toHaveAttribute('data-visible-to-player', 'true')
+
+      await selectHexAndOpenInspector(room.gm.page, 0, 0)
+      await room.gm.page.getByTitle('Add Landmark').click()
+
+      await expect(hexCell(room.gm.page, 0, 0).getByTestId('hex-marker-icon')).toBeVisible()
+      await expect(hexCell(room.player1.page, 0, 0).getByTestId('hex-marker-icon')).toBeVisible()
+      await expect(hexCell(room.player2.page, 0, 0)).toHaveAttribute('data-marker-count', '1')
+
+      await room.gm.page.getByPlaceholder('What did the party learn here? (Ctrl+Enter)').fill('the ford is passable in summer')
+      await room.gm.page.getByRole('button', { name: 'Save note' }).click()
+
+      await expect(hexCell(room.gm.page, 0, 0)).toHaveAttribute('data-note-count', '1')
+      await expect(hexCell(room.gm.page, 0, 0).getByTestId('hex-note-indicator')).toBeVisible()
+      await expect(hexCell(room.player1.page, 0, 0)).toHaveAttribute('data-note-count', '1')
+      await expect(hexCell(room.player2.page, 0, 0)).toHaveAttribute('data-note-count', '1')
+
+      // a later edit to the same cell must not clobber the count client-side
+      await room.gm.page.getByTestId('hex-tool-reveal').click()
+      await hexCell(room.gm.page, 1, 0).click()
+      await expect(hexCell(room.gm.page, 0, 0)).toHaveAttribute('data-note-count', '1')
+    } finally {
+      await room.close()
+    }
+  })
+
   // The one hex-security guarantee from #10 that was never proven at the browser:
   // player network/api responses never contain gm_markers. The store strips them,
   // so a regression that reintroduced a direct supabase read or an unredacted

@@ -57,8 +57,8 @@ pub async fn list(
             jsonb_agg(
                 case
                     when h.explored = false then {unexplored_sentinel}
-                    when $3 then to_jsonb(h)
-                    when h.revealed = true then to_jsonb(h){strip_gm_fields}
+                    when $3 then to_jsonb(h) || jsonb_build_object('note_count', nc.n)
+                    when h.revealed = true then (to_jsonb(h) || jsonb_build_object('note_count', nc.n)){strip_gm_fields}
                     else {hidden_sentinel}
                 end
                 order by h.map_id, h.q, h.r
@@ -67,6 +67,9 @@ pub async fn list(
         )
         from hex_cells h
         join maps m on m.id = h.map_id
+        cross join lateral (
+            select count(*)::int as n from hex_notes hn where hn.hex_cell_id = h.id
+        ) nc
         where h.session_id = $1
           and ($2::uuid is null or h.map_id = $2)
           and (
