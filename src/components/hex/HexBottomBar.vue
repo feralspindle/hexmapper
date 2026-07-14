@@ -75,6 +75,15 @@
           <template v-else-if="m.id === 'landmark'">
             <path d="M12 3l3 6 6 .8-4.5 4 1 6.2-5.5-3-5.5 3 1-6.2L3 9.8 9 9z"/>
           </template>
+          <template v-else-if="m.id === 'cache'">
+            <path d="M4 21V11a8 6 0 0116 0v10z"/>
+            <rect x="4" y="11" width="16" height="1.5" fill="var(--paper, #f4e8cc)"/>
+            <rect x="10.8" y="12.5" width="2.4" height="3.5" fill="var(--paper, #f4e8cc)"/>
+          </template>
+          <template v-else-if="m.id === 'quest'">
+            <rect x="5" y="3" width="2.2" height="18" rx="1"/>
+            <path d="M7.2 4h11.5l-3 4 3 4H7.2z"/>
+          </template>
         </svg>
         <span class="hm-stamp-lbl">{{ m.label }}</span>
       </button>
