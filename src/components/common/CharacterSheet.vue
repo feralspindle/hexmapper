@@ -2411,10 +2411,9 @@ function submitAddCoin() {
 }
 
 const luckCurrent = computed(() => char.value?.luckTokens?.current ?? 1);
-// tokens are uncapped, show at least the old baseline of 3 gems and keep
-// one empty outline past the filled ones as a hint that more can be added
+// current is clamped to max in the store, but legacy saves may exceed it
 const luckGemCount = computed(() =>
-    Math.max(char.value?.luckTokens?.max ?? 3, luckCurrent.value + 1),
+    Math.max(char.value?.luckTokens?.max ?? 3, luckCurrent.value),
 );
 
 function handleSpendLuck() {
