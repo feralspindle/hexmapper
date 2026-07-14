@@ -22,13 +22,16 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
   const iconStyle   = ref(_cached?.iconStyle   ?? 'filled')
   const panelLayout = ref(_cached?.panelLayout ?? 'right')
   const showCursors = ref(_cached?.showCursors ?? true)
+  const showHexMarkers = ref(_cached?.showHexMarkers ?? true)
+  const showDungeonItems = ref(_cached?.showDungeonItems ?? true)
 
   let _loaded = false
   let _pendingSave = false
 
   function _snapshot() {
     return { mapStyle: mapStyle.value, density: density.value, palette: palette.value,
-             iconStyle: iconStyle.value, panelLayout: panelLayout.value, showCursors: showCursors.value }
+             iconStyle: iconStyle.value, panelLayout: panelLayout.value, showCursors: showCursors.value,
+             showHexMarkers: showHexMarkers.value, showDungeonItems: showDungeonItems.value }
   }
 
   async function load() {
@@ -60,6 +63,8 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
       iconStyle.value   = data.dungeon_icon_style   ?? 'filled'
       panelLayout.value = data.dungeon_panel_layout ?? 'right'
       showCursors.value = data.dungeon_show_cursors ?? true
+      showHexMarkers.value = data.hex_show_markers ?? true
+      showDungeonItems.value = data.dungeon_show_items ?? true
       _writeStorage(_snapshot())
     }
     _loaded = true
@@ -84,6 +89,8 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
         dungeon_icon_style:   iconStyle.value,
         dungeon_panel_layout: panelLayout.value,
         dungeon_show_cursors: showCursors.value,
+        hex_show_markers:     showHexMarkers.value,
+        dungeon_show_items:   showDungeonItems.value,
       })
     } catch (error) {
       console.error('userPrefsStore.save:', error instanceof ApiError ? error.message : error)
@@ -96,10 +103,13 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
   function setIconStyle(v)   { iconStyle.value   = v; _writeStorage(_snapshot()); _scheduleSave() }
   function setPanelLayout(v) { panelLayout.value = v; _writeStorage(_snapshot()); _scheduleSave() }
   function setShowCursors(v) { showCursors.value = v; _writeStorage(_snapshot()); _scheduleSave() }
+  function setShowHexMarkers(v)   { showHexMarkers.value   = v; _writeStorage(_snapshot()); _scheduleSave() }
+  function setShowDungeonItems(v) { showDungeonItems.value = v; _writeStorage(_snapshot()); _scheduleSave() }
 
   return {
-    mapStyle, density, palette, iconStyle, panelLayout, showCursors,
+    mapStyle, density, palette, iconStyle, panelLayout, showCursors, showHexMarkers, showDungeonItems,
     load,
     setMapStyle, setDensity, setPalette, setIconStyle, setPanelLayout, setShowCursors,
+    setShowHexMarkers, setShowDungeonItems,
   }
 })

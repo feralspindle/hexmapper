@@ -78,6 +78,18 @@
           >Live Cursors {{ prefs.showCursors ? '✓' : '' }}</button>
         </div>
       </div>
+
+      <div>
+        <label class="ds-tweaks-label">Markers</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button
+            class="ds-radio-chip"
+            :class="{ selected: prefs.showDungeonItems }"
+            @click="prefs.setShowDungeonItems(!prefs.showDungeonItems)"
+            style="flex:1;text-align:center"
+          >Room Markers {{ prefs.showDungeonItems ? '✓' : '' }}</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

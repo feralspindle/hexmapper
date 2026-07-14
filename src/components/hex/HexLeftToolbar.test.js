@@ -1,6 +1,13 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
+import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import HexLeftToolbar from './HexLeftToolbar.vue'
+
+beforeEach(() => {
+  localStorage.clear()
+  setActivePinia(createPinia())
+})
 
 const mountToolbar = (props = {}) => mount(HexLeftToolbar, { props })
 
@@ -46,9 +53,20 @@ describe('HexLeftToolbar GM gating', () => {
 
   test('view, party and sound controls render for everyone regardless of role', () => {
     const player = mountToolbar({ hexMode: 'fow', isGM: false })
-    for (const id of ['hex-tool-select', 'hex-tool-pan', 'hex-party-toggle', 'hex-vault-toggle', 'hex-sound-toggle']) {
+    for (const id of ['hex-tool-select', 'hex-tool-pan', 'hex-party-toggle', 'hex-vault-toggle', 'hex-sound-toggle', 'hex-markers-visibility']) {
       expect(has(player, id), `everyone should see ${id}`).toBe(true)
     }
+  })
+
+  test('marker visibility toggle flips the player pref in both toolbar variants', async () => {
+    const prefs = useUserPrefsStore()
+    const docked = mountToolbar({ hexMode: 'fow', isGM: true })
+    await docked.get('[data-testid="hex-markers-visibility"]').trigger('click')
+    expect(prefs.showHexMarkers).toBe(false)
+
+    const floating = mountToolbar({ hexMode: 'fow', isGM: false, floating: true })
+    await floating.get('[data-testid="hex-markers-visibility"]').trigger('click')
+    expect(prefs.showHexMarkers).toBe(true)
   })
 })
 

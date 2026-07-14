@@ -25,6 +25,8 @@ fn projection_columns(src: &str) -> String {
         {src}.payload->>'dungeon_icon_style',
         {src}.payload->>'dungeon_panel_layout',
         ({src}.payload->>'dungeon_show_cursors')::boolean,
+        coalesce(({src}.payload->>'hex_show_markers')::boolean, true),
+        coalesce(({src}.payload->>'dungeon_show_items')::boolean, true),
         {src}.created_at
         "#
     )
@@ -32,7 +34,8 @@ fn projection_columns(src: &str) -> String {
 
 const COLUMN_LIST: &str = r#"
     user_id, dungeon_map_style, dungeon_density, dungeon_palette,
-    dungeon_icon_style, dungeon_panel_layout, dungeon_show_cursors, updated_at
+    dungeon_icon_style, dungeon_panel_layout, dungeon_show_cursors,
+    hex_show_markers, dungeon_show_items, updated_at
 "#;
 
 /// Appends a `user_preferences.updated` event and folds it into `user_preferences`
@@ -54,6 +57,8 @@ pub async fn append_and_project(
             dungeon_icon_style   = excluded.dungeon_icon_style,
             dungeon_panel_layout = excluded.dungeon_panel_layout,
             dungeon_show_cursors = excluded.dungeon_show_cursors,
+            hex_show_markers     = excluded.hex_show_markers,
+            dungeon_show_items   = excluded.dungeon_show_items,
             updated_at           = excluded.updated_at
         returning {COLUMN_LIST}
         "#,

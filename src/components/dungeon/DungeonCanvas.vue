@@ -91,7 +91,7 @@
               :font-family="labelStyle.dims.family"
               :letter-spacing="labelStyle.dims.letterSpacing"
             >{{ r.width * 5 }} × {{ r.height * 5 }} ft</text>
-            <g :clip-path="`url(#room-clip-${id})`">
+            <g v-if="prefs.showDungeonItems" :clip-path="`url(#room-clip-${id})`">
               <template v-for="item in (room.items ?? [])" :key="item.id">
                 <circle
                   :cx="Math.max(r.origin_x * cellPx - viewport.offsetX, Math.min((r.origin_x + r.width) * cellPx - viewport.offsetX - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostX : item.x) * cellPx - viewport.offsetX - editorAvatarSize / 2)) + editorAvatarSize / 2"

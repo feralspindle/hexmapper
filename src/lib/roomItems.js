@@ -9,6 +9,11 @@ export const ROOM_ITEM_TYPES = [
   { type: 'scroll',   faClass: 'ra ra-scroll-unfurled',     icon: '\uf556', label: 'Scroll' },
   { type: 'key',      faClass: 'ra ra-key',                 icon: '\uf511', label: 'Key' },
   { type: 'trap',     faClass: 'ra ra-bear-trap',            icon: '\uf562', label: 'Trap' },
+  { type: 'feature',  faClass: 'ra ra-scroll-unfurled',      icon: '\uf556', label: 'Feature' },
+  { type: 'secret',   faClass: 'ra ra-eyeball',              icon: '\ue9b5', label: 'Secret' },
+  { type: 'cache',    faClass: 'fa-solid fa-box',            icon: '\uf466', label: 'Cache' },
+  { type: 'quest',    faClass: 'fa-solid fa-flag',           icon: '\uf024', label: 'Quest' },
+  { type: 'note',     faClass: 'ra ra-quill-ink',            icon: '\uea75', label: 'Note' },
 ]
 
 export function iconForType(type) {
