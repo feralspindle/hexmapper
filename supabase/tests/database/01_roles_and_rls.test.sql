@@ -56,6 +56,9 @@ set active_character_id = '80000000-0000-0000-0000-000000000001'
 where session_id = '10000000-0000-0000-0000-000000000001'
   and user_id = '00000000-0000-0000-0000-000000000002';
 
+insert into public.dungeon_tokens (session_id, dungeon_id, character_id, x, y)
+values ('10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', 0, 0);
+
 insert into public.chat_messages (session_id, user_id, display_name, body)
 values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'hello');
 

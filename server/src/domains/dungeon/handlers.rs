@@ -289,9 +289,13 @@ pub async fn create_token(
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
     let character_id = body_uuid(&body, "character_id")?;
     let session_id = member_for_dungeon(&state, auth.user_id, dungeon_id).await?;
-    let (owner_id, _) = authz::character_owner_session(state.pool(), character_id)
+    let (owner_id, character_session) = authz::character_owner_session(state.pool(), character_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    // the composite fk enforces this too, but reject cleanly instead of 500ing
+    if character_session != Some(session_id) {
+        return Err(AppError::Forbidden);
+    }
     if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
