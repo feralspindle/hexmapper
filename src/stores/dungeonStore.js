@@ -348,7 +348,7 @@ export const useD = defineStore('dungeon', () => {
     _removeChannels()
 
     try {
-      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }, { data: tokenData }] = await Promise.all([
+      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }, { data: tokenData, error: e4 }] = await Promise.all([
         supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
         supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
@@ -359,6 +359,7 @@ export const useD = defineStore('dungeon', () => {
       if (e1) throw new Error(e1.message)
       if (e2) throw new Error(e2.message)
       if (e3) throw new Error(e3.message)
+      if (e4) throw new Error(e4.message)
 
       dungeon.value = dungeonData
       rooms.value = new Map((roomData ?? []).map(r => [r.id, r]))

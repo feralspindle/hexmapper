@@ -150,8 +150,7 @@ const availablePresets = computed(() => {
 
 function adjustHp(delta) {
   if (!character.value) return
-  const next = Math.max(0, Math.min(maxHp.value, currentHp.value + delta))
-  characterStore.updateFieldForChar(character.value.id, 'currentHp', next)
+  characterStore.adjustHpForChar(character.value.id, delta)
 }
 
 function addCondition(name) {

@@ -172,6 +172,21 @@ describe('characterStore', () => {
     expect(store.character.tempHp).toBe(3)
   })
 
+  test('adjustHpForChar matches adjustHp semantics for a non-active character', async () => {
+    const store = await loadedStore([
+      char('c1'),
+      char('other', { user_id: 'them', data: { maxHitPoints: 10, currentHp: 10, tempHp: 3 } }),
+    ])
+
+    store.adjustHpForChar('other', -5)
+    const other = store.characters.find(c => c.id === 'other')
+    expect(other.data.tempHp).toBe(0)
+    expect(other.data.currentHp).toBe(8)
+
+    store.adjustHpForChar('other', 99)
+    expect(store.characters.find(c => c.id === 'other').data.currentHp).toBe(10)
+  })
+
   test('a realtime echo of a stale save cannot revert edits made while the save was in flight', async () => {
     let resolvePatch
     kit.api['patch /characters/c1'] = () => new Promise(resolve => { resolvePatch = resolve })

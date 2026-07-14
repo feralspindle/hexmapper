@@ -19,7 +19,16 @@ export async function uploadTokenImage(file, sessionId) {
   return path
 }
 
+// public urls are pure functions of the path; memoize so per-frame render
+// code can call this freely
+const _urlCache = new Map()
+
 export function tokenImageUrl(path) {
   if (!path) return null
-  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  let url = _urlCache.get(path)
+  if (!url) {
+    url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+    _urlCache.set(path, url)
+  }
+  return url
 }

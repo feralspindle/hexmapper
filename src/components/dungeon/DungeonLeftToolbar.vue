@@ -142,12 +142,16 @@
 import { h } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useCharacterStore } from '@/stores/characterStore.js'
+import { useAuthStore } from '@/stores/authStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { useToolTooltip } from '@/composables/useToolTooltip.js'
 import ToolbarToggleButton from '@/components/common/ToolbarToggleButton.vue'
 
 const dungeonStore = useD()
 const sessionStore = useSessionStore()
+const characterStore = useCharacterStore()
+const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
 const { tip, onHover, onLeave } = useToolTooltip()
 
@@ -189,7 +193,11 @@ function deleteSelected() {
   const { type, id, roomId } = dungeonStore.selectedElement
   if (type === 'room') confirm('Delete this room?', () => dungeonStore.deleteRoom(id))
   else if (type === 'door') { dungeonStore.removeDoor(roomId, id); dungeonStore.deselect() }
-  else if (type === 'token') dungeonStore.removeToken(id)
+  else if (type === 'token') {
+    const token = dungeonStore.tokens.get(id)
+    const char = token && characterStore.characters.find(c => c.id === token.character_id)
+    if (sessionStore.isGM || char?.user_id === authStore.user?.id) dungeonStore.removeToken(id)
+  }
   else dungeonStore.deleteCorridor(id)
 }
 

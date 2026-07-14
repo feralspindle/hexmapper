@@ -523,6 +523,26 @@ export const useCharacterStore = defineStore('character', () => {
     _scheduleBroadcast(id)
   }
 
+  // same damage semantics as adjustHp (temp hp absorbs first), for any
+  // character the caller may edit - the token inspector uses this for
+  // gm-side hp changes
+  function adjustHpForChar(id, delta) {
+    const char = characters.value.find(c => c.id === id)
+    if (!char) return
+    const max = char.data.maxHitPoints ?? 0
+    if (delta < 0) {
+      const temp = char.data.tempHp ?? 0
+      const absorbed = Math.min(temp, -delta)
+      if (absorbed > 0) updateFieldForChar(id, 'tempHp', temp - absorbed)
+      const remaining = -delta - absorbed
+      if (remaining > 0) {
+        updateFieldForChar(id, 'currentHp', Math.max(0, (char.data.currentHp ?? max) - remaining))
+      }
+    } else {
+      updateFieldForChar(id, 'currentHp', Math.min(max, (char.data.currentHp ?? max) + delta))
+    }
+  }
+
   async function clearAllInitiative() {
     if (!currentSessionId.value) return
     characters.value = characters.value.map(c => ({
@@ -747,7 +767,7 @@ export const useCharacterStore = defineStore('character', () => {
     luckEvents,
     gmInitiative,
     loadAll, refresh, setActive, importCharacter, deleteCharacter,
-    updateField, updateFieldForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
+    updateField, updateFieldForChar, adjustHpForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
     renownValue, adjustRenown, setRenown, deleteRenownEntry, awardHaul,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,
