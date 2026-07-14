@@ -557,14 +557,119 @@ describe('dungeonStore', () => {
     expect(store.dungeon.name).toBe('Fresh Crypt')
   })
 
-  test('cleanup removes all six channels and resets state', async () => {
+  test('cleanup removes all seven channels and resets state', async () => {
     const store = await loadedStore()
     store.cleanup()
 
-    expect(kit.channels).toHaveLength(6)
+    expect(kit.channels).toHaveLength(7)
     expect(kit.channels.every(c => c.removed)).toBe(true)
     expect(store.dungeon).toBeNull()
     expect(store.rooms.size).toBe(0)
+    expect(store.tokens.size).toBe(0)
     expect(store.undoStack).toEqual([])
+  })
+
+  describe('tokens', () => {
+    const token = (id, overrides = {}) => ({
+      id,
+      dungeon_id: 'd1',
+      session_id: 's1',
+      character_id: `char-${id}`,
+      x: 2,
+      y: 3,
+      ...overrides,
+    })
+
+    test('init loads tokens', async () => {
+      kit.responses.dungeon_tokens = { data: [token('t1')], error: null }
+      const store = await loadedStore()
+
+      expect(store.tokens.get('t1').character_id).toBe('char-t1')
+    })
+
+    test('placeToken swaps the optimistic token for the server row', async () => {
+      kit.api['post /dungeon-tokens'] = body => token('server-token', body)
+      const store = await loadedStore()
+
+      await store.placeToken('char-1', 4, 5)
+
+      expect(store.tokens.get('server-token')).toBeTruthy()
+      expect([...store.tokens.keys()]).toHaveLength(1)
+      expect(kit.apiClient.post).toHaveBeenCalledWith(
+        '/dungeon-tokens',
+        expect.objectContaining({ dungeon_id: 'd1', character_id: 'char-1', x: 4, y: 5 }),
+        'place_token',
+      )
+    })
+
+    test('placing a character that already has a token moves it instead', async () => {
+      kit.responses.dungeon_tokens = { data: [token('t1', { character_id: 'char-1' })], error: null }
+      const store = await loadedStore()
+
+      await store.placeToken('char-1', 8, 9)
+
+      expect(kit.apiClient.post).not.toHaveBeenCalledWith('/dungeon-tokens', expect.anything(), 'place_token')
+      expect(kit.apiClient.patch).toHaveBeenCalledWith(
+        '/dungeon-tokens/t1',
+        expect.objectContaining({ x: 8, y: 9 }),
+        'move_token',
+      )
+      expect(store.tokens.get('t1')).toMatchObject({ x: 8, y: 9 })
+      expect(store.tokens.size).toBe(1)
+    })
+
+    test('a failed move rolls the token back', async () => {
+      kit.responses.dungeon_tokens = { data: [token('t1')], error: null }
+      kit.api['patch /dungeon-tokens/t1'] = () => { throw new kit.ApiError('cell is hidden by fog', 400) }
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const store = await loadedStore()
+
+      await store.moveToken('t1', { x: 99, y: 99 })
+
+      expect(store.tokens.get('t1')).toMatchObject({ x: 2, y: 3 })
+      errorSpy.mockRestore()
+    })
+
+    test('a failed remove restores the token', async () => {
+      kit.responses.dungeon_tokens = { data: [token('t1')], error: null }
+      kit.api['delete /dungeon-tokens/t1'] = () => { throw new kit.ApiError('forbidden', 403) }
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const store = await loadedStore()
+
+      await store.removeToken('t1')
+
+      expect(store.tokens.get('t1')).toBeTruthy()
+      errorSpy.mockRestore()
+    })
+
+    test('realtime insert/update/delete from another client applies to the map', async () => {
+      const store = await loadedStore()
+      const ch = channelNamed(':tokens')
+
+      ch.emitPostgres('dungeon_tokens', 'INSERT', token('t9', { source_client: 'someone-else' }))
+      expect(store.tokens.get('t9')).toBeTruthy()
+
+      ch.emitPostgres('dungeon_tokens', 'UPDATE', token('t9', { x: 7, y: 7, source_client: 'someone-else' }))
+      expect(store.tokens.get('t9')).toMatchObject({ x: 7, y: 7 })
+
+      store.selectElement('token', 't9')
+      ch.emitPostgres('dungeon_tokens', 'DELETE', {}, { id: 't9' })
+      expect(store.tokens.has('t9')).toBe(false)
+      expect(store.selectedElement).toBeNull()
+    })
+
+    test('isCellPlaceable follows fog state', async () => {
+      kit.responses.dungeon_fog_cells = { data: [{ cell_x: 1, cell_y: 1 }], error: null }
+      const store = await loadedStore()
+
+      expect(store.isCellPlaceable(1, 1)).toBe(true)
+      expect(store.isCellPlaceable(5, 5)).toBe(false)
+
+      store.dungeon = { ...store.dungeon, fog_reveal_all: true }
+      expect(store.isCellPlaceable(5, 5)).toBe(true)
+
+      store.dungeon = { ...store.dungeon, fog_mode: false, fog_reveal_all: false }
+      expect(store.isCellPlaceable(5, 5)).toBe(true)
+    })
   })
 })

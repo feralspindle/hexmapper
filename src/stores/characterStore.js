@@ -83,6 +83,7 @@ export const useCharacterStore = defineStore('character', () => {
       // shadowdark: gear slots = STR score, 10 minimum
       gearSlotsTotal: data.gearSlotsTotal ?? Math.max(10, data.stats?.STR ?? 10),
       xpLog:       data.xpLog ?? [],
+      conditions:  data.conditions ?? [],
     }
   }
 

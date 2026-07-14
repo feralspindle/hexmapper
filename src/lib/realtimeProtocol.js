@@ -9,6 +9,7 @@ export const REALTIME_TABLES = {
   dungeon_element_note: 'dungeon_element_notes',
   dungeon_fog_cell: 'dungeon_fog_cells',
   dungeon_room: 'dungeon_rooms',
+  dungeon_token: 'dungeon_tokens',
   hex_cell: 'hex_cells',
   hex_note: 'hex_notes',
   map: 'maps',
