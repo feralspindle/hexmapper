@@ -245,7 +245,8 @@ fn body_cell(body: &Value, key: &str) -> Result<f64, AppError> {
 
 // Players can only put tokens on revealed ground. The GM sees through fog, so
 // they can stage tokens anywhere; fog-less (collaborative) dungeons and
-// reveal-all skip the check entirely.
+// reveal-all skip the check entirely. One query - token moves are the highest
+// frequency dungeon write.
 async fn ensure_cell_placeable(
     state: &AppState,
     user_id: Uuid,
@@ -254,31 +255,26 @@ async fn ensure_cell_placeable(
     x: f64,
     y: f64,
 ) -> Result<(), AppError> {
-    if authz::is_session_gm(state.pool(), user_id, session_id).await? {
-        return Ok(());
-    }
-    let flags: Option<(bool, bool)> = sqlx::query_as(
-        "select fog_mode, fog_reveal_all from dungeons where id = $1",
+    let row: Option<(bool, bool, bool, bool)> = sqlx::query_as(
+        r#"
+        select d.fog_mode, d.fog_reveal_all,
+            exists (select 1 from sessions s where s.id = $2 and s.owner_id = $3) as is_gm,
+            exists (select 1 from dungeon_fog_cells f where f.dungeon_id = d.id and f.cell_x = $4 and f.cell_y = $5) as revealed
+        from dungeons d where d.id = $1
+        "#,
     )
     .bind(dungeon_id)
-    .fetch_optional(state.pool())
-    .await?;
-    let (fog_mode, reveal_all) = flags.ok_or(AppError::NotFound)?;
-    if !fog_mode || reveal_all {
-        return Ok(());
-    }
-    let revealed: bool = sqlx::query_scalar(
-        "select exists (select 1 from dungeon_fog_cells where dungeon_id = $1 and cell_x = $2 and cell_y = $3)",
-    )
-    .bind(dungeon_id)
+    .bind(session_id)
+    .bind(user_id)
     .bind(x.round() as i32)
     .bind(y.round() as i32)
-    .fetch_one(state.pool())
+    .fetch_optional(state.pool())
     .await?;
-    if !revealed {
-        return Err(AppError::BadRequest("cell is hidden by fog".into()));
+    let (fog_mode, reveal_all, is_gm, revealed) = row.ok_or(AppError::NotFound)?;
+    if is_gm || !fog_mode || reveal_all || revealed {
+        return Ok(());
     }
-    Ok(())
+    Err(AppError::BadRequest("cell is hidden by fog".into()))
 }
 
 pub async fn create_token(

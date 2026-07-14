@@ -65,8 +65,8 @@
             :height="room.height * cellPx - 2"
           />
         </clipPath>
-        <clipPath v-for="t in tokenViews" :key="`token-clip-${t.id}`" :id="`token-clip-${t.id}`">
-          <circle :cx="t.cx" :cy="t.cy" :r="tokenR - 1.5" />
+        <clipPath id="token-clip">
+          <circle cx="0" cy="0" :r="tokenR - 1.5" />
         </clipPath>
       </defs>
       <g v-for="[id, room] in dungeonStore.rooms" :key="id" data-testid="dungeon-room">
@@ -179,14 +179,15 @@
         />
       </g>
       <g
-        v-for="t in tokenViews"
+        v-for="t in tokenModels"
         :key="t.id"
         data-testid="dungeon-token"
         :data-token-character="t.characterId"
+        :transform="tokenTransform(t)"
       >
         <circle
-          v-if="t.selected"
-          :cx="t.cx" :cy="t.cy" :r="tokenR + 4"
+          v-if="dungeonStore.selectedElement?.type === 'token' && dungeonStore.selectedElement.id === t.id"
+          cx="0" cy="0" :r="tokenR + 4"
           fill="none"
           :stroke="styleColors.selectedColor"
           stroke-width="2"
@@ -194,7 +195,7 @@
           style="pointer-events:none"
         />
         <circle
-          :cx="t.cx" :cy="t.cy" :r="tokenR"
+          cx="0" cy="0" :r="tokenR"
           fill="#141210"
           :stroke="t.color"
           stroke-width="2"
@@ -203,15 +204,15 @@
         <image
           v-if="t.imageUrl"
           :href="t.imageUrl"
-          :x="t.cx - tokenR" :y="t.cy - tokenR"
+          :x="-tokenR" :y="-tokenR"
           :width="tokenR * 2" :height="tokenR * 2"
           preserveAspectRatio="xMidYMid slice"
-          :clip-path="`url(#token-clip-${t.id})`"
+          clip-path="url(#token-clip)"
           style="pointer-events:none"
         />
         <text
           v-else
-          :x="t.cx" :y="t.cy"
+          x="0" y="0"
           text-anchor="middle"
           dominant-baseline="central"
           fill="#ede1c7"
@@ -222,13 +223,13 @@
         >{{ t.name.slice(0, 1).toUpperCase() }}</text>
         <template v-if="t.maxHp > 0">
           <rect
-            :x="t.cx - tokenR" :y="t.cy + tokenR + 2"
+            :x="-tokenR" :y="tokenR + 2"
             :width="tokenR * 2" height="3" rx="1.5"
             fill="rgba(0,0,0,.65)"
             style="pointer-events:none"
           />
           <rect
-            :x="t.cx - tokenR" :y="t.cy + tokenR + 2"
+            :x="-tokenR" :y="tokenR + 2"
             :width="Math.max(0, tokenR * 2 * t.hpPct)" height="3" rx="1.5"
             :fill="t.hpColor"
             style="pointer-events:none"
@@ -236,13 +237,13 @@
         </template>
         <g v-if="t.initiative != null" style="pointer-events:none">
           <circle
-            :cx="t.cx + tokenR * 0.9" :cy="t.cy - tokenR * 0.9" :r="Math.max(6, tokenR * 0.55)"
+            :cx="tokenR * 0.9" :cy="-tokenR * 0.9" :r="Math.max(6, tokenR * 0.55)"
             fill="#1a1410"
             :stroke="t.color"
             stroke-width="1.2"
           />
           <text
-            :x="t.cx + tokenR * 0.9" :y="t.cy - tokenR * 0.9"
+            :x="tokenR * 0.9" :y="-tokenR * 0.9"
             text-anchor="middle"
             dominant-baseline="central"
             fill="#ede1c7"
@@ -253,22 +254,28 @@
         <circle
           v-for="(cond, ci) in t.conditions.slice(0, 6)"
           :key="cond.name"
-          :cx="t.cx - tokenR + ci * (tokenCondR * 2 + 2) + tokenCondR"
-          :cy="t.cy - tokenR - tokenCondR - 2"
+          :cx="-tokenR + ci * (tokenCondR * 2 + 2) + tokenCondR"
+          :cy="-tokenR - tokenCondR - 2"
           :r="tokenCondR"
           :fill="cond.color"
           stroke="#1a1410"
           stroke-width="1"
+          :class="tokensInteractive ? 'pointer-events-auto' : ''"
+          @pointerdown.stop="onTokenPointerDown($event, t)"
+          @pointerenter="hoveredTokenId = t.id"
+          @pointerleave="hoveredTokenId = null"
         />
         <circle
-          :cx="t.cx" :cy="t.cy" :r="tokenR + 2"
+          cx="0" cy="0" :r="tokenR + 2"
           fill="transparent"
+          role="img"
+          :aria-label="tokenAriaLabel(t)"
           :class="tokensInteractive ? 'pointer-events-auto' : ''"
           :style="{ cursor: t.canDrag ? 'grab' : 'pointer', touchAction: 'none' }"
           @pointerdown.stop="onTokenPointerDown($event, t)"
           @pointermove="onTokenPointerMove"
           @pointerup="onTokenPointerUp"
-          @pointercancel="onTokenPointerUp"
+          @pointercancel="onTokenPointerCancel"
           @pointerenter="hoveredTokenId = t.id"
           @pointerleave="hoveredTokenId = null"
         />
@@ -898,11 +905,10 @@ const hoveredCorridorPoint = ref(-1)
 
 const draggingItem = ref(null)
 
-// --- player tokens ----------------------------------------------------------
-
 const draggingToken = ref(null)
 const tokenPlacementCharId = ref(null)
 const hoveredTokenId = ref(null)
+const lastPointerType = ref('mouse')
 
 const tokenR = computed(() => cellPx.value * 0.45)
 const tokenCondR = computed(() => Math.max(3, tokenR.value * 0.28))
@@ -932,27 +938,31 @@ function hpColorFor(pct) {
   return '#c83c32'
 }
 
-const tokenViews = computed(() => {
-  const views = []
+const charactersById = computed(() =>
+  new Map(characterStore.characters.map(c => [c.id, c]))
+)
+
+// viewport-independent so panning and dragging don't rebuild it - screen
+// position is derived per frame in tokenTransform instead
+const tokenModels = computed(() => {
+  const models = []
   const isGM = sessionStore.isGM
   const myId = authStore.user?.id
-  const cs = cellPx.value
   for (const token of dungeonStore.tokens.values()) {
-    const drag = draggingToken.value?.id === token.id ? draggingToken.value : null
     // players never see a token parked in unrevealed fog - the GM may be
     // staging an ambush
     if (!isGM && dungeonStore.fogMode && !dungeonStore.fogRevealAll &&
-        !dungeonStore.isCellRevealed(token.x, token.y) && !drag) continue
-    const char = characterStore.characters.find(c => c.id === token.character_id)
+        !dungeonStore.isCellRevealed(token.x, token.y)) continue
+    const char = charactersById.value.get(token.character_id)
     const data = char?.data ?? {}
     const maxHp = data.maxHitPoints ?? 0
     const hp = data.currentHp ?? maxHp
     const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0
-    views.push({
+    models.push({
       id: token.id,
       characterId: token.character_id,
-      cx: (drag ? drag.gx : token.x + 0.5) * cs - viewport.value.offsetX,
-      cy: (drag ? drag.gy : token.y + 0.5) * cs - viewport.value.offsetY,
+      x: token.x,
+      y: token.y,
       name: data.name || 'Unknown',
       color: playerColorFor(char?.user_id),
       hp,
@@ -964,26 +974,50 @@ const tokenViews = computed(() => {
       conditions: (data.conditions ?? []).map(conditionBadge),
       imageUrl: tokenImageUrl(data.tokenImagePath),
       canDrag: isGM || (char && char.user_id === myId),
-      selected: dungeonStore.selectedElement?.type === 'token' && dungeonStore.selectedElement.id === token.id,
     })
   }
-  return views
+  return models
 })
 
+function tokenTransform(t) {
+  const cs = cellPx.value
+  const d = draggingToken.value
+  const gx = d?.id === t.id ? d.gx : t.x + 0.5
+  const gy = d?.id === t.id ? d.gy : t.y + 0.5
+  return `translate(${gx * cs - viewport.value.offsetX}, ${gy * cs - viewport.value.offsetY})`
+}
+
+function tokenAriaLabel(t) {
+  const parts = [t.name]
+  if (t.maxHp > 0) parts.push(`HP ${t.hp} of ${t.maxHp}`)
+  if (t.ac != null) parts.push(`AC ${t.ac}`)
+  if (t.initiative != null) parts.push(`initiative ${t.initiative}`)
+  if (t.conditions.length) parts.push(t.conditions.map(c => c.name).join(', '))
+  return parts.join(', ')
+}
+
+// touch has no hover, so a tap-selected token keeps its card up instead
 const tokenTooltip = computed(() => {
-  if (!hoveredTokenId.value || draggingToken.value) return null
-  return tokenViews.value.find(t => t.id === hoveredTokenId.value) ?? null
+  if (draggingToken.value) return null
+  const selected = dungeonStore.selectedElement
+  const id = hoveredTokenId.value ??
+    (lastPointerType.value === 'touch' && selected?.type === 'token' ? selected.id : null)
+  if (!id) return null
+  return tokenModels.value.find(t => t.id === id) ?? null
 })
 
 const tokenTooltipStyle = computed(() => {
   const t = tokenTooltip.value
   if (!t) return {}
+  const cs = cellPx.value
+  const cx = (t.x + 0.5) * cs - viewport.value.offsetX
+  const cy = (t.y + 0.5) * cs - viewport.value.offsetY
   // flip below the token when there isn't room above (condition chips can
   // stack the tooltip a few lines tall)
-  const below = t.cy - tokenR.value < 150
+  const below = cy - tokenR.value < 150
   return {
-    left: `${t.cx}px`,
-    top: below ? `${t.cy + tokenR.value + 14}px` : `${t.cy - tokenR.value - 14}px`,
+    left: `${cx}px`,
+    top: below ? `${cy + tokenR.value + 14}px` : `${cy - tokenR.value - 14}px`,
     transform: below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
   }
 })
@@ -996,14 +1030,18 @@ const tokenDropAllowed = computed(() => {
 
 function onTokenPointerDown(e, view) {
   if (!tokensInteractive.value) return
+  lastPointerType.value = e.pointerType
   if (!view.canDrag) {
     dungeonStore.selectElement('token', view.id)
     return
   }
+  // one drag at a time - a second finger must not steal or corrupt it
+  if (draggingToken.value) return
   const token = dungeonStore.tokens.get(view.id)
   if (!token) return
   draggingToken.value = {
     id: view.id,
+    pointerId: e.pointerId,
     gx: token.x + 0.5,
     gy: token.y + 0.5,
     startClientX: e.clientX,
@@ -1015,7 +1053,7 @@ function onTokenPointerDown(e, view) {
 
 function onTokenPointerMove(e) {
   const d = draggingToken.value
-  if (!d) return
+  if (!d || e.pointerId !== d.pointerId) return
   const moved = d.moved || Math.hypot(e.clientX - d.startClientX, e.clientY - d.startClientY) > 4
   if (!moved) return
   const rect = getRect()
@@ -1028,9 +1066,9 @@ function onTokenPointerMove(e) {
   }
 }
 
-function onTokenPointerUp() {
+function onTokenPointerUp(e) {
   const d = draggingToken.value
-  if (!d) return
+  if (!d || e.pointerId !== d.pointerId) return
   draggingToken.value = null
   if (!d.moved) {
     dungeonStore.selectElement('token', d.id)
@@ -1046,11 +1084,19 @@ function onTokenPointerUp() {
   dungeonStore.moveToken(d.id, { x: cellX, y: cellY })
 }
 
+// a browser-cancelled gesture (palm rejection, tab switch) is not a tap -
+// just drop the drag, never select
+function onTokenPointerCancel(e) {
+  const d = draggingToken.value
+  if (!d || e.pointerId !== d.pointerId) return
+  draggingToken.value = null
+}
+
 function canDeleteToken(id) {
   const token = dungeonStore.tokens.get(id)
   if (!token) return false
   if (sessionStore.isGM) return true
-  const char = characterStore.characters.find(c => c.id === token.character_id)
+  const char = charactersById.value.get(token.character_id)
   return char?.user_id === authStore.user?.id
 }
 
