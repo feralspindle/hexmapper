@@ -43,90 +43,90 @@ export async function loginByEmail(page, account) {
     .toBe('signed-in')
 }
 
-export async function dismissWelcome(page) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const overlay = page.locator('.ds-wm-overlay')
-    if ((await overlay.count()) === 0) return
+async function dismissWelcomeOnce(page) {
+  if ((await page.locator('.ds-wm-overlay').count()) === 0) return
 
-    const ok = page.getByTestId('welcome-ok')
-    if (await ok.isVisible().catch(() => false)) {
-      await ok.click()
-      await page.waitForTimeout(100)
-      continue
-    }
+  const ok = page.getByTestId('welcome-ok')
+  if (await ok.isVisible().catch(() => false)) {
+    await ok.click({ timeout: 1000 }).catch(() => {})
+    return
+  }
 
-    const close = page.getByTestId('welcome-close')
-    if (await close.isVisible().catch(() => false)) {
-      await close.click()
-      await page.waitForTimeout(100)
-      continue
-    }
+  const close = page.getByTestId('welcome-close')
+  if (await close.isVisible().catch(() => false)) {
+    await close.click({ timeout: 1000 }).catch(() => {})
   }
 }
 
-export async function closeMapSettings(page) {
-  // The GM map-settings panel auto-opens when the first map finishes loading
-  // (HexMapView watches maps.length going 0 -> >0). A single close can land
-  // before that load and then get undone when the panel reopens, so re-close
-  // until it stays shut instead of clicking once and moving on.
-  const panel = page.locator('.map-settings-panel')
+async function closeMapSettingsOnce(page) {
+  if ((await page.locator('.map-settings-panel').count()) === 0) return
+  await page.getByTestId('map-settings-close').click({ timeout: 1000 }).catch(() => {})
+}
+
+async function closeSessionPanelOnce(page) {
+  // On narrow viewports the right session panel overlays the map behind a
+  // scrim that swallows toolbar clicks; on desktop it docks and the scrim
+  // never shows. Clicking the scrim closes the panel.
+  const scrim = page.locator('.ds-panel-scrim')
+  if (await scrim.isVisible().catch(() => false)) {
+    await scrim.click({ timeout: 1000 }).catch(() => {})
+  }
+}
+
+export async function closeSessionPanel(page) {
   await expect(async () => {
-    if ((await panel.count()) > 0) {
-      await page.getByTestId('map-settings-close').click({ timeout: 1000 }).catch(() => {})
-    }
-    await expect(panel).toHaveCount(0, { timeout: 1000 })
+    await closeSessionPanelOnce(page)
+    await expect(page.locator('.ds-panel-scrim')).not.toBeVisible({ timeout: 1000 })
   }).toPass({ timeout: 15_000 })
 }
 
-export async function closePartyPanel(page) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    if ((await page.locator('.ds-party-panel').count()) === 0) return
-    if ((await page.locator('.ds-wm-overlay').count()) > 0) return
+async function closePartyPanelOnce(page) {
+  if ((await page.locator('.ds-party-panel').count()) === 0) return
+  // The welcome overlay sits on top of everything; let dismissWelcomeOnce
+  // clear it on the next pass instead of clicking into the scrim.
+  if ((await page.locator('.ds-wm-overlay').count()) > 0) return
 
-    const close = page.getByTestId('party-panel-close')
-    if (await close.isVisible().catch(() => false)) {
-      await close.click({ timeout: 1000 }).catch(() => {})
-      await page.waitForTimeout(100)
-      continue
-    }
+  const close = page.getByTestId('party-panel-close')
+  if (await close.isVisible().catch(() => false)) {
+    await close.click({ timeout: 1000 }).catch(() => {})
+    return
+  }
 
-    const toggles = page.locator('[data-testid="hex-party-toggle"][aria-pressed="true"]')
-    const count = await toggles.count()
-    for (let i = 0; i < count; i += 1) {
-      const toggle = toggles.nth(i)
-      if (await toggle.isVisible().catch(() => false)) {
-        await toggle.click({ timeout: 1000 }).catch(() => {})
-        break
-      }
+  const toggles = page.locator('[data-testid="hex-party-toggle"][aria-pressed="true"]')
+  const count = await toggles.count()
+  for (let i = 0; i < count; i += 1) {
+    const toggle = toggles.nth(i)
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click({ timeout: 1000 }).catch(() => {})
+      return
     }
-    await page.waitForTimeout(100)
   }
 }
 
 export async function prepareHexInteractions(page) {
-  // After a reload the close loop can run against the not-yet-mounted app,
+  // After a reload the close pass can run against the not-yet-mounted app,
   // find nothing to close, and exit — leaving the party panel to mount right
   // after and trip the assertions below. Wait for the map shell first so the
-  // panels the loop checks for actually exist when they're going to.
+  // panels the pass checks for actually exist when they're going to.
   await expect(page.getByTestId('hex-grid')).toBeVisible()
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    await dismissWelcome(page)
+  // The GM map-settings panel auto-opens when the first map finishes loading
+  // (HexMapView watches maps.length going 0 -> >0), and the party panel
+  // starts open, so a close can land early and get undone. Keep closing
+  // inside the poll until everything stays shut, rather than burning a fixed
+  // number of attempts and then asserting while a panel is still up.
+  await expect(async () => {
+    await dismissWelcomeOnce(page)
     // The floating party panel sits above the map settings panel, so it must
-    // go first or it intercepts the settings close click.
-    await closePartyPanel(page)
-    await closeMapSettings(page)
-    if (
-      (await page.locator('.ds-wm-overlay').count()) === 0 &&
-      (await page.locator('.map-settings-panel').count()) === 0 &&
-      (await page.locator('.ds-party-panel').count()) === 0
-    ) {
-      break
-    }
-    await page.waitForTimeout(100)
-  }
-  await expect(page.locator('.ds-wm-overlay')).toHaveCount(0)
-  await expect(page.locator('.map-settings-panel')).toHaveCount(0)
-  await expect(page.locator('.ds-party-panel')).toHaveCount(0)
+    // go first or it intercepts the settings close click. The session-panel
+    // scrim sits above the settings panel too, so it goes before that close.
+    await closePartyPanelOnce(page)
+    await closeSessionPanelOnce(page)
+    await closeMapSettingsOnce(page)
+    await expect(page.locator('.ds-wm-overlay')).toHaveCount(0, { timeout: 1000 })
+    await expect(page.locator('.ds-panel-scrim')).not.toBeVisible({ timeout: 1000 })
+    await expect(page.locator('.map-settings-panel')).toHaveCount(0, { timeout: 1000 })
+    await expect(page.locator('.ds-party-panel')).toHaveCount(0, { timeout: 1000 })
+  }).toPass({ timeout: 30_000 })
   await expect(page.getByTestId('hex-grid')).toBeVisible()
 }
 
