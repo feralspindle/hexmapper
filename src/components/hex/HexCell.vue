@@ -10,6 +10,7 @@
     :data-visible-to-player="visibleToPlayer ? 'true' : 'false'"
     :data-terrain="cell?.terrain_type ?? ''"
     :data-marker-count="markerCount"
+    :data-note-count="noteCount"
     :class="{ 'cursor-pointer': true }"
     @click.stop="emit('click')"
     @contextmenu.prevent.stop="emit('contextmenu')"
@@ -71,7 +72,12 @@
       </template>
     </g>
 
-    <g v-if="blankMode && visibleToPlayer && markerCount" v-tooltip="markerTooltip">
+    <g
+      v-if="visibleToPlayer && markerCount"
+      v-tooltip="markerTooltip"
+      :style="overlayShadow"
+      data-testid="hex-marker-icon"
+    >
       <circle
         cx="0" cy="0"
         :r="markerR"
@@ -106,7 +112,7 @@
         text-anchor="middle"
         :y="markerR + size * 0.2"
         :font-size="10 * (size / 48)"
-        fill="var(--ink, #1a0f06)"
+        :fill="blankMode ? 'var(--ink, #1a0f06)' : 'var(--paper, #f4e8cc)'"
         style="font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 600;"
       >{{ firstMarker.label.slice(0, 16) }}</text>
     </g>
@@ -145,6 +151,28 @@
         fill="var(--paper, #f4e8cc)"
         style="font-family: var(--font-mono, monospace); font-weight: 700;"
       >M</text>
+    </g>
+
+    <g
+      v-if="visibleToPlayer && noteCount"
+      :transform="`translate(${-size * 0.42}, ${size * 0.28})`"
+      :style="overlayShadow"
+      data-testid="hex-note-indicator"
+      v-tooltip="noteTooltip"
+    >
+      <circle
+        :r="size * 0.09"
+        fill="var(--paper, #f4e8cc)"
+        stroke="var(--ink, #1a0f06)"
+        :stroke-width="1 / (size / 48)"
+      />
+      <path
+        :d="`M${-size * 0.045},${-size * 0.022} H${size * 0.045} M${-size * 0.045},${size * 0.026} H${size * 0.015}`"
+        stroke="var(--ink, #1a0f06)"
+        :stroke-width="1 / (size / 48)"
+        stroke-linecap="round"
+        fill="none"
+      />
     </g>
 
     <template v-if="visibleToPlayer && !imageMode">
@@ -338,6 +366,10 @@ const terrainIconColor = computed(() => {
   return luma > 100 ? 'rgba(26,20,16,.7)' : 'rgba(237,225,199,.6)'
 })
 
+const overlayShadow = computed(() =>
+  blankMode.value ? undefined : 'filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))'
+)
+
 const markerKinds       = computed(() => parseMarkers(props.cell?.marker_color))
 const firstMarker       = computed(() => markerKinds.value[0] ?? null)
 const markerCount       = computed(() => markerKinds.value.length)
@@ -355,6 +387,11 @@ const markerTooltip = computed(() =>
       return m.label ? `${kindLabel}: ${m.label}` : kindLabel
     })
     .join('\n')
+)
+
+const noteCount   = computed(() => props.cell?.note_count ?? 0)
+const noteTooltip = computed(() =>
+  `${noteCount.value} note${noteCount.value === 1 ? '' : 's'}`
 )
 
 const gmMarkerKinds  = computed(() => props.isGM ? parseMarkers(props.cell?.gm_markers) : [])

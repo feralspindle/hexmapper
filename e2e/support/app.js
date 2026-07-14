@@ -104,6 +104,11 @@ export async function closePartyPanel(page) {
 }
 
 export async function prepareHexInteractions(page) {
+  // After a reload the close loop can run against the not-yet-mounted app,
+  // find nothing to close, and exit — leaving the party panel to mount right
+  // after and trip the assertions below. Wait for the map shell first so the
+  // panels the loop checks for actually exist when they're going to.
+  await expect(page.getByTestId('hex-grid')).toBeVisible()
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await dismissWelcome(page)
     // The floating party panel sits above the map settings panel, so it must

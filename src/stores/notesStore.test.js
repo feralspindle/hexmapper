@@ -22,6 +22,9 @@ vi.mock('@/stores/authStore.js', () => ({
 vi.mock('@/stores/activityStore.js', () => ({
   useActivityStore: () => ({ record: vi.fn() }),
 }))
+vi.mock('@/stores/hexStore.js', () => ({
+  useHexStore: () => kit.hexStore,
+}))
 
 import { useNotesStore } from './notesStore.js'
 
@@ -37,6 +40,7 @@ describe('notesStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     resetKit(kit)
+    kit.hexStore = { noteCountsChanged: vi.fn() }
   })
 
   test('initForHex loads notes and subscribes to that hex only', async () => {
@@ -105,6 +109,33 @@ describe('notesStore', () => {
 
     expect(store.notes).toHaveLength(1)
     expect(store.notes[0]).toMatchObject({ id: 'server-note', body: 'hello' })
+  })
+
+  test('hex note add and delete nudge the hex store to refresh note counts', async () => {
+    kit.responses.hex_notes = { data: [note('n1')], error: null }
+    kit.api['post /hex-notes'] = body => note('server-note', { body: body.body, user_id: 'me' })
+    kit.api['delete /hex-notes/n1'] = null
+    const store = useNotesStore()
+    await store.initForHex('hex-1', 's1')
+
+    await store.addNote('hello')
+    expect(kit.hexStore.noteCountsChanged).toHaveBeenCalledTimes(1)
+
+    await store.deleteNote('n1')
+    expect(kit.hexStore.noteCountsChanged).toHaveBeenCalledTimes(2)
+  })
+
+  test('dungeon element notes never touch hex note counts', async () => {
+    kit.api['post /dungeon-element-notes'] = body => note('server-note', body)
+    kit.api['delete /dungeon-element-notes/n1'] = null
+    kit.responses.dungeon_element_notes = { data: [note('n1')], error: null }
+    const store = useNotesStore()
+    await store.initForDungeonElement('room-1', 'room', 's1')
+
+    await store.addNote('a secret door')
+    await store.deleteNote('n1')
+
+    expect(kit.hexStore.noteCountsChanged).not.toHaveBeenCalled()
   })
 
   test('a failed addNote rolls the optimistic note back', async () => {
