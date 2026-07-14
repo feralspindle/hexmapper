@@ -8,7 +8,7 @@
 //! Gated on `DATABASE_URL`: skipped when unset. It (re)creates throwaway
 //! tables, so point it ONLY at a disposable database.
 
-use hexmap_server::domains::dungeon::{corridor_projection, fog_projection, room_projection};
+use hexmap_server::domains::dungeon::{corridor_projection, fog_projection, room_projection, token_projection};
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -19,9 +19,12 @@ drop table if exists events cascade;
 drop table if exists dungeon_rooms cascade;
 drop table if exists dungeon_corridors cascade;
 drop table if exists dungeon_fog_cells cascade;
+drop table if exists dungeon_tokens cascade;
+drop table if exists characters cascade;
 drop table if exists shadow_rooms cascade;
 drop table if exists shadow_corridors cascade;
 drop table if exists shadow_fog cascade;
+drop table if exists shadow_tokens cascade;
 
 create table dungeon_rooms (
     id            uuid primary key,
@@ -69,6 +72,23 @@ create table dungeon_fog_cells (
     unique (dungeon_id, cell_x, cell_y)
 );
 
+create table characters (
+    id uuid primary key default gen_random_uuid()
+);
+
+create table dungeon_tokens (
+    id            uuid primary key default gen_random_uuid(),
+    dungeon_id    uuid not null,
+    session_id    uuid not null,
+    character_id  uuid not null references characters(id) on delete cascade,
+    x             int not null,
+    y             int not null,
+    source_client text,
+    created_at    timestamptz not null default now(),
+    updated_at    timestamptz not null default now(),
+    unique (dungeon_id, character_id)
+);
+
 create table events (
     id             bigserial primary key,
     aggregate_type text not null,
@@ -85,6 +105,7 @@ create table events (
 create table shadow_rooms     (like dungeon_rooms including defaults);
 create table shadow_corridors (like dungeon_corridors including defaults);
 create table shadow_fog       (like dungeon_fog_cells including defaults);
+create table shadow_tokens    (like dungeon_tokens including defaults);
 "#;
 
 async fn setup() -> Option<PgPool> {
@@ -292,6 +313,109 @@ async fn dungeon_projections_round_trip_and_replay_from_events() {
     assert_eq!(hidden, 1);
     assert_eq!(count(&pool, "select count(*) from dungeon_fog_cells").await, 1);
 
+    // --- tokens: create rounds coords, re-placing the same character moves --
+    let character_id = Uuid::new_v4();
+    let dead_character_id = Uuid::new_v4();
+    sqlx::query("insert into characters (id) values ($1), ($2)")
+        .bind(character_id)
+        .bind(dead_character_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut tx = pool.begin().await.unwrap();
+    let token = token_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "character_id": character_id, "x": 2.6, "y": 3.4, "source_client": "client-a" }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    let token_id: Uuid = token["id"].as_str().unwrap().parse().unwrap();
+    assert_eq!(token["x"], 3);
+    assert_eq!(token["y"], 3);
+
+    let mut tx = pool.begin().await.unwrap();
+    let replaced = token_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "character_id": character_id, "x": 7, "y": 8 }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(replaced["id"].as_str().unwrap(), token_id.to_string());
+    assert_eq!(replaced["x"], 7);
+    assert_eq!(count(&pool, "select count(*) from dungeon_tokens").await, 1);
+
+    let mut tx = pool.begin().await.unwrap();
+    token_projection::update(&mut tx, token_id, &json!({ "x": 1.2, "y": 0.9 }), &meta())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    let (tx_pos, ty_pos): (i32, i32) =
+        sqlx::query_as("select x, y from dungeon_tokens where id = $1")
+            .bind(token_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((tx_pos, ty_pos), (1, 1));
+
+    assert_eq!(
+        event_log(&pool, "dungeon_token", token_id)
+            .await
+            .iter()
+            .map(|(seq, ty)| (*seq, ty.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, "dungeon_token.created"),
+            (2, "dungeon_token.created"),
+            (3, "dungeon_token.updated"),
+        ],
+    );
+
+    // A token whose character gets deleted cascades away without a deleted
+    // event; replay must not resurrect it.
+    let mut tx = pool.begin().await.unwrap();
+    token_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "character_id": dead_character_id, "x": 0, "y": 0 }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    sqlx::query("delete from characters where id = $1")
+        .bind(dead_character_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count(&pool, "select count(*) from dungeon_tokens").await, 1);
+
+    // A deleted token stays deleted on replay.
+    let mut tx = pool.begin().await.unwrap();
+    let doomed_token = token_projection::create(
+        &mut tx,
+        Uuid::new_v4(),
+        session_id,
+        &json!({ "character_id": character_id, "x": 4, "y": 4 }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    let doomed_token_id: Uuid = doomed_token["id"].as_str().unwrap().parse().unwrap();
+    token_projection::delete(&mut tx, doomed_token_id, &meta()).await.unwrap();
+    tx.commit().await.unwrap();
+
     // --- replay: every read model rebuilds from the event log alone ---------
     sqlx::query(&room_projection::replay_select("shadow_rooms"))
         .execute(&pool)
@@ -305,6 +429,14 @@ async fn dungeon_projections_round_trip_and_replay_from_events() {
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query(&token_projection::replay_select("shadow_tokens"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let shadow_tokens: Vec<(Uuid, i32, i32)> =
+        sqlx::query_as("select id, x, y from shadow_tokens").fetch_all(&pool).await.unwrap();
+    assert_eq!(shadow_tokens, vec![(token_id, 1, 1)]);
 
     let shadow_rooms: Vec<(Uuid, String)> =
         sqlx::query_as("select id, label from shadow_rooms").fetch_all(&pool).await.unwrap();
