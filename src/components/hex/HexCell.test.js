@@ -1,11 +1,17 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
+import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import HexCell from './HexCell.vue'
 
 const mountCell = (props = {}) =>
   mount(HexCell, { props: { q: 0, r: 0, ...props } })
 
 describe('HexCell', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
   test('renders a hex polygon and emits click', async () => {
     const wrapper = mountCell({ isGM: true })
     expect(wrapper.find('polygon.hex-cell-poly').exists()).toBe(true)
@@ -100,6 +106,17 @@ describe('HexCell', () => {
       isGM: true,
       cell: { revealed: true, explored: false, marker_color: landmark },
     })
+    expect(wrapper.text()).not.toContain('Old Tower')
+  })
+
+  test('markers and GM badges disappear when the player pref hides them', () => {
+    useUserPrefsStore().setShowHexMarkers(false)
+    const gmMarkers = JSON.stringify([{ id: 'g1', kind: 'trap', label: '' }])
+    const wrapper = mountCell({
+      isGM: true,
+      cell: { marker_color: landmark, gm_markers: gmMarkers },
+    })
+    expect(wrapper.find('[data-testid="hex-marker-icon"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Old Tower')
   })
 

@@ -73,7 +73,7 @@
     </g>
 
     <g
-      v-if="visibleToPlayer && markerCount"
+      v-if="prefs.showHexMarkers && visibleToPlayer && markerCount"
       v-tooltip="markerTooltip"
       :style="overlayShadow"
       data-testid="hex-marker-icon"
@@ -239,7 +239,7 @@
     />
 
     <g
-      v-if="isGM && gmMarkerCount"
+      v-if="prefs.showHexMarkers && isGM && gmMarkerCount"
       :transform="`translate(${size * 0.42}, ${size * 0.08})`"
       style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))"
       v-tooltip="gmMarkerTooltip"
@@ -291,6 +291,9 @@
 import { computed } from 'vue'
 import { hexToPixel, hexCorners, cornersToPoints, HEX_SIZE } from '@/composables/useHexGeometry.js'
 import { TERRAIN_TYPES, MARKER_KINDS, GM_MARKER_KINDS, parseMarkers } from '@/stores/hexStore.js'
+import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
+
+const prefs = useUserPrefsStore()
 
 const props = defineProps({
   q: Number,

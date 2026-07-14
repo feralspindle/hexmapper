@@ -19,6 +19,8 @@ pub struct SavePrefsRequest {
     pub dungeon_icon_style: String,
     pub dungeon_panel_layout: String,
     pub dungeon_show_cursors: bool,
+    pub hex_show_markers: bool,
+    pub dungeon_show_items: bool,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -30,6 +32,8 @@ pub struct PrefsRow {
     pub dungeon_icon_style: String,
     pub dungeon_panel_layout: String,
     pub dungeon_show_cursors: bool,
+    pub hex_show_markers: bool,
+    pub dungeon_show_items: bool,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -50,6 +54,8 @@ pub async fn save_prefs(
             "dungeon_icon_style": req.dungeon_icon_style,
             "dungeon_panel_layout": req.dungeon_panel_layout,
             "dungeon_show_cursors": req.dungeon_show_cursors,
+            "hex_show_markers": req.hex_show_markers,
+            "dungeon_show_items": req.dungeon_show_items,
         }),
         metadata: auth.metadata(),
     };
