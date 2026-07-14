@@ -251,20 +251,42 @@
             font-family="'JetBrains Mono', monospace"
           >{{ t.initiative }}</text>
         </g>
-        <circle
-          v-for="(cond, ci) in t.conditions.slice(0, 6)"
-          :key="cond.name"
-          :cx="-tokenR + ci * (tokenCondR * 2 + 2) + tokenCondR"
-          :cy="-tokenR - tokenCondR - 2"
-          :r="tokenCondR"
-          :fill="cond.color"
-          stroke="#1a1410"
-          stroke-width="1"
+        <g
+          v-if="t.conditions.length"
           :class="tokensInteractive ? 'pointer-events-auto' : ''"
           @pointerdown.stop="onTokenPointerDown($event, t)"
           @pointerenter="hoveredTokenId = t.id"
           @pointerleave="hoveredTokenId = null"
-        />
+        >
+          <circle
+            :cx="-tokenR + tokenCondR"
+            :cy="-tokenR - tokenCondR - 2"
+            :r="tokenCondR"
+            :fill="t.conditions[0].color"
+            stroke="#1a1410"
+            stroke-width="1"
+          />
+          <template v-if="t.conditions.length > 1">
+            <circle
+              :cx="-tokenR + tokenCondR * 2.1"
+              :cy="-tokenR - tokenCondR * 2.1 - 2"
+              :r="Math.max(4, tokenCondR * 0.9)"
+              fill="#c83c32"
+              stroke="#1a1410"
+              stroke-width="0.8"
+            />
+            <text
+              :x="-tokenR + tokenCondR * 2.1"
+              :y="-tokenR - tokenCondR * 2.1 - 2"
+              text-anchor="middle"
+              dominant-baseline="central"
+              fill="#fff5e8"
+              :font-size="Math.max(6, tokenCondR * 1.2)"
+              font-family="'JetBrains Mono', monospace"
+              font-weight="700"
+            >{{ t.conditions.length }}</text>
+          </template>
+        </g>
         <circle
           cx="0" cy="0" :r="tokenR + 2"
           fill="transparent"
