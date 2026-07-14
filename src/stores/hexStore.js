@@ -14,6 +14,8 @@ export const MARKER_KINDS = [
   { id: "city", label: "City" },
   { id: "dungeon", label: "Dungeon" },
   { id: "landmark", label: "Landmark" },
+  { id: "cache", label: "Cache" },
+  { id: "quest", label: "Quest Location" },
 ];
 
 export const GM_MARKER_KINDS = [
