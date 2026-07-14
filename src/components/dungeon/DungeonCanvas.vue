@@ -223,14 +223,16 @@
         >{{ t.name.slice(0, 1).toUpperCase() }}</text>
         <template v-if="t.maxHp > 0">
           <rect
-            :x="-tokenR" :y="tokenR + 2"
-            :width="tokenR * 2" height="3" rx="1.5"
-            fill="rgba(0,0,0,.65)"
+            :x="-tokenR - 0.5" :y="tokenR + 1.5"
+            :width="tokenR * 2 + 1" :height="tokenHpH + 1" :rx="(tokenHpH + 1) / 2"
+            fill="rgba(0,0,0,.85)"
+            stroke="rgba(237,225,199,.55)"
+            stroke-width="1"
             style="pointer-events:none"
           />
           <rect
             :x="-tokenR" :y="tokenR + 2"
-            :width="Math.max(0, tokenR * 2 * t.hpPct)" height="3" rx="1.5"
+            :width="Math.max(0, tokenR * 2 * t.hpPct)" :height="tokenHpH" :rx="tokenHpH / 2"
             :fill="t.hpColor"
             style="pointer-events:none"
           />
@@ -934,6 +936,7 @@ const lastPointerType = ref('mouse')
 
 const tokenR = computed(() => cellPx.value * 0.45)
 const tokenCondR = computed(() => Math.max(3, tokenR.value * 0.28))
+const tokenHpH = computed(() => Math.max(4, tokenR.value * 0.3))
 
 // tokens only take pointer events in modes where grabbing one can't hijack a
 // drawing gesture (the fog brush especially - a token would eat brush strokes)
