@@ -108,6 +108,23 @@ select throws_ok(
 );
 
 select throws_ok(
+  $sql$insert into public.maps (session_id, name, parent_map_id)
+       values ('11000000-0000-0000-0000-000000000001', 'bad link', '21000000-0000-0000-0000-000000000002')$sql$,
+  '23503',
+  NULL,
+  'map rejects a parent map from another session'
+);
+
+select throws_ok(
+  $sql$update public.maps
+       set parent_hex_id = '31000000-0000-0000-0000-000000000002'
+       where id = '21000000-0000-0000-0000-000000000001'$sql$,
+  '23503',
+  NULL,
+  'map rejects a parent hex from another session'
+);
+
+select throws_ok(
   $sql$insert into public.dice_rolls (session_id, user_id, display_name, pending, modifier, results, total, character_id)
        values ('11000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000012', 'Player', '[]', 0, '[]', 1, '81000000-0000-0000-0000-000000000002')$sql$,
   '23503',

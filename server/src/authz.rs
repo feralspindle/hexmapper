@@ -215,6 +215,7 @@ pub async fn party_session_note_author_session(pool: &PgPool, note_id: Uuid) -> 
 #[derive(Clone, Copy)]
 pub enum SessionTable {
     Maps,
+    HexCells,
     PartyQuests,
     PartyVaultContainers,
     PartyVaultLoot,
@@ -227,6 +228,7 @@ impl SessionTable {
     fn as_str(self) -> &'static str {
         match self {
             Self::Maps                  => "maps",
+            Self::HexCells              => "hex_cells",
             Self::PartyQuests           => "party_quests",
             Self::PartyVaultContainers  => "party_vault_containers",
             Self::PartyVaultLoot        => "party_vault_loot",
