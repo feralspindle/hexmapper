@@ -184,7 +184,6 @@
         data-testid="dungeon-token"
         :data-token-character="t.characterId"
       >
-        <title>{{ t.name }}{{ t.conditions.length ? ` — ${t.conditions.map(c => c.name).join(', ')}` : '' }}</title>
         <circle
           v-if="t.selected"
           :cx="t.cx" :cy="t.cy" :r="tokenR + 4"
@@ -251,17 +250,16 @@
             font-family="'JetBrains Mono', monospace"
           >{{ t.initiative }}</text>
         </g>
-        <g v-for="(cond, ci) in t.conditions.slice(0, 6)" :key="cond.name">
-          <circle
-            :cx="t.cx - tokenR + ci * (tokenCondR * 2 + 2) + tokenCondR"
-            :cy="t.cy - tokenR - tokenCondR - 2"
-            :r="tokenCondR"
-            :fill="cond.color"
-            stroke="#1a1410"
-            stroke-width="1"
-          />
-          <title>{{ cond.name }}</title>
-        </g>
+        <circle
+          v-for="(cond, ci) in t.conditions.slice(0, 6)"
+          :key="cond.name"
+          :cx="t.cx - tokenR + ci * (tokenCondR * 2 + 2) + tokenCondR"
+          :cy="t.cy - tokenR - tokenCondR - 2"
+          :r="tokenCondR"
+          :fill="cond.color"
+          stroke="#1a1410"
+          stroke-width="1"
+        />
         <circle
           :cx="t.cx" :cy="t.cy" :r="tokenR + 2"
           fill="transparent"
@@ -271,6 +269,8 @@
           @pointermove="onTokenPointerMove"
           @pointerup="onTokenPointerUp"
           @pointercancel="onTokenPointerUp"
+          @pointerenter="hoveredTokenId = t.id"
+          @pointerleave="hoveredTokenId = null"
         />
       </g>
 
@@ -417,6 +417,28 @@
         >{{ opt.label }}</button>
       </div>
     </Transition>
+
+    <div
+      v-if="tokenTooltip"
+      class="ds-token-tip"
+      data-testid="token-tooltip"
+      :style="tokenTooltipStyle"
+    >
+      <div class="ds-token-tip-name">{{ tokenTooltip.name }}</div>
+      <div class="ds-token-tip-stats">
+        <span v-if="tokenTooltip.maxHp > 0">HP {{ tokenTooltip.hp }}/{{ tokenTooltip.maxHp }}</span>
+        <span v-if="tokenTooltip.ac != null">AC {{ tokenTooltip.ac }}</span>
+        <span v-if="tokenTooltip.initiative != null">Init {{ tokenTooltip.initiative }}</span>
+      </div>
+      <div v-if="tokenTooltip.conditions.length" class="ds-token-tip-conds">
+        <span
+          v-for="cond in tokenTooltip.conditions"
+          :key="cond.name"
+          class="ds-token-tip-cond"
+          :style="{ '--cond-color': cond.color }"
+        ><i :class="cond.faClass" /> {{ cond.name }}</span>
+      </div>
+    </div>
 
     <Transition name="ds-banner">
       <div v-if="dungeonStore.drawMode === 'token'" class="ds-fog-size-picker" data-testid="token-picker">
@@ -880,6 +902,7 @@ const draggingItem = ref(null)
 
 const draggingToken = ref(null)
 const tokenPlacementCharId = ref(null)
+const hoveredTokenId = ref(null)
 
 const tokenR = computed(() => cellPx.value * 0.45)
 const tokenCondR = computed(() => Math.max(3, tokenR.value * 0.28))
@@ -932,9 +955,11 @@ const tokenViews = computed(() => {
       cy: (drag ? drag.gy : token.y + 0.5) * cs - viewport.value.offsetY,
       name: data.name || 'Unknown',
       color: playerColorFor(char?.user_id),
+      hp,
       maxHp,
       hpPct,
       hpColor: hpColorFor(hpPct),
+      ac: data.armorClass ?? null,
       initiative: data.initiative ?? null,
       conditions: (data.conditions ?? []).map(conditionBadge),
       imageUrl: tokenImageUrl(data.tokenImagePath),
@@ -943,6 +968,24 @@ const tokenViews = computed(() => {
     })
   }
   return views
+})
+
+const tokenTooltip = computed(() => {
+  if (!hoveredTokenId.value || draggingToken.value) return null
+  return tokenViews.value.find(t => t.id === hoveredTokenId.value) ?? null
+})
+
+const tokenTooltipStyle = computed(() => {
+  const t = tokenTooltip.value
+  if (!t) return {}
+  // flip below the token when there isn't room above (condition chips can
+  // stack the tooltip a few lines tall)
+  const below = t.cy - tokenR.value < 150
+  return {
+    left: `${t.cx}px`,
+    top: below ? `${t.cy + tokenR.value + 14}px` : `${t.cy - tokenR.value - 14}px`,
+    transform: below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
+  }
 })
 
 const tokenDropAllowed = computed(() => {
@@ -2459,6 +2502,55 @@ onUnmounted(() => {
 .ds-dim-btn:hover { background: var(--accent, #8a1c1c); border-color: var(--accent, #8a1c1c); }
 .ds-dim-ghost { background: transparent; color: rgba(237,225,199,.5); }
 .ds-dim-ghost:hover { background: rgba(237,225,199,.1); border-color: rgba(237,225,199,.3); color: var(--paper, #ede1c7); }
+
+.ds-token-tip {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  max-width: 240px;
+  padding: 7px 10px;
+  background: rgba(13,10,7,.94);
+  border: 1px solid rgba(237,225,199,.35);
+  border-radius: 5px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.6);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ds-token-tip-name {
+  font-family: var(--font-display, serif);
+  font-size: 14px;
+  color: #ede1c7;
+  line-height: 1.15;
+}
+.ds-token-tip-stats {
+  display: flex;
+  gap: 10px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  color: rgba(237,225,199,.8);
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.ds-token-tip-conds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ds-token-tip-cond {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--cond-color);
+  background: rgba(237,225,199,.06);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10.5px;
+  color: #ede1c7;
+  letter-spacing: .02em;
+}
+.ds-token-tip-cond i { color: var(--cond-color); font-size: 10px; }
 
 .ds-fog-size-picker {
   position: absolute;
