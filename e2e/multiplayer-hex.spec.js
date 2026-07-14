@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
+  closeSessionPanel,
   createThreeRoleCampaign,
   hexCell,
   prepareHexInteractions,
@@ -12,6 +13,7 @@ const missingEnv = missingE2EAccountEnv()
 async function addGmMarker(page, q, r, kind) {
   await selectHexAndOpenInspector(page, q, r)
   await page.getByTestId(`gm-marker-add-${kind}`).click()
+  await closeSessionPanel(page)
 }
 
 // Records everything that crosses a player's wire: hex-cell/api REST bodies and
@@ -164,6 +166,7 @@ test.describe.serial('hex map multiplayer sync', () => {
       await expect(hexCell(room.player2.page, 0, 0)).toHaveAttribute('data-note-count', '1')
 
       // a later edit to the same cell must not clobber the count client-side
+      await closeSessionPanel(room.gm.page)
       await room.gm.page.getByTestId('hex-tool-reveal').click()
       await hexCell(room.gm.page, 1, 0).click()
       await expect(hexCell(room.gm.page, 0, 0)).toHaveAttribute('data-note-count', '1')
