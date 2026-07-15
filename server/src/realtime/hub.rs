@@ -404,8 +404,11 @@ impl RealtimeHub {
 }
 
 fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
-    if row.aggregate_type == "dungeon_token" {
-        return visible_token_event(row, is_gm);
+    if matches!(
+        row.aggregate_type.as_str(),
+        "dungeon_token" | "dungeon_icon" | "dungeon_cell_note"
+    ) {
+        return visible_fogged_event(row, is_gm);
     }
     if row.aggregate_type != "hex_cell" {
         return Some((row.event_type.clone(), with_event_fields(row)));
@@ -432,12 +435,14 @@ fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
     Some((row.event_type.clone(), payload))
 }
 
-// A token on unrevealed ground is GM-only (#153). The listener stamps `fogged`
-// into metadata before dispatch (this function has no pool). Players get a
-// synthetic removal instead of a silent drop, so a token moving into fog
-// vanishes from their store instead of freezing at its last revealed spot.
-// Real deletes carry no fog stamp and pass through - a removal leaks nothing.
-fn visible_token_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
+// A row on unrevealed ground is GM-only (#153): tokens, and the fog-mode
+// annotation layer that shares their grid (icons, cell notes). The listener
+// stamps `fogged` into metadata before dispatch (this function has no pool).
+// Players get a synthetic removal instead of a silent drop, so a row moving
+// into fog vanishes from their store instead of freezing at its last revealed
+// spot. Real deletes carry no fog stamp and pass through - a removal leaks
+// nothing.
+fn visible_fogged_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
     let payload = with_event_fields(row);
     let fogged = row
         .metadata
@@ -453,7 +458,7 @@ fn visible_token_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
             removal.insert(key.to_string(), value.clone());
         }
     }
-    Some(("dungeon_token.deleted".into(), Value::Object(removal)))
+    Some((format!("{}.deleted", row.aggregate_type), Value::Object(removal)))
 }
 
 fn with_event_fields(row: &EventRow) -> Value {
@@ -590,6 +595,75 @@ mod tests {
         let (event, payload) = visible_event(&row, false).unwrap();
         assert_eq!(event, "dungeon_token.created");
         assert_eq!(payload.get("x"), Some(&json!(2)));
+    }
+
+    #[test]
+    fn fogged_icon_becomes_a_removal_for_players_only() {
+        let dungeon_id = Uuid::new_v4();
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "dungeon_icon".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "dungeon_icon.created".into(),
+            payload: json!({"dungeon_id": dungeon_id, "type": "monster", "label": "Owlbear", "x": 4, "y": 9}),
+            metadata: json!({"fogged": true}),
+            created_at: chrono::Utc::now(),
+        };
+
+        let (event, payload) = visible_event(&row, false).unwrap();
+        assert_eq!(event, "dungeon_icon.deleted");
+        assert!(payload.get("x").is_none());
+        assert!(payload.get("type").is_none());
+        assert!(payload.get("label").is_none());
+        assert!(payload.get("id").is_some());
+        assert_eq!(payload.get("dungeon_id"), Some(&json!(dungeon_id)));
+
+        let (event, payload) = visible_event(&row, true).unwrap();
+        assert_eq!(event, "dungeon_icon.created");
+        assert_eq!(payload.get("label"), Some(&json!("Owlbear")));
+    }
+
+    #[test]
+    fn fogged_cell_note_body_never_reaches_players() {
+        let dungeon_id = Uuid::new_v4();
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "dungeon_cell_note".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "dungeon_cell_note.created".into(),
+            payload: json!({"dungeon_id": dungeon_id, "cell_x": 5, "cell_y": 7, "body": "ambush here"}),
+            metadata: json!({"fogged": true}),
+            created_at: chrono::Utc::now(),
+        };
+
+        let (event, payload) = visible_event(&row, false).unwrap();
+        assert_eq!(event, "dungeon_cell_note.deleted");
+        assert!(payload.get("body").is_none());
+        assert!(payload.get("cell_x").is_none());
+        assert!(payload.get("id").is_some());
+
+        let (event, payload) = visible_event(&row, true).unwrap();
+        assert_eq!(event, "dungeon_cell_note.created");
+        assert_eq!(payload.get("body"), Some(&json!("ambush here")));
+    }
+
+    #[test]
+    fn unfogged_cell_note_passes_through_for_players() {
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "dungeon_cell_note".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "dungeon_cell_note.edited".into(),
+            payload: json!({"dungeon_id": Uuid::new_v4(), "cell_x": 1, "cell_y": 2, "body": "a mossy door"}),
+            metadata: json!({"fogged": false}),
+            created_at: chrono::Utc::now(),
+        };
+        let (event, payload) = visible_event(&row, false).unwrap();
+        assert_eq!(event, "dungeon_cell_note.edited");
+        assert_eq!(payload.get("body"), Some(&json!("a mossy door")));
     }
 
     #[test]

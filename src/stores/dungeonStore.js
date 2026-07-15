@@ -21,6 +21,7 @@ export const useD = defineStore('dungeon', () => {
   const rooms = ref(new Map())
   const corridors = ref(new Map())
   const tokens = ref(new Map())
+  const icons = ref(new Map())
   const loading = ref(true)
   const loadError = ref(null)
   const drawMode = ref('select')
@@ -39,6 +40,7 @@ export const useD = defineStore('dungeon', () => {
   let roomChannel = null
   let corridorChannel = null
   let tokenChannel = null
+  let iconChannel = null
   let dungeonChannel = null
   let presenceChannel = null
   let fogChannel = null
@@ -288,34 +290,35 @@ export const useD = defineStore('dungeon', () => {
     return updateDungeon({ fogRevealAll: false })
   }
 
-  // fog changes flip which token rows RLS lets a player read (#153) - hidden
-  // tokens never arrive at all, so a reveal has to refetch them. debounced
-  // because the fog brush lands as a burst of cell events.
-  let _tokenRefetchTimer = null
+  // fog changes flip which token/icon rows RLS lets a player read (#153) -
+  // hidden rows never arrive at all, so a reveal has to refetch them.
+  // debounced because the fog brush lands as a burst of cell events.
+  let _fogRefetchTimer = null
 
-  function _scheduleTokenRefetch() {
-    if (_tokenRefetchTimer) clearTimeout(_tokenRefetchTimer)
-    _tokenRefetchTimer = setTimeout(() => {
-      _tokenRefetchTimer = null
-      void _refetchTokens()
+  function _scheduleFogRefetch() {
+    if (_fogRefetchTimer) clearTimeout(_fogRefetchTimer)
+    _fogRefetchTimer = setTimeout(() => {
+      _fogRefetchTimer = null
+      void _refetchFogGated('dungeon_tokens', tokens, 'token')
+      void _refetchFogGated('dungeon_icons', icons, 'icon')
     }, 250)
   }
 
-  async function _refetchTokens() {
+  async function _refetchFogGated(table, collection, entity) {
     const dungeonId = _dungeonId
     const generation = _initGeneration
     if (!dungeonId) return
-    const { data, error } = await supabase.from('dungeon_tokens').select('*').eq('dungeon_id', dungeonId)
+    const { data, error } = await supabase.from(table).select('*').eq('dungeon_id', dungeonId)
     if (error || _dungeonId !== dungeonId || generation !== _initGeneration) return
-    const next = new Map((data ?? []).map(t => [t.id, t]))
+    const next = new Map((data ?? []).map(r => [r.id, r]))
     // keep optimistic rows whose write hasn't settled yet
     for (const key of _pendingWrites.keys()) {
-      if (!key.startsWith('token:')) continue
-      const id = key.slice('token:'.length)
-      const current = tokens.value.get(id)
+      if (!key.startsWith(`${entity}:`)) continue
+      const id = key.slice(entity.length + 1)
+      const current = collection.value.get(id)
       if (current) next.set(id, current)
     }
-    tokens.value = next
+    collection.value = next
   }
 
   async function refresh() {
@@ -323,12 +326,13 @@ export const useD = defineStore('dungeon', () => {
     const generation = _initGeneration
     if (!dungeonId) return
     try {
-      const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }, { data: fogData }, { data: tokenData }] = await Promise.all([
+      const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }, { data: fogData }, { data: tokenData }, { data: iconData }] = await Promise.all([
         supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
         supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_fog_cells').select('cell_x, cell_y').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_tokens').select('*').eq('dungeon_id', dungeonId),
+        supabase.from('dungeon_icons').select('*').eq('dungeon_id', dungeonId),
       ])
       if (e1) throw new Error(e1.message)
       if (_dungeonId !== dungeonId || generation !== _initGeneration) return
@@ -349,6 +353,7 @@ export const useD = defineStore('dungeon', () => {
       corridors.value = new Map((corridorData ?? []).map(c => [c.id, c]))
       fogCells.value = new Set((fogData ?? []).map(r => _fogKey(r.cell_x, r.cell_y)))
       tokens.value = new Map((tokenData ?? []).map(t => [t.id, t]))
+      icons.value = new Map((iconData ?? []).map(i => [i.id, i]))
       loadError.value = null
     } catch (err) {
       console.error('dungeonStore.refresh error:', err)
@@ -362,6 +367,7 @@ export const useD = defineStore('dungeon', () => {
     if (roomChannel)     { realtime.removeChannel(roomChannel); roomChannel = null }
     if (corridorChannel) { realtime.removeChannel(corridorChannel); corridorChannel = null }
     if (tokenChannel)    { realtime.removeChannel(tokenChannel); tokenChannel = null }
+    if (iconChannel)     { realtime.removeChannel(iconChannel); iconChannel = null }
     if (presenceChannel) { realtime.removeChannel(presenceChannel); presenceChannel = null }
     if (fogChannel)      { realtime.removeChannel(fogChannel); fogChannel = null }
     if (undoChannel)     { realtime.removeChannel(undoChannel); undoChannel = null }
@@ -378,11 +384,12 @@ export const useD = defineStore('dungeon', () => {
     _removeChannels()
 
     try {
-      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }, { data: tokenData, error: e4 }] = await Promise.all([
+      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }, { data: tokenData, error: e4 }, { data: iconData, error: e5 }] = await Promise.all([
         supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
         supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_tokens').select('*').eq('dungeon_id', dungeonId),
+        supabase.from('dungeon_icons').select('*').eq('dungeon_id', dungeonId),
       ])
 
       if (generation !== _initGeneration) return
@@ -390,11 +397,13 @@ export const useD = defineStore('dungeon', () => {
       if (e2) throw new Error(e2.message)
       if (e3) throw new Error(e3.message)
       if (e4) throw new Error(e4.message)
+      if (e5) throw new Error(e5.message)
 
       dungeon.value = dungeonData
       rooms.value = new Map((roomData ?? []).map(r => [r.id, r]))
       corridors.value = new Map((corridorData ?? []).map(c => [c.id, c]))
       tokens.value = new Map((tokenData ?? []).map(t => [t.id, t]))
+      icons.value = new Map((iconData ?? []).map(i => [i.id, i]))
 
       const { data: fogData } = await supabase
         .from('dungeon_fog_cells')
@@ -432,7 +441,7 @@ export const useD = defineStore('dungeon', () => {
           }
           dungeon.value = merged
           if (prev && (prev.fog_mode !== merged.fog_mode || prev.fog_reveal_all !== merged.fog_reveal_all))
-            _scheduleTokenRefetch()
+            _scheduleFogRefetch()
         },
       )
       .subscribe(status => {
@@ -453,7 +462,7 @@ export const useD = defineStore('dungeon', () => {
             if (pending) pending.confirmed = true
             if (row.source_client !== CLIENT_ID)
               fogCells.value = new Set(fogCells.value).add(key)
-            _scheduleTokenRefetch()
+            _scheduleFogRefetch()
           } else if (eventType === 'DELETE') {
             const key = _fogKey(old.cell_x, old.cell_y)
             const pending = _pendingFogOps.get(key)
@@ -461,7 +470,7 @@ export const useD = defineStore('dungeon', () => {
             const next = new Set(fogCells.value)
             next.delete(key)
             fogCells.value = next
-            _scheduleTokenRefetch()
+            _scheduleFogRefetch()
           }
         },
       )
@@ -527,6 +536,24 @@ export const useD = defineStore('dungeon', () => {
             tokens.value.set(row.id, row)
           } else if (eventType === 'DELETE') {
             tokens.value.delete(old.id)
+            if (selectedElement.value?.id === old.id) selectedElement.value = null
+          }
+        },
+      )
+      .subscribe()
+
+    iconChannel = realtime
+      .channel(`session:${sessionId}:dungeon:${dungeonId}:icons`, { sessionId })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dungeon_icons', filter: `dungeon_id=eq.${dungeonId}` },
+        ({ eventType, new: row, old }) => {
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            if (row.source_client === CLIENT_ID &&
+                (eventType === 'INSERT' || _pendingWrites.has(`icon:${row.id}`))) return
+            icons.value.set(row.id, row)
+          } else if (eventType === 'DELETE') {
+            icons.value.delete(old.id)
             if (selectedElement.value?.id === old.id) selectedElement.value = null
           }
         },
@@ -877,6 +904,74 @@ export const useD = defineStore('dungeon', () => {
     }
   }
 
+  // free-placed grid icons (fog-mode annotation layer). like tokens they stay
+  // off the shared undo stack and mirror the fog placement rule client-side.
+  function iconsAtCell(cellX, cellY) {
+    const result = []
+    for (const icon of icons.value.values()) {
+      if (icon.x === cellX && icon.y === cellY) result.push(icon)
+    }
+    return result
+  }
+
+  async function addIcon(type, x, y) {
+    if (!dungeon.value?.id) return
+    const tempId = crypto.randomUUID()
+    const optimistic = {
+      id: tempId,
+      dungeon_id: dungeon.value.id,
+      session_id: dungeon.value.session_id,
+      type, x, y,
+      label: null,
+      notes: null,
+      source_client: CLIENT_ID,
+    }
+    icons.value.set(tempId, optimistic)
+    try {
+      const data = await apiClient.post('/dungeon-icons', {
+        dungeon_id: dungeon.value.id,
+        type, x, y,
+        source_client: CLIENT_ID,
+      }, 'place_icon')
+      icons.value.delete(tempId)
+      if (!icons.value.has(data.id)) icons.value.set(data.id, data)
+      useActivityStore().record('placed icon', type)
+    } catch (error) {
+      icons.value.delete(tempId)
+      console.error('addIcon error:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
+  async function updateIcon(id, patch) {
+    const existing = icons.value.get(id)
+    if (!existing) return
+    const optimistic = { ...existing, ...patch }
+    icons.value.set(id, optimistic)
+
+    _pendingWrites.begin([`icon:${id}`])
+    try {
+      await apiClient.patch(`/dungeon-icons/${id}`, { ...patch, source_client: CLIENT_ID }, 'update_icon')
+    } catch (error) {
+      if (toRaw(icons.value.get(id)) === optimistic) icons.value.set(id, existing)
+      console.error('updateIcon error:', error instanceof ApiError ? error.message : error)
+    } finally {
+      _pendingWrites.end([`icon:${id}`])
+    }
+  }
+
+  async function removeIcon(id) {
+    const backup = icons.value.get(id)
+    icons.value.delete(id)
+    if (selectedElement.value?.id === id) selectedElement.value = null
+    try {
+      await apiClient.delete(`/dungeon-icons/${id}`, 'remove_icon')
+      useActivityStore().record('removed icon', backup?.type ?? '')
+    } catch (error) {
+      if (backup && !icons.value.has(id)) icons.value.set(id, backup)
+      console.error('removeIcon error:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
   function selectElement(type, id, extra = {}) {
     selectedElement.value = { type, id, ...extra }
     _trackPresence?.()
@@ -924,7 +1019,7 @@ export const useD = defineStore('dungeon', () => {
 
   function cleanup() {
     _initGeneration += 1
-    if (_tokenRefetchTimer) { clearTimeout(_tokenRefetchTimer); _tokenRefetchTimer = null }
+    if (_fogRefetchTimer) { clearTimeout(_fogRefetchTimer); _fogRefetchTimer = null }
     _removeChannels()
     _cleanupImageUrl()
     _dungeonId  = null
@@ -935,6 +1030,7 @@ export const useD = defineStore('dungeon', () => {
     rooms.value = new Map()
     corridors.value = new Map()
     tokens.value = new Map()
+    icons.value = new Map()
     viewers.value = []
     selectedElement.value = null
     loadError.value = null
@@ -949,6 +1045,7 @@ export const useD = defineStore('dungeon', () => {
     rooms,
     corridors,
     tokens,
+    icons,
     loading,
     loadError,
     drawMode,
@@ -994,6 +1091,10 @@ export const useD = defineStore('dungeon', () => {
     placeToken,
     moveToken,
     removeToken,
+    iconsAtCell,
+    addIcon,
+    updateIcon,
+    removeIcon,
     revealFogCell,
     hideFogCell,
     revealFogCells,

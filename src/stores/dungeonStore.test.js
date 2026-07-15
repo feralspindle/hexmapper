@@ -557,15 +557,16 @@ describe('dungeonStore', () => {
     expect(store.dungeon.name).toBe('Fresh Crypt')
   })
 
-  test('cleanup removes all seven channels and resets state', async () => {
+  test('cleanup removes all eight channels and resets state', async () => {
     const store = await loadedStore()
     store.cleanup()
 
-    expect(kit.channels).toHaveLength(7)
+    expect(kit.channels).toHaveLength(8)
     expect(kit.channels.every(c => c.removed)).toBe(true)
     expect(store.dungeon).toBeNull()
     expect(store.rooms.size).toBe(0)
     expect(store.tokens.size).toBe(0)
+    expect(store.icons.size).toBe(0)
     expect(store.undoStack).toEqual([])
   })
 
@@ -658,6 +659,23 @@ describe('dungeonStore', () => {
       expect(store.selectedElement).toBeNull()
     })
 
+    test('a fog change refetches the fog-gated collections (tokens and icons)', async () => {
+      const store = await loadedStore()
+      vi.useFakeTimers()
+
+      // RLS hid these rows until the reveal - they only exist on refetch
+      kit.responses.dungeon_tokens = { data: [token('t1')], error: null }
+      kit.responses.dungeon_icons = { data: [{ id: 'i1', dungeon_id: 'd1', session_id: 's1', type: 'trap', x: 3, y: 3 }], error: null }
+      channelNamed(':fog').emitPostgres('dungeon_fog_cells', 'INSERT', { cell_x: 3, cell_y: 3, source_client: 'other' })
+
+      await vi.advanceTimersByTimeAsync(300)
+      vi.useRealTimers()
+      await Promise.resolve()
+
+      expect(store.tokens.get('t1')).toBeTruthy()
+      expect(store.icons.get('i1')).toMatchObject({ type: 'trap', x: 3, y: 3 })
+    })
+
     test('isCellPlaceable follows fog state', async () => {
       kit.responses.dungeon_fog_cells = { data: [{ cell_x: 1, cell_y: 1 }], error: null }
       const store = await loadedStore()
@@ -670,6 +688,94 @@ describe('dungeonStore', () => {
 
       store.dungeon = { ...store.dungeon, fog_mode: false, fog_reveal_all: false }
       expect(store.isCellPlaceable(5, 5)).toBe(true)
+    })
+  })
+
+  describe('icons', () => {
+    const icon = (id, overrides = {}) => ({
+      id,
+      dungeon_id: 'd1',
+      session_id: 's1',
+      type: 'monster',
+      label: null,
+      notes: null,
+      x: 2,
+      y: 3,
+      ...overrides,
+    })
+
+    test('init loads icons and iconsAtCell filters by position', async () => {
+      kit.responses.dungeon_icons = { data: [icon('i1'), icon('i2', { x: 9, y: 9 })], error: null }
+      const store = await loadedStore()
+
+      expect(store.icons.size).toBe(2)
+      expect(store.iconsAtCell(2, 3).map(i => i.id)).toEqual(['i1'])
+    })
+
+    test('addIcon swaps the optimistic icon for the server row', async () => {
+      kit.api['post /dungeon-icons'] = body => icon('server-icon', body)
+      const store = await loadedStore()
+
+      await store.addIcon('trap', 4, 5)
+
+      expect(store.icons.get('server-icon')).toBeTruthy()
+      expect([...store.icons.keys()]).toHaveLength(1)
+      expect(kit.apiClient.post).toHaveBeenCalledWith(
+        '/dungeon-icons',
+        expect.objectContaining({ dungeon_id: 'd1', type: 'trap', x: 4, y: 5 }),
+        'place_icon',
+      )
+    })
+
+    test('a failed addIcon removes the optimistic icon', async () => {
+      kit.api['post /dungeon-icons'] = new kit.ApiError('cell is hidden by fog', 400)
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const store = await loadedStore()
+
+      await store.addIcon('trap', 9, 9)
+
+      expect(store.icons.size).toBe(0)
+      errorSpy.mockRestore()
+    })
+
+    test('a failed updateIcon rolls the icon back', async () => {
+      kit.responses.dungeon_icons = { data: [icon('i1')], error: null }
+      kit.api['patch /dungeon-icons/i1'] = () => { throw new kit.ApiError('cell is hidden by fog', 400) }
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const store = await loadedStore()
+
+      await store.updateIcon('i1', { x: 99, y: 99 })
+
+      expect(store.icons.get('i1')).toMatchObject({ x: 2, y: 3 })
+      errorSpy.mockRestore()
+    })
+
+    test('a failed removeIcon restores the icon', async () => {
+      kit.responses.dungeon_icons = { data: [icon('i1')], error: null }
+      kit.api['delete /dungeon-icons/i1'] = () => { throw new kit.ApiError('forbidden', 403) }
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const store = await loadedStore()
+
+      await store.removeIcon('i1')
+
+      expect(store.icons.get('i1')).toBeTruthy()
+      errorSpy.mockRestore()
+    })
+
+    test('realtime insert/update/delete from another client applies to the map', async () => {
+      const store = await loadedStore()
+      const ch = channelNamed(':icons')
+
+      ch.emitPostgres('dungeon_icons', 'INSERT', icon('i9', { source_client: 'someone-else' }))
+      expect(store.icons.get('i9')).toBeTruthy()
+
+      ch.emitPostgres('dungeon_icons', 'UPDATE', icon('i9', { label: 'Owlbear den', source_client: 'someone-else' }))
+      expect(store.icons.get('i9')).toMatchObject({ label: 'Owlbear den' })
+
+      store.selectElement('icon', 'i9')
+      ch.emitPostgres('dungeon_icons', 'DELETE', {}, { id: 'i9' })
+      expect(store.icons.has('i9')).toBe(false)
+      expect(store.selectedElement).toBeNull()
     })
   })
 })
