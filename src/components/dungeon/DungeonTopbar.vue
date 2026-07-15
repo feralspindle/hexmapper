@@ -11,6 +11,37 @@
             @navigate="goToMap"
         />
 
+        <div
+            v-if="mode && sessionStore.isGM"
+            class="hm-mode-badge"
+            :data-mode="mode"
+        >
+            <span class="hm-mode-label">{{
+                mode === "fow" ? "Fog of War" : "Blank Slate"
+            }}</span>
+            <button
+                class="hm-switch-btn"
+                aria-label="Switch"
+                @click="emit('switch-mode')"
+            >
+                <span class="hm-switch-text">Switch</span>
+                <svg
+                    class="hm-switch-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <path d="M2 4.5h8.5M8.5 2l2.5 2.5L8.5 7" />
+                    <path d="M12 9.5H3.5M5.5 12L3 9.5 5.5 7" />
+                </svg>
+            </button>
+        </div>
+
         <div class="ds-divider" />
 
         <SessionTorchTimer />
@@ -89,9 +120,10 @@ import { activeNavDropdown } from "@/composables/useNavDropdown.js";
 
 defineProps({
     dungeonId: String,
+    mode: { type: String, default: null },
     charOpen: { type: Boolean, default: false },
 });
-const emit = defineEmits(["toggle-char"]);
+const emit = defineEmits(["toggle-char", "switch-mode"]);
 
 const router = useRouter();
 const route = useRoute();
