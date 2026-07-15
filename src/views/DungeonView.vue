@@ -16,7 +16,11 @@
     />
 
     <div v-if="showModePicker" class="hm-setup-bg">
-      <DungeonModePicker @pick-fow="onPickFow" @pick-blank="onPickBlank" />
+      <DungeonModePicker
+        :has-map-image="!!dungeonStore.dungeon?.map_image_path"
+        @pick-fow="onPickFow"
+        @pick-blank="onPickBlank"
+      />
     </div>
 
     <div v-else class="ds-body">
@@ -196,7 +200,13 @@ async function onPickFow(file) {
 async function onPickBlank() {
   showModePicker.value = false
   localStorage.setItem(modeKey, 'blank')
-  await dungeonStore.updateDungeon({ fogMode: false })
+  // blank slate means the party draws the map, so a GM-uploaded image has no
+  // business lingering underneath - clear it along with the mode flip
+  if (dungeonStore.dungeon?.map_image_path) {
+    await dungeonStore.clearMapImage({ fogMode: false })
+  } else {
+    await dungeonStore.updateDungeon({ fogMode: false })
+  }
 }
 
 watch(charOpen, (val) => {
