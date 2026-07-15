@@ -404,6 +404,9 @@ impl RealtimeHub {
 }
 
 fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
+    if row.aggregate_type == "dungeon_token" {
+        return visible_token_event(row, is_gm);
+    }
     if row.aggregate_type != "hex_cell" {
         return Some((row.event_type.clone(), with_event_fields(row)));
     }
@@ -427,6 +430,30 @@ fn visible_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
         hex_visibility::VisibleHexRow::Sentinel(sentinel) => sentinel,
     };
     Some((row.event_type.clone(), payload))
+}
+
+// A token on unrevealed ground is GM-only (#153). The listener stamps `fogged`
+// into metadata before dispatch (this function has no pool). Players get a
+// synthetic removal instead of a silent drop, so a token moving into fog
+// vanishes from their store instead of freezing at its last revealed spot.
+// Real deletes carry no fog stamp and pass through - a removal leaks nothing.
+fn visible_token_event(row: &EventRow, is_gm: bool) -> Option<(String, Value)> {
+    let payload = with_event_fields(row);
+    let fogged = row
+        .metadata
+        .get("fogged")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if is_gm || !fogged {
+        return Some((row.event_type.clone(), payload));
+    }
+    let mut removal = serde_json::Map::new();
+    for key in ["id", "dungeon_id", "session_id"] {
+        if let Some(value) = payload.get(key) {
+            removal.insert(key.to_string(), value.clone());
+        }
+    }
+    Some(("dungeon_token.deleted".into(), Value::Object(removal)))
 }
 
 fn with_event_fields(row: &EventRow) -> Value {
@@ -518,6 +545,68 @@ mod tests {
             assert!(payload.get("terrain_type").is_none());
             assert!(payload.get("label").is_none());
         }
+    }
+
+    #[test]
+    fn fogged_token_becomes_a_removal_for_players_only() {
+        let dungeon_id = Uuid::new_v4();
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "dungeon_token".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "dungeon_token.updated".into(),
+            payload: json!({"dungeon_id": dungeon_id, "character_id": Uuid::new_v4(), "x": 5, "y": 7}),
+            metadata: json!({"fogged": true}),
+            created_at: chrono::Utc::now(),
+        };
+
+        let (event, payload) = visible_event(&row, false).unwrap();
+        assert_eq!(event, "dungeon_token.deleted");
+        assert!(payload.get("x").is_none());
+        assert!(payload.get("y").is_none());
+        assert!(payload.get("character_id").is_none());
+        assert!(payload.get("id").is_some());
+        assert_eq!(payload.get("dungeon_id"), Some(&json!(dungeon_id)));
+
+        let (event, payload) = visible_event(&row, true).unwrap();
+        assert_eq!(event, "dungeon_token.updated");
+        assert_eq!(payload.get("x"), Some(&json!(5)));
+        assert_eq!(payload.get("y"), Some(&json!(7)));
+    }
+
+    #[test]
+    fn unfogged_token_passes_through_for_players() {
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "dungeon_token".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "dungeon_token.created".into(),
+            payload: json!({"dungeon_id": Uuid::new_v4(), "x": 2, "y": 3}),
+            metadata: json!({"fogged": false}),
+            created_at: chrono::Utc::now(),
+        };
+        let (event, payload) = visible_event(&row, false).unwrap();
+        assert_eq!(event, "dungeon_token.created");
+        assert_eq!(payload.get("x"), Some(&json!(2)));
+    }
+
+    #[test]
+    fn token_delete_without_fog_stamp_passes_through() {
+        let row = EventRow {
+            id: 1,
+            aggregate_type: "dungeon_token".into(),
+            aggregate_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
+            event_type: "dungeon_token.deleted".into(),
+            payload: json!({}),
+            metadata: json!({}),
+            created_at: chrono::Utc::now(),
+        };
+        let (event, payload) = visible_event(&row, false).unwrap();
+        assert_eq!(event, "dungeon_token.deleted");
+        assert!(payload.get("id").is_some());
     }
 
     #[test]

@@ -70,6 +70,50 @@ async fn dispatch_row(state: &AppState, mut row: EventRow) -> Result<(), sqlx::E
             row.payload = payload;
         }
     }
+    // visible_event decides per viewer but has no pool, so resolve fog state
+    // for token events here and stamp it into metadata - metadata never
+    // reaches clients, the payload does (#153)
+    if row.aggregate_type == "dungeon_token"
+        && matches!(
+            row.event_type.as_str(),
+            "dungeon_token.created" | "dungeon_token.updated"
+        )
+    {
+        let dungeon_id = row
+            .payload
+            .get("dungeon_id")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse::<uuid::Uuid>().ok());
+        let cell = row
+            .payload
+            .get("x")
+            .and_then(Value::as_i64)
+            .zip(row.payload.get("y").and_then(Value::as_i64));
+        if let (Some(dungeon_id), Some((x, y))) = (dungeon_id, cell) {
+            let fogged: Option<bool> = retry_query(
+                || {
+                    sqlx::query_scalar(
+                        r#"
+                        select d.fog_mode and not d.fog_reveal_all and not exists (
+                            select 1 from dungeon_fog_cells f
+                            where f.dungeon_id = d.id and f.cell_x = $2 and f.cell_y = $3
+                        )
+                        from dungeons d where d.id = $1
+                        "#,
+                    )
+                    .bind(dungeon_id)
+                    .bind(x as i32)
+                    .bind(y as i32)
+                    .fetch_optional(state.pool())
+                },
+                "dungeon_token_fog",
+            )
+            .await?;
+            if let (Some(fogged), Value::Object(metadata)) = (fogged, &mut row.metadata) {
+                metadata.insert("fogged".into(), Value::Bool(fogged));
+            }
+        }
+    }
     let lag = (chrono::Utc::now() - row.created_at)
         .num_milliseconds()
         .max(0) as f64
