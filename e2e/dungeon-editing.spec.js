@@ -22,6 +22,7 @@ async function enterDungeonAsGm(gmPage) {
   await gmPage.getByTestId('dungeon-name-input').fill('E2E Crypt')
   await gmPage.getByTestId('dungeon-confirm').click()
   await gmPage.waitForURL(/\/dungeon\/[0-9a-f-]+$/i)
+  await gmPage.getByTestId('dungeon-mode-blank').click()
   await expect(gmPage.getByTestId('dungeon-canvas')).toBeVisible()
   await dismissDungeonOverlays(gmPage)
   return new URL(gmPage.url()).pathname
@@ -88,9 +89,8 @@ test.describe.serial('dungeon editing sync', () => {
       await expect(room.gm.page.getByTestId('dungeon-corridor')).toHaveCount(1)
       await expect(room.player1.page.getByTestId('dungeon-corridor')).toHaveCount(1)
 
-      await room.gm.page.getByTestId('dungeon-map-settings').click()
-      await room.gm.page.getByTestId('dungeon-fog-toggle').click()
-      await room.gm.page.getByTestId('dungeon-settings-close').click()
+      await room.gm.page.getByRole('button', { name: 'Switch' }).click()
+      await room.gm.page.getByTestId('dungeon-mode-fow-nomap').click()
 
       await expect(room.gm.page.getByTestId('dungeon-canvas')).toHaveAttribute('data-fog-mode', 'true')
       await expect(room.player1.page.getByTestId('dungeon-canvas')).toHaveAttribute('data-fog-mode', 'true')

@@ -52,19 +52,11 @@
       <button class="dms-lock-btn" @click="toggleLock">{{ isLocked ? 'Unlock' : 'Lock' }}</button>
     </div>
 
-    <div class="dms-section">
+    <div v-if="dungeonStore.fogMode" class="dms-section">
       <div class="dms-label">Fog of war</div>
-      <div class="dms-fog-row">
-        <button :class="['dms-fog-btn', dungeonStore.fogMode ? 'active' : '']" data-testid="dungeon-fog-toggle" @click="toggleFogMode">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 15.25M8 16h.01M12 19h.01M16 16h.01"/>
-          </svg>
-          {{ dungeonStore.fogMode ? 'Fog on' : 'Fog off' }}
-        </button>
-      </div>
-      <p class="dms-hint">When on, players only see cells you've revealed with the fog brush.</p>
+      <p class="dms-hint">Players only see cells you've revealed with the fog brush. Use the Switch button in the topbar to leave fog mode.</p>
 
-      <div v-if="dungeonStore.fogMode" class="dms-fog-actions">
+      <div class="dms-fog-actions">
         <button class="dms-action-btn" @click="revealAll">Reveal all</button>
         <button class="dms-action-btn dms-action-danger" @click="hideAll">Hide all</button>
       </div>
@@ -145,10 +137,6 @@ async function toggleLock() {
   await dungeonStore.updateDungeon({ mapOffsetLocked: locked })
 }
 
-async function toggleFogMode() {
-  await dungeonStore.updateDungeon({ fogMode: !dungeonStore.fogMode })
-}
-
 async function revealAll() {
   await dungeonStore.revealAllFog(dungeonId)
 }
@@ -217,24 +205,6 @@ async function hideAll() {
   transition: background .15s, color .15s;
 }
 .dms-lock-btn:hover { background: var(--paper-3); color: var(--ink); }
-
-.dms-fog-row { display: flex; gap: 4px; margin-bottom: 4px; }
-.dms-fog-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: .04em;
-  color: var(--ink-mute);
-  background: var(--paper-2);
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
-  transition: background .15s, color .15s, border-color .15s;
-}
-.dms-fog-btn:hover { color: var(--ink-2); background: var(--paper-3); }
-.dms-fog-btn.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
 .dms-fog-actions {
   display: flex;
