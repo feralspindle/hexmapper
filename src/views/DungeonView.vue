@@ -9,11 +9,17 @@
     <DungeonTopbar
       ref="topbarEl"
       :dungeon-id="dungeonId"
+      :mode="dungeonMode"
       :char-open="charOpen"
       @toggle-char="charOpen = !charOpen"
+      @switch-mode="onSwitchMode"
     />
 
-    <div class="ds-body">
+    <div v-if="showModePicker" class="hm-setup-bg">
+      <DungeonModePicker @pick-fow="onPickFow" @pick-blank="onPickBlank" />
+    </div>
+
+    <div v-else class="ds-body">
       <DungeonLeftToolbar
         :map-settings-open="mapSettingsOpen"
         @map-settings="mapSettingsOpen = !mapSettingsOpen"
@@ -64,8 +70,8 @@
     </div>
 
 
-    <DungeonPartyPanel />
-    <PartyNotebook :session-id="sessionId" />
+    <DungeonPartyPanel v-if="!showModePicker" />
+    <PartyNotebook v-if="!showModePicker" :session-id="sessionId" />
 
 
     <CharacterDrawer parchment :open="charOpen" :nav-height="topbarHeight" @close="charOpen = false" />
@@ -83,7 +89,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted, watchEffect } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
@@ -96,6 +102,7 @@ import { useSessionServices } from '@/composables/useSessionServices.js'
 import { activeNavDropdown } from '@/composables/useNavDropdown.js'
 
 import DungeonTopbar           from '@/components/dungeon/DungeonTopbar.vue'
+import DungeonModePicker       from '@/components/dungeon/DungeonModePicker.vue'
 import DungeonLeftToolbar      from '@/components/dungeon/DungeonLeftToolbar.vue'
 import DungeonCanvas           from '@/components/dungeon/DungeonCanvas.vue'
 import DungeonContentsBar      from '@/components/dungeon/DungeonContentsBar.vue'
@@ -130,6 +137,67 @@ const topbarHeight = ref(48)
 const charOpen    = ref(false)
 const mapSettingsOpen = ref(false)
 const mapMoveMode     = ref('none')
+
+const showModePicker = ref(false)
+const modeKey = `dungeon_mode_${dungeonId}`
+
+const dungeonMode = computed(() => {
+  if (showModePicker.value || !dungeonStore.dungeon) return null
+  return dungeonStore.fogMode ? 'fow' : 'blank'
+})
+
+// fog_mode is a plain boolean with a false default, so an untouched dungeon is
+// indistinguishable from a chosen blank slate server-side. GM's localStorage
+// records the explicit choice; any existing content or fog means a mode is
+// already in use and we don't re-ask.
+function loadMode() {
+  if (!sessionStore.isGM || dungeonStore.loadError) {
+    showModePicker.value = false
+    return
+  }
+  const saved = localStorage.getItem(modeKey)
+  if (saved === 'fow' || saved === 'blank') {
+    showModePicker.value = false
+    return
+  }
+  const inUse =
+    dungeonStore.fogMode ||
+    dungeonStore.rooms.size > 0 ||
+    dungeonStore.corridors.size > 0 ||
+    dungeonStore.icons.size > 0 ||
+    dungeonStore.tokens.size > 0 ||
+    !!dungeonStore.dungeon?.map_image_path
+  showModePicker.value = !inUse
+}
+
+function onSwitchMode() {
+  if (!sessionStore.isGM) return
+  localStorage.removeItem(modeKey)
+  showModePicker.value = true
+  mapSettingsOpen.value = false
+  dungeonStore.drawMode = 'select'
+}
+
+async function onPickFow(file) {
+  showModePicker.value = false
+  localStorage.setItem(modeKey, 'fow')
+  await dungeonStore.updateDungeon({ fogMode: true, fogRevealAll: false })
+  if (file) {
+    try {
+      const path = await dungeonStore.uploadDungeonImage(sessionId, file)
+      await dungeonStore.updateDungeon({ mapImagePath: path })
+      mapSettingsOpen.value = true
+    } catch (e) {
+      console.error('Dungeon map upload failed:', e.message)
+    }
+  }
+}
+
+async function onPickBlank() {
+  showModePicker.value = false
+  localStorage.setItem(modeKey, 'blank')
+  await dungeonStore.updateDungeon({ fogMode: false })
+}
 
 watch(charOpen, (val) => {
   if (val) activeNavDropdown.value = 'char-sheet'
@@ -176,6 +244,7 @@ onMounted(async () => {
   await joinSession()
   await mapStore.init(sessionId)
   await dungeonStore.init(sessionId, dungeonId)
+  loadMode()
   initServices()
   activityStore.init(sessionId, dungeonId)
 })
