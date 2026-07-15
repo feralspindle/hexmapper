@@ -9,6 +9,14 @@
         :error="uploadError"
         @file="handleUpload"
       />
+      <button
+        v-if="dungeonStore.dungeon?.map_image_path"
+        class="dms-action-btn dms-action-danger dms-remove-btn"
+        data-testid="dungeon-image-remove"
+        @click="removeImage"
+      >
+        Remove image
+      </button>
     </div>
 
     <div v-if="dungeonStore.dungeon?.map_image_path" :class="['dms-section', isLocked ? 'dms-locked' : '']">
@@ -68,6 +76,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { useRoute } from 'vue-router'
 import SettingsPanel from '@/components/common/mapSettings/SettingsPanel.vue'
 import UploadControl from '@/components/common/mapSettings/UploadControl.vue'
@@ -81,6 +90,7 @@ defineProps({
 const emit = defineEmits(['update:moveMode', 'close'])
 
 const dungeonStore = useD()
+const { confirm } = useConfirmDialog()
 const route = useRoute()
 const dungeonId = route.params.dungeonId
 const sessionId = route.params.sessionId
@@ -135,6 +145,12 @@ async function toggleLock() {
   const locked = !isLocked.value
   if (locked) emit('update:moveMode', 'none')
   await dungeonStore.updateDungeon({ mapOffsetLocked: locked })
+}
+
+function removeImage() {
+  confirm('Remove the map image? Alignment resets too.', () => dungeonStore.clearMapImage(), {
+    confirmLabel: 'Remove',
+  })
 }
 
 async function revealAll() {
@@ -224,6 +240,7 @@ async function hideAll() {
   transition: background .15s, color .15s;
 }
 .dms-action-btn:hover { background: var(--paper-3); color: var(--ink); }
+.dms-remove-btn { width: 100%; margin-top: 6px; }
 .dms-action-danger { color: var(--accent); }
 .dms-action-danger:hover { background: var(--accent); color: var(--paper); border-color: var(--accent); }
 </style>

@@ -144,6 +144,13 @@
                     <li>Drop tokens &amp; annotate rooms</li>
                 </ul>
                 <div style="flex: 1" />
+                <p
+                    v-if="hasMapImage"
+                    class="hm-mode-tagline"
+                    style="color: var(--accent); margin-bottom: 6px"
+                >
+                    Removes the uploaded map image.
+                </p>
                 <button
                     class="ds-btn"
                     data-testid="dungeon-mode-blank"
@@ -165,6 +172,10 @@
 
 <script setup>
 import { ref } from "vue";
+
+defineProps({
+    hasMapImage: { type: Boolean, default: false },
+});
 
 defineEmits(["pick-fow", "pick-blank"]);
 
