@@ -43,7 +43,8 @@ echo "==> database tests (pgTAP)"
 if supabase status >/dev/null 2>&1; then
   supabase test db
 else
-  echo "    supabase stack not running — skipping pgTAP suite (CI still runs it from scratch)"
+  echo "    supabase stack not running — using the local embedded-postgres runner"
+  bash scripts/test-db-local.sh
 fi
 
 echo "==> all suites passed"
