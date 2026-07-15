@@ -46,6 +46,30 @@
                 <span class="ds-tool-key">H</span>
                 <span class="ds-tip">Pan map <kbd>H</kbd></span>
             </button>
+            <button
+                class="ds-tool"
+                data-testid="hex-markers-visibility"
+                :aria-pressed="!prefs.showHexMarkers"
+                @click="prefs.setShowHexMarkers(!prefs.showHexMarkers)"
+            >
+                <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <path
+                        d="M12 2a6 6 0 00-6 6c0 5 6 12 6 12s6-7 6-12a6 6 0 00-6-6z"
+                    />
+                    <circle cx="12" cy="8" r="2.2" />
+                    <path v-if="!prefs.showHexMarkers" d="M3 3l18 18" />
+                </svg>
+                <span class="ds-tip">{{ prefs.showHexMarkers ? 'Hide markers' : 'Show markers' }}</span>
+            </button>
         </div>
 
         <template v-if="hexMode === 'fow' && isGM">
@@ -366,6 +390,30 @@
             </svg>
             <span class="ds-tip">Pan <kbd>H</kbd></span>
         </button>
+        <button
+            class="ds-tool"
+            data-testid="hex-markers-visibility"
+            :aria-pressed="!prefs.showHexMarkers"
+            @click="prefs.setShowHexMarkers(!prefs.showHexMarkers)"
+        >
+            <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <path
+                    d="M12 2a6 6 0 00-6 6c0 5 6 12 6 12s6-7 6-12a6 6 0 00-6-6z"
+                />
+                <circle cx="12" cy="8" r="2.2" />
+                <path v-if="!prefs.showHexMarkers" d="M3 3l18 18" />
+            </svg>
+            <span class="ds-tip">{{ prefs.showHexMarkers ? 'Hide markers' : 'Show markers' }}</span>
+        </button>
         <div class="ds-float-sep" />
         <ToolbarToggleButton kind="party" testid="hex-party-toggle" :size="16" />
         <ToolbarToggleButton kind="vault" testid="hex-vault-toggle" :size="16" />
@@ -455,6 +503,7 @@
 <script setup>
 import { useToolTooltip } from "@/composables/useToolTooltip.js";
 import ToolbarToggleButton from "@/components/common/ToolbarToggleButton.vue";
+import { useUserPrefsStore } from "@/stores/userPrefsStore.js";
 
 defineProps({
     hexMode: { type: String, default: null },
@@ -468,5 +517,6 @@ defineProps({
 
 const emit = defineEmits(["tool", "reveal-all", "hide-all", "map-settings", "toggle-exploration"]);
 
+const prefs = useUserPrefsStore();
 const { tip, onHover, onLeave } = useToolTooltip();
 </script>

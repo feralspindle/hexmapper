@@ -222,6 +222,13 @@
                                         d="M12 3l3 6 6 .8-4.5 4 1 6.2-5.5-3-5.5 3 1-6.2L3 9.8 9 9z"
                                     />
                                 </template>
+                                <template v-else-if="m.kind === 'cache'">
+                                    <path d="M4 21V11a8 6 0 0116 0v10z" />
+                                </template>
+                                <template v-else-if="m.kind === 'quest'">
+                                    <rect x="5" y="3" width="2.2" height="18" rx="1" />
+                                    <path d="M7.2 4h11.5l-3 4 3 4H7.2z" />
+                                </template>
                             </svg>
                         </div>
                         <span class="hm-kind">{{
@@ -284,6 +291,13 @@
                                 <path
                                     d="M12 3l3 6 6 .8-4.5 4 1 6.2-5.5-3-5.5 3 1-6.2L3 9.8 9 9z"
                                 />
+                            </template>
+                            <template v-else-if="k.id === 'cache'">
+                                <path d="M4 21V11a8 6 0 0116 0v10z" />
+                            </template>
+                            <template v-else-if="k.id === 'quest'">
+                                <rect x="5" y="3" width="2.2" height="18" rx="1" />
+                                <path d="M7.2 4h11.5l-3 4 3 4H7.2z" />
                             </template>
                         </svg>
                         {{ k.label }}

@@ -32,8 +32,26 @@
             <span class="hm-mode-label">{{
                 hexMode === "fow" ? "Fog of War" : "Blank Slate"
             }}</span>
-            <button class="hm-switch-btn" @click="$emit('switch-mode')">
-                Switch
+            <button
+                class="hm-switch-btn"
+                aria-label="Switch"
+                @click="$emit('switch-mode')"
+            >
+                <span class="hm-switch-text">Switch</span>
+                <svg
+                    class="hm-switch-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <path d="M2 4.5h8.5M8.5 2l2.5 2.5L8.5 7" />
+                    <path d="M12 9.5H3.5M5.5 12L3 9.5 5.5 7" />
+                </svg>
             </button>
         </div>
 

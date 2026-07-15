@@ -19,6 +19,11 @@ pub fn router() -> Router<AppState> {
             "/dungeon-corridors/{id}",
             axum::routing::patch(handlers::update_corridor).delete(handlers::delete_corridor),
         )
+        .route("/dungeon-tokens", post(handlers::create_token))
+        .route(
+            "/dungeon-tokens/{id}",
+            axum::routing::patch(handlers::update_token).delete(handlers::delete_token),
+        )
         .route("/dungeon-fog/reveal", post(handlers::fog_reveal))
         .route("/dungeon-fog/hide", post(handlers::fog_hide))
         .route("/dungeon-fog/reveal-bulk", post(handlers::fog_reveal_bulk))

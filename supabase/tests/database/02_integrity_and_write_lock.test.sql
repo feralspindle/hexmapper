@@ -108,6 +108,23 @@ select throws_ok(
 );
 
 select throws_ok(
+  $sql$insert into public.maps (session_id, name, parent_map_id)
+       values ('11000000-0000-0000-0000-000000000001', 'bad link', '21000000-0000-0000-0000-000000000002')$sql$,
+  '23503',
+  NULL,
+  'map rejects a parent map from another session'
+);
+
+select throws_ok(
+  $sql$update public.maps
+       set parent_hex_id = '31000000-0000-0000-0000-000000000002'
+       where id = '21000000-0000-0000-0000-000000000001'$sql$,
+  '23503',
+  NULL,
+  'map rejects a parent hex from another session'
+);
+
+select throws_ok(
   $sql$insert into public.dice_rolls (session_id, user_id, display_name, pending, modifier, results, total, character_id)
        values ('11000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000012', 'Player', '[]', 0, '[]', 1, '81000000-0000-0000-0000-000000000002')$sql$,
   '23503',
@@ -167,6 +184,22 @@ select throws_ok(
   'polymorphic dungeon note rejects an element from another session'
 );
 
+select throws_ok(
+  $sql$insert into public.dungeon_tokens (session_id, dungeon_id, character_id, x, y)
+       values ('11000000-0000-0000-0000-000000000001', '41000000-0000-0000-0000-000000000002', '81000000-0000-0000-0000-000000000001', 0, 0)$sql$,
+  '23503',
+  NULL,
+  'token rejects a dungeon from another session'
+);
+
+select throws_ok(
+  $sql$insert into public.dungeon_tokens (session_id, dungeon_id, character_id, x, y)
+       values ('11000000-0000-0000-0000-000000000001', '41000000-0000-0000-0000-000000000001', '81000000-0000-0000-0000-000000000002', 0, 0)$sql$,
+  '23503',
+  NULL,
+  'token rejects a character from another session'
+);
+
 select is(
   (
     select count(distinct tablename)
@@ -175,8 +208,8 @@ select is(
       and policyname in ('es_lock_no_insert', 'es_lock_no_update', 'es_lock_no_delete')
       and permissive = 'RESTRICTIVE'
   ),
-  28::bigint,
-  'all 28 event-sourced projections have restrictive client write locks'
+  30::bigint,
+  'all 30 event-sourced projections have restrictive client write locks'
 );
 
 select is(
@@ -187,7 +220,7 @@ select is(
       and policyname in ('es_lock_no_insert', 'es_lock_no_update', 'es_lock_no_delete')
       and permissive = 'RESTRICTIVE'
   ),
-  84::bigint,
+  90::bigint,
   'every event-sourced projection blocks insert, update, and delete'
 );
 

@@ -7,6 +7,7 @@
     :data-corridor-count="dungeonStore.corridors.size"
     :data-fog-revealed="dungeonStore.fogCells.size"
     :data-fog-mode="dungeonStore.fogMode ? 'true' : 'false'"
+    :data-token-count="dungeonStore.tokens.size"
   >
 
     <canvas
@@ -16,7 +17,6 @@
       @mousedown="onMouseDown"
       @mousedown.middle.prevent
       @mousemove="onMouseMove"
-      @mouseleave="broadcastCursorHidden"
       @mouseup="onMouseUp"
       @click="onClick"
       @wheel.prevent="onWheel"
@@ -64,6 +64,9 @@
             :height="room.height * cellPx - 2"
           />
         </clipPath>
+        <clipPath id="token-clip">
+          <circle cx="0" cy="0" :r="tokenR - 1.5" />
+        </clipPath>
       </defs>
       <g v-for="[id, room] in dungeonStore.rooms" :key="id" data-testid="dungeon-room">
         <template v-if="true">
@@ -91,7 +94,7 @@
               :font-family="labelStyle.dims.family"
               :letter-spacing="labelStyle.dims.letterSpacing"
             >{{ r.width * 5 }} × {{ r.height * 5 }} ft</text>
-            <g :clip-path="`url(#room-clip-${id})`">
+            <g v-if="prefs.showDungeonItems" :clip-path="`url(#room-clip-${id})`">
               <template v-for="item in (room.items ?? [])" :key="item.id">
                 <circle
                   :cx="Math.max(r.origin_x * cellPx - viewport.offsetX, Math.min((r.origin_x + r.width) * cellPx - viewport.offsetX - editorAvatarSize, (draggingItem?.itemId === item.id ? draggingItem.ghostX : item.x) * cellPx - viewport.offsetX - editorAvatarSize / 2)) + editorAvatarSize / 2"
@@ -162,6 +165,145 @@
           />
         </template>
       </g>
+
+      <g v-if="draggingToken" style="pointer-events:none">
+        <rect
+          :x="Math.floor(draggingToken.gx) * cellPx - viewport.offsetX"
+          :y="Math.floor(draggingToken.gy) * cellPx - viewport.offsetY"
+          :width="cellPx"
+          :height="cellPx"
+          :fill="tokenDropAllowed ? 'rgba(110,190,90,.18)' : 'rgba(200,60,50,.22)'"
+          :stroke="tokenDropAllowed ? '#6ebe5a' : '#c83c32'"
+          stroke-width="1.5"
+        />
+      </g>
+      <g
+        v-for="t in tokenModels"
+        :key="t.id"
+        data-testid="dungeon-token"
+        :data-token-character="t.characterId"
+        :transform="tokenTransform(t)"
+      >
+        <circle
+          v-if="dungeonStore.selectedElement?.type === 'token' && dungeonStore.selectedElement.id === t.id"
+          cx="0" cy="0" :r="tokenR + 4"
+          fill="none"
+          :stroke="styleColors.selectedColor"
+          stroke-width="2"
+          stroke-dasharray="5 3"
+          style="pointer-events:none"
+        />
+        <circle
+          cx="0" cy="0" :r="tokenR"
+          fill="#141210"
+          :stroke="t.color"
+          stroke-width="2"
+          style="pointer-events:none"
+        />
+        <image
+          v-if="t.imageUrl"
+          :href="t.imageUrl"
+          :x="-tokenR" :y="-tokenR"
+          :width="tokenR * 2" :height="tokenR * 2"
+          preserveAspectRatio="xMidYMid slice"
+          clip-path="url(#token-clip)"
+          style="pointer-events:none"
+        />
+        <text
+          v-else
+          x="0" y="0"
+          text-anchor="middle"
+          dominant-baseline="central"
+          fill="#ede1c7"
+          :font-size="tokenR"
+          font-family="var(--font-ui, sans-serif)"
+          font-weight="700"
+          style="pointer-events:none"
+        >{{ t.name.slice(0, 1).toUpperCase() }}</text>
+        <template v-if="t.maxHp > 0">
+          <rect
+            :x="-tokenR - 0.5" :y="tokenR + 1.5"
+            :width="tokenR * 2 + 1" :height="tokenHpH + 1" :rx="(tokenHpH + 1) / 2"
+            fill="rgba(0,0,0,.85)"
+            stroke="rgba(237,225,199,.55)"
+            stroke-width="1"
+            style="pointer-events:none"
+          />
+          <rect
+            :x="-tokenR" :y="tokenR + 2"
+            :width="Math.max(0, tokenR * 2 * t.hpPct)" :height="tokenHpH" :rx="tokenHpH / 2"
+            :fill="t.hpColor"
+            style="pointer-events:none"
+          />
+        </template>
+        <g v-if="t.initiative != null" style="pointer-events:none">
+          <circle
+            :cx="tokenR * 0.9" :cy="-tokenR * 0.9" :r="Math.max(6, tokenR * 0.55)"
+            fill="#1a1410"
+            :stroke="t.color"
+            stroke-width="1.2"
+          />
+          <text
+            :x="tokenR * 0.9" :y="-tokenR * 0.9"
+            text-anchor="middle"
+            dominant-baseline="central"
+            fill="#ede1c7"
+            :font-size="Math.max(7, tokenR * 0.6)"
+            font-family="'JetBrains Mono', monospace"
+          >{{ t.initiative }}</text>
+        </g>
+        <g
+          v-if="t.conditions.length"
+          :class="tokensInteractive ? 'pointer-events-auto' : ''"
+          @pointerdown.stop="onTokenPointerDown($event, t)"
+          @pointerenter="hoveredTokenId = t.id"
+          @pointerleave="hoveredTokenId = null"
+        >
+          <circle
+            :cx="-tokenR + tokenCondR"
+            :cy="-tokenR - tokenCondR - 2"
+            :r="tokenCondR"
+            :fill="t.conditions[0].color"
+            stroke="#1a1410"
+            stroke-width="1"
+          />
+          <template v-if="t.conditions.length > 1">
+            <circle
+              :cx="-tokenR + tokenCondR * 2.1"
+              :cy="-tokenR - tokenCondR * 2.1 - 2"
+              :r="Math.max(4, tokenCondR * 0.9)"
+              fill="#c83c32"
+              stroke="#1a1410"
+              stroke-width="0.8"
+            />
+            <text
+              :x="-tokenR + tokenCondR * 2.1"
+              :y="-tokenR - tokenCondR * 2.1 - 2"
+              text-anchor="middle"
+              dominant-baseline="central"
+              fill="#fff5e8"
+              :font-size="Math.max(6, tokenCondR * 1.2)"
+              font-family="'JetBrains Mono', monospace"
+              font-weight="700"
+            >{{ t.conditions.length }}</text>
+          </template>
+        </g>
+        <circle
+          cx="0" cy="0" :r="tokenR + 2"
+          fill="transparent"
+          role="img"
+          :aria-label="tokenAriaLabel(t)"
+          :class="tokensInteractive ? 'pointer-events-auto' : ''"
+          :style="{ cursor: t.canDrag ? 'grab' : 'pointer', touchAction: 'none' }"
+          @pointerdown.stop="onTokenPointerDown($event, t)"
+          @pointermove="onTokenPointerMove"
+          @pointerup="onTokenPointerUp"
+          @pointercancel="onTokenPointerCancel"
+          @pointerenter="hoveredTokenId = t.id"
+          @pointerleave="hoveredTokenId = null"
+        />
+      </g>
+
       <g v-if="prefs.showCursors">
         <g v-for="[userId, cursor] in remoteCursors" :key="userId" style="pointer-events:none">
           
@@ -307,6 +449,45 @@
     </Transition>
 
     <div
+      v-if="tokenTooltip"
+      class="ds-token-tip"
+      data-testid="token-tooltip"
+      :style="tokenTooltipStyle"
+    >
+      <div class="ds-token-tip-name">{{ tokenTooltip.name }}</div>
+      <div class="ds-token-tip-stats">
+        <span v-if="tokenTooltip.maxHp > 0">HP {{ tokenTooltip.hp }}/{{ tokenTooltip.maxHp }}</span>
+        <span v-if="tokenTooltip.ac != null">AC {{ tokenTooltip.ac }}</span>
+        <span v-if="tokenTooltip.initiative != null">Init {{ tokenTooltip.initiative }}</span>
+      </div>
+      <div v-if="tokenTooltip.conditions.length" class="ds-token-tip-conds">
+        <span
+          v-for="cond in tokenTooltip.conditions"
+          :key="cond.name"
+          class="ds-token-tip-cond"
+          :style="{ '--cond-color': cond.color }"
+        ><i :class="cond.faClass" /> {{ cond.name }}</span>
+      </div>
+    </div>
+
+    <Transition name="ds-banner">
+      <div v-if="dungeonStore.drawMode === 'token'" class="ds-fog-size-picker" data-testid="token-picker">
+        <span class="ds-fog-size-label">Token</span>
+        <button
+          v-for="c in placeableCharacters"
+          :key="c.id"
+          :class="['ds-fog-size-btn', tokenPlacementCharId === c.id && 'ds-fog-size-btn--active']"
+          :data-testid="`token-pick-${c.id}`"
+          @click="tokenPlacementCharId = c.id"
+        >{{ c.data?.name || 'Unnamed' }}</button>
+        <span
+          v-if="!placeableCharacters.length"
+          style="font-family:var(--font-mono,'JetBrains Mono',monospace);font-size:11px;color:rgba(237,225,199,.55)"
+        >no characters yet</span>
+      </div>
+    </Transition>
+
+    <div
       v-if="dimEntry"
       class="ds-dim-input"
       :style="{ left: dimEntry.screenX + 14 + 'px', top: dimEntry.screenY + 14 + 'px' }"
@@ -345,8 +526,11 @@ import { useDungeonDraw, CELL_SIZE, pixelToGrid, pixelToCell, corridorSegments }
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
+import { useCharacterStore } from '@/stores/characterStore.js'
 import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { conditionBadge } from '@/lib/conditions.js'
+import { tokenImageUrl } from '@/lib/tokenImage.js'
 
 const prefs = useUserPrefsStore()
 const sessionStore = useSessionStore()
@@ -389,6 +573,7 @@ const TOOL_HINTS = {
   corridor: [{ type: 'text', text: 'Click to place points along the corridor. Double-click to finish. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
   door:     [{ type: 'text', text: 'Click a wall to place a door. ' }],
   fog:      [{ type: 'text', text: 'Click or drag to reveal cells. Hold ' }, { type: 'kbd', text: 'Shift' }, { type: 'text', text: ' to hide.' }],
+  token:    [{ type: 'text', text: 'Pick a character, then click the map to place their token. Drag a token to move it.' }],
 }
 const statusBanner = computed(() => TOOL_HINTS[dungeonStore.drawMode] ?? null)
 
@@ -401,6 +586,7 @@ const emit = defineEmits(['image-offset-change'])
 
 const dungeonStore = useD()
 const authStore = useAuthStore()
+const characterStore = useCharacterStore()
 const { confirm } = useConfirmDialog()
 
 const remoteCursors = ref(new Map())
@@ -417,6 +603,7 @@ let skipNextDoorClick = false
 let cursorChannel = null
 let cursorRafQueued = false
 let pendingCursor = null
+let cursorBroadcastVisible = false
 let _stopCursorWatch = null
 
 function cursorColorFor(userId) {
@@ -451,8 +638,29 @@ function initCursorChannel(dungeonId) {
 
 function broadcastCursorHidden() {
   pendingCursor = null
+  cursorBroadcastVisible = false
   if (!cursorChannel || !authStore.user?.id) return
   cursorChannel.send({ type: 'broadcast', event: 'cursor', payload: { userId: authStore.user.id, hidden: true } })
+}
+
+// Tracked on window rather than the canvas so panels and pointer-events-auto
+// overlays (labels, door handles) don't swallow moves and flicker the cursor
+// for everyone else.
+function onCursorTrack(e) {
+  if (!prefs.showCursors || !canvasEl.value) return
+  const rect = getRect()
+  const inside = e.clientX >= rect.left && e.clientX < rect.right
+    && e.clientY >= rect.top && e.clientY < rect.bottom
+  if (!inside) {
+    if (cursorBroadcastVisible) broadcastCursorHidden()
+    return
+  }
+  cursorBroadcastVisible = true
+  broadcastCursor(e.clientX - rect.left, e.clientY - rect.top)
+}
+
+function onDocumentMouseLeave() {
+  if (cursorBroadcastVisible) broadcastCursorHidden()
 }
 
 watch(() => dungeonStore.viewers, (viewers) => {
@@ -742,6 +950,202 @@ const hoveredCorridorPoint = ref(-1)
 
 const draggingItem = ref(null)
 
+const draggingToken = ref(null)
+const tokenPlacementCharId = ref(null)
+const hoveredTokenId = ref(null)
+const lastPointerType = ref('mouse')
+
+const tokenR = computed(() => cellPx.value * 0.45)
+const tokenCondR = computed(() => Math.max(3, tokenR.value * 0.28))
+const tokenHpH = computed(() => Math.max(4, tokenR.value * 0.3))
+
+// tokens only take pointer events in modes where grabbing one can't hijack a
+// drawing gesture (the fog brush especially - a token would eat brush strokes)
+const tokensInteractive = computed(() =>
+  ['select', 'edit', 'token'].includes(dungeonStore.drawMode)
+)
+
+const placeableCharacters = computed(() =>
+  sessionStore.isGM ? characterStore.characters : characterStore.myCharacters
+)
+
+watch(() => dungeonStore.drawMode, (mode) => {
+  if (mode !== 'token') return
+  const candidates = placeableCharacters.value
+  if (!candidates.some(c => c.id === tokenPlacementCharId.value)) {
+    tokenPlacementCharId.value =
+      candidates.find(c => c.id === characterStore.activeId)?.id ?? candidates[0]?.id ?? null
+  }
+})
+
+function hpColorFor(pct) {
+  if (pct > 0.5) return '#6ebe5a'
+  if (pct > 0.25) return '#e0a83c'
+  return '#c83c32'
+}
+
+const charactersById = computed(() =>
+  new Map(characterStore.characters.map(c => [c.id, c]))
+)
+
+// viewport-independent so panning and dragging don't rebuild it - screen
+// position is derived per frame in tokenTransform instead
+const tokenModels = computed(() => {
+  const models = []
+  const isGM = sessionStore.isGM
+  const myId = authStore.user?.id
+  for (const token of dungeonStore.tokens.values()) {
+    // players never see a token parked in unrevealed fog - the GM may be
+    // staging an ambush
+    if (!isGM && dungeonStore.fogMode && !dungeonStore.fogRevealAll &&
+        !dungeonStore.isCellRevealed(token.x, token.y)) continue
+    const char = charactersById.value.get(token.character_id)
+    const data = char?.data ?? {}
+    const maxHp = data.maxHitPoints ?? 0
+    const hp = data.currentHp ?? maxHp
+    const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0
+    models.push({
+      id: token.id,
+      characterId: token.character_id,
+      x: token.x,
+      y: token.y,
+      name: data.name || 'Unknown',
+      color: playerColorFor(char?.user_id),
+      hp,
+      maxHp,
+      hpPct,
+      hpColor: hpColorFor(hpPct),
+      ac: data.armorClass ?? null,
+      initiative: data.initiative ?? null,
+      conditions: (data.conditions ?? []).map(conditionBadge),
+      imageUrl: tokenImageUrl(data.tokenImagePath),
+      canDrag: isGM || (char && char.user_id === myId),
+    })
+  }
+  return models
+})
+
+function tokenTransform(t) {
+  const cs = cellPx.value
+  const d = draggingToken.value
+  const gx = d?.id === t.id ? d.gx : t.x + 0.5
+  const gy = d?.id === t.id ? d.gy : t.y + 0.5
+  return `translate(${gx * cs - viewport.value.offsetX}, ${gy * cs - viewport.value.offsetY})`
+}
+
+function tokenAriaLabel(t) {
+  const parts = [t.name]
+  if (t.maxHp > 0) parts.push(`HP ${t.hp} of ${t.maxHp}`)
+  if (t.ac != null) parts.push(`AC ${t.ac}`)
+  if (t.initiative != null) parts.push(`initiative ${t.initiative}`)
+  if (t.conditions.length) parts.push(t.conditions.map(c => c.name).join(', '))
+  return parts.join(', ')
+}
+
+// touch has no hover, so a tap-selected token keeps its card up instead
+const tokenTooltip = computed(() => {
+  if (draggingToken.value) return null
+  const selected = dungeonStore.selectedElement
+  const id = hoveredTokenId.value ??
+    (lastPointerType.value === 'touch' && selected?.type === 'token' ? selected.id : null)
+  if (!id) return null
+  return tokenModels.value.find(t => t.id === id) ?? null
+})
+
+const tokenTooltipStyle = computed(() => {
+  const t = tokenTooltip.value
+  if (!t) return {}
+  const cs = cellPx.value
+  const cx = (t.x + 0.5) * cs - viewport.value.offsetX
+  const cy = (t.y + 0.5) * cs - viewport.value.offsetY
+  // flip below the token when there isn't room above (condition chips can
+  // stack the tooltip a few lines tall)
+  const below = cy - tokenR.value < 150
+  return {
+    left: `${cx}px`,
+    top: below ? `${cy + tokenR.value + 14}px` : `${cy - tokenR.value - 14}px`,
+    transform: below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
+  }
+})
+
+const tokenDropAllowed = computed(() => {
+  const d = draggingToken.value
+  if (!d) return false
+  return sessionStore.isGM || dungeonStore.isCellPlaceable(Math.floor(d.gx), Math.floor(d.gy))
+})
+
+function onTokenPointerDown(e, view) {
+  if (!tokensInteractive.value) return
+  lastPointerType.value = e.pointerType
+  if (!view.canDrag) {
+    dungeonStore.selectElement('token', view.id)
+    return
+  }
+  // one drag at a time - a second finger must not steal or corrupt it
+  if (draggingToken.value) return
+  const token = dungeonStore.tokens.get(view.id)
+  if (!token) return
+  draggingToken.value = {
+    id: view.id,
+    pointerId: e.pointerId,
+    gx: token.x + 0.5,
+    gy: token.y + 0.5,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+    moved: false,
+  }
+  e.target.setPointerCapture(e.pointerId)
+}
+
+function onTokenPointerMove(e) {
+  const d = draggingToken.value
+  if (!d || e.pointerId !== d.pointerId) return
+  const moved = d.moved || Math.hypot(e.clientX - d.startClientX, e.clientY - d.startClientY) > 4
+  if (!moved) return
+  const rect = getRect()
+  const cs = cellPx.value
+  draggingToken.value = {
+    ...d,
+    gx: (e.clientX - rect.left + viewport.value.offsetX) / cs,
+    gy: (e.clientY - rect.top + viewport.value.offsetY) / cs,
+    moved: true,
+  }
+}
+
+function onTokenPointerUp(e) {
+  const d = draggingToken.value
+  if (!d || e.pointerId !== d.pointerId) return
+  draggingToken.value = null
+  if (!d.moved) {
+    dungeonStore.selectElement('token', d.id)
+    return
+  }
+  const token = dungeonStore.tokens.get(d.id)
+  if (!token) return
+  const cellX = Math.floor(d.gx)
+  const cellY = Math.floor(d.gy)
+  if (cellX === token.x && cellY === token.y) return
+  // snap back when a player drops into fog - the server rejects it anyway
+  if (!sessionStore.isGM && !dungeonStore.isCellPlaceable(cellX, cellY)) return
+  dungeonStore.moveToken(d.id, { x: cellX, y: cellY })
+}
+
+// a browser-cancelled gesture (palm rejection, tab switch) is not a tap -
+// just drop the drag, never select
+function onTokenPointerCancel(e) {
+  const d = draggingToken.value
+  if (!d || e.pointerId !== d.pointerId) return
+  draggingToken.value = null
+}
+
+function canDeleteToken(id) {
+  const token = dungeonStore.tokens.get(id)
+  if (!token) return false
+  if (sessionStore.isGM) return true
+  const char = charactersById.value.get(token.character_id)
+  return char?.user_id === authStore.user?.id
+}
+
 function onItemMouseDown(_e, roomId, item) {
   draggingItem.value = { roomId, itemId: item.id, ghostX: item.x, ghostY: item.y }
   window.addEventListener('mousemove', onItemMouseMove)
@@ -853,6 +1257,7 @@ const cursorStyle = computed(() => {
   if (dungeonStore.drawMode === 'room' || dungeonStore.drawMode === 'circle' || dungeonStore.drawMode === 'polygon') return 'crosshair'
   if (dungeonStore.drawMode === 'corridor') return 'cell'
   if (dungeonStore.drawMode === 'door') return 'crosshair'
+  if (dungeonStore.drawMode === 'token') return 'copy'
   return 'default'
 })
 
@@ -1608,11 +2013,6 @@ function onMouseDown(e) {
 }
 
 function onMouseMove(e) {
-  if (prefs.showCursors) {
-    const rect = getRect()
-    broadcastCursor(e.clientX - rect.left, e.clientY - rect.top)
-  }
-
   if (isPanning && props.mapMoveMode === 'image') {
     const dx = (e.clientX - panStart.x) / viewport.value.zoom
     const dy = (e.clientY - panStart.y) / viewport.value.zoom
@@ -1851,6 +2251,16 @@ function onClick(e) {
     return
   }
 
+  if (dungeonStore.drawMode === 'token') {
+    if (!tokenPlacementCharId.value) return
+    const rect = getRect()
+    const { cellX, cellY } = pixelToCell(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
+    if (!sessionStore.isGM && !dungeonStore.isCellPlaceable(cellX, cellY)) return
+    dungeonStore.placeToken(tokenPlacementCharId.value, cellX, cellY)
+    dungeonStore.drawMode = 'select'
+    return
+  }
+
   if (dungeonStore.drawMode === 'select' || dungeonStore.drawMode === 'edit') {
     if (skipNextDoorClick) { skipNextDoorClick = false; return }
     const rect = getRect()
@@ -2071,6 +2481,10 @@ function onKeyDown(e) {
   if (e.key === 'p' || e.key === 'P') { dungeonStore.drawMode = 'pan'; return }
   if (e.key === 'd' || e.key === 'D') { dungeonStore.drawMode = 'door'; return }
   if (e.key === 'w' || e.key === 'W') { dungeonStore.drawMode = 'polygon'; return }
+  if (e.key === 't' || e.key === 'T') {
+    dungeonStore.drawMode = dungeonStore.drawMode === 'token' ? 'select' : 'token'
+    return
+  }
   // generation is a solo/co-op feature, gated like the toolbar button.
   // generateRoom also guards itself (store-level generating flag), so key
   // repeat can't mass-produce rooms
@@ -2087,6 +2501,8 @@ function onKeyDown(e) {
     } else if (type === 'door') {
       dungeonStore.removeDoor(roomId, id)
       dungeonStore.deselect()
+    } else if (type === 'token') {
+      if (canDeleteToken(id)) dungeonStore.removeToken(id)
     } else {
       dungeonStore.deleteCorridor(id)
     }
@@ -2113,6 +2529,8 @@ onMounted(() => {
   canvasEl.value.height = canvasHeight.value
   resizeObserver.observe(containerEl.value)
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('mousemove', onCursorTrack)
+  document.addEventListener('mouseleave', onDocumentMouseLeave)
   if (props.dungeonId) initCursorChannel(props.dungeonId)
   rafId = requestAnimationFrame(renderFrame)
 })
@@ -2121,6 +2539,8 @@ onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
   resizeObserver.disconnect()
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('mousemove', onCursorTrack)
+  document.removeEventListener('mouseleave', onDocumentMouseLeave)
   broadcastCursorHidden()
   if (cursorChannel) realtime.removeChannel(cursorChannel)
   if (_stopCursorWatch) _stopCursorWatch()
@@ -2173,6 +2593,55 @@ onUnmounted(() => {
 .ds-dim-btn:hover { background: var(--accent, #8a1c1c); border-color: var(--accent, #8a1c1c); }
 .ds-dim-ghost { background: transparent; color: rgba(237,225,199,.5); }
 .ds-dim-ghost:hover { background: rgba(237,225,199,.1); border-color: rgba(237,225,199,.3); color: var(--paper, #ede1c7); }
+
+.ds-token-tip {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  max-width: 240px;
+  padding: 7px 10px;
+  background: rgba(13,10,7,.94);
+  border: 1px solid rgba(237,225,199,.35);
+  border-radius: 5px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.6);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ds-token-tip-name {
+  font-family: var(--font-display, serif);
+  font-size: 14px;
+  color: #ede1c7;
+  line-height: 1.15;
+}
+.ds-token-tip-stats {
+  display: flex;
+  gap: 10px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  color: rgba(237,225,199,.8);
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.ds-token-tip-conds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ds-token-tip-cond {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--cond-color);
+  background: rgba(237,225,199,.06);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10.5px;
+  color: #ede1c7;
+  letter-spacing: .02em;
+}
+.ds-token-tip-cond i { color: var(--cond-color); font-size: 10px; }
 
 .ds-fog-size-picker {
   position: absolute;

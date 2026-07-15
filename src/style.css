@@ -2382,6 +2382,9 @@ textarea.ds-input {
     background: rgba(237, 225, 199, 0.18);
     color: var(--paper);
 }
+.hm-switch-icon {
+    display: none;
+}
 .hm-presence-count {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -2976,11 +2979,30 @@ textarea.ds-input {
         gap: 4px;
     }
     .ds-divider,
-    .hm-mode-badge,
     .mb-nav,
     .ds-presence,
     .hm-presence-count {
         display: none !important;
+    }
+    /* the badge stays for the GM's mode switch, shrunk to an icon-only pill */
+    .hm-mode-label,
+    .hm-switch-text {
+        display: none;
+    }
+    .hm-switch-icon {
+        display: block;
+    }
+    .hm-switch-btn {
+        border-left: none;
+        padding: 0 8px;
+        display: flex;
+        align-items: center;
+    }
+    .hm-mode-badge[data-mode="fow"] .hm-switch-btn {
+        color: #a8c4d8;
+    }
+    .hm-mode-badge[data-mode="blank"] .hm-switch-btn {
+        color: #c8d98a;
     }
     .ds-session-name {
         max-width: 34vw;

@@ -2,7 +2,7 @@
 //! rolled-back transaction; backfills genesis events, replays each aggregate into a
 //! shadow table, and diffs ALL projection columns against the live tables.
 
-use hexmap_server::domains::dungeon::{corridor_projection, fog_projection, projection, room_projection};
+use hexmap_server::domains::dungeon::{corridor_projection, fog_projection, projection, room_projection, token_projection};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Connection;
 use std::env;
@@ -27,6 +27,11 @@ insert into events (aggregate_type, aggregate_id, session_id, sequence, event_ty
 select 'dungeon_fog_cell', f.id, d.session_id, 1, 'dungeon_fog_cell.revealed', to_jsonb(f), jsonb_build_object('genesis', true), f.created_at
 from dungeon_fog_cells f join dungeons d on d.id = f.dungeon_id
 where not exists (select 1 from events e where e.aggregate_type='dungeon_fog_cell' and e.aggregate_id=f.id);
+
+insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata, created_at)
+select 'dungeon_token', t.id, t.session_id, 1, 'dungeon_token.created', to_jsonb(t), jsonb_build_object('genesis', true), t.created_at
+from dungeon_tokens t
+where not exists (select 1 from events e where e.aggregate_type='dungeon_token' and e.aggregate_id=t.id);
 "#;
 
 struct Agg {
@@ -58,6 +63,9 @@ async fn main() {
         Agg { name: "dungeon_fog_cell", table: "dungeon_fog_cells",
             diff_cols: "id, dungeon_id, cell_x, cell_y, source_client, created_at",
             replay: fog_projection::replay_select },
+        Agg { name: "dungeon_token", table: "dungeon_tokens",
+            diff_cols: "id, dungeon_id, session_id, character_id, x, y, source_client, created_at, updated_at",
+            replay: token_projection::replay_select },
     ];
 
     let mut ok = true;

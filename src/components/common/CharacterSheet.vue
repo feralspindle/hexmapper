@@ -1444,6 +1444,40 @@
                                                 </svg>
                                             </button>
                                             <button
+                                                v-if="vaultStore.containers.length"
+                                                class="cs-icon-btn"
+                                                title="Store in group storage"
+                                                data-testid="gear-stash"
+                                                @click="toggleStashGear(item)"
+                                            >
+                                                <svg
+                                                    width="10"
+                                                    height="10"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                >
+                                                    <polyline
+                                                        points="21 8 21 21 3 21 3 8"
+                                                    />
+                                                    <rect
+                                                        x="1"
+                                                        y="3"
+                                                        width="22"
+                                                        height="5"
+                                                    />
+                                                    <line
+                                                        x1="10"
+                                                        y1="12"
+                                                        x2="14"
+                                                        y2="12"
+                                                    />
+                                                </svg>
+                                            </button>
+                                            <button
                                                 class="cs-icon-btn danger"
                                                 title="Delete"
                                                 @click="
@@ -1475,6 +1509,27 @@
                                             </button>
                                         </div>
                                     </div>
+                                </div>
+                                <div
+                                    v-if="stashingGearId === item.instanceId"
+                                    class="cs-stash-row"
+                                >
+                                    <span class="cs-stash-label">Store in:</span>
+                                    <button
+                                        v-for="c in vaultStore.containers"
+                                        :key="c.id"
+                                        class="cs-stash-option"
+                                        data-testid="gear-stash-option"
+                                        @click="stashGear(item, c.id)"
+                                    >
+                                        {{ c.name }}
+                                    </button>
+                                    <button
+                                        class="cs-stash-cancel"
+                                        @click="stashingGearId = null"
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
                             </template>
                             <template v-else>
@@ -2356,10 +2411,9 @@ function submitAddCoin() {
 }
 
 const luckCurrent = computed(() => char.value?.luckTokens?.current ?? 1);
-// tokens are uncapped, show at least the old baseline of 3 gems and keep
-// one empty outline past the filled ones as a hint that more can be added
+// current is clamped to max in the store, but legacy saves may exceed it
 const luckGemCount = computed(() =>
-    Math.max(char.value?.luckTokens?.max ?? 3, luckCurrent.value + 1),
+    Math.max(char.value?.luckTokens?.max ?? 3, luckCurrent.value),
 );
 
 function handleSpendLuck() {
@@ -2514,6 +2568,16 @@ function saveGearEdit(instanceId) {
     else delete patch.name;
     characterStore.updateGearItem(instanceId, patch);
     editingGearId.value = null;
+}
+
+const stashingGearId = ref(null);
+function toggleStashGear(item) {
+    stashingGearId.value =
+        stashingGearId.value === item.instanceId ? null : item.instanceId;
+}
+async function stashGear(item, containerId) {
+    stashingGearId.value = null;
+    await vaultStore.stashGearItem(item, containerId);
 }
 
 const showAddTreasure = ref(false);
@@ -3359,6 +3423,51 @@ button.cs-stat-val:hover {
 .cs-icon-btn.danger:hover {
     color: #8a1c1c;
     background: rgba(138, 28, 28, 0.08);
+}
+
+.cs-stash-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 8px;
+    border-top: 1px dashed var(--rule, #d8cbb8);
+}
+.cs-stash-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-mute, #9e8e7e);
+}
+.cs-stash-option {
+    background: var(--paper-2);
+    border: 1px solid var(--rule-strong, #b8a890);
+    color: var(--ink, #1a1410);
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition:
+        background 0.1s,
+        color 0.1s;
+}
+.cs-stash-option:hover {
+    background: var(--ink, #1a1410);
+    color: var(--paper, #f4ead8);
+}
+.cs-stash-cancel {
+    background: transparent;
+    border: none;
+    color: var(--ink-mute, #9e8e7e);
+    cursor: pointer;
+    padding: 2px 4px;
+}
+.cs-stash-cancel:hover {
+    color: var(--ink, #1a1410);
 }
 
 .cs-adj-btn {

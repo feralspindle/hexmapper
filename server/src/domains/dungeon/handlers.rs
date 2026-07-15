@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::authz;
-use crate::domains::dungeon::{corridor_projection, fog_projection, projection, room_projection};
+use crate::domains::dungeon::{corridor_projection, fog_projection, projection, room_projection, token_projection};
 use crate::error::AppError;
 use crate::retry_tx;
 use crate::state::AppState;
@@ -231,6 +231,118 @@ pub async fn delete_corridor(
     let metadata = auth.metadata();
     retry_tx!(state.pool(), |tx| {
         corridor_projection::delete(&mut tx, id, &metadata).await
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- tokens ------------------------------------------------------------------
+
+fn body_cell(body: &Value, key: &str) -> Result<f64, AppError> {
+    body.get(key)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| AppError::BadRequest(format!("{key} required")))
+}
+
+// Players can only put tokens on revealed ground. The GM sees through fog, so
+// they can stage tokens anywhere; fog-less (collaborative) dungeons and
+// reveal-all skip the check entirely. One query - token moves are the highest
+// frequency dungeon write.
+async fn ensure_cell_placeable(
+    state: &AppState,
+    user_id: Uuid,
+    session_id: Uuid,
+    dungeon_id: Uuid,
+    x: f64,
+    y: f64,
+) -> Result<(), AppError> {
+    let row: Option<(bool, bool, bool, bool)> = sqlx::query_as(
+        r#"
+        select d.fog_mode, d.fog_reveal_all,
+            exists (select 1 from sessions s where s.id = $2 and s.owner_id = $3) as is_gm,
+            exists (select 1 from dungeon_fog_cells f where f.dungeon_id = d.id and f.cell_x = $4 and f.cell_y = $5) as revealed
+        from dungeons d where d.id = $1
+        "#,
+    )
+    .bind(dungeon_id)
+    .bind(session_id)
+    .bind(user_id)
+    .bind(x.round() as i32)
+    .bind(y.round() as i32)
+    .fetch_optional(state.pool())
+    .await?;
+    let (fog_mode, reveal_all, is_gm, revealed) = row.ok_or(AppError::NotFound)?;
+    if is_gm || !fog_mode || reveal_all || revealed {
+        return Ok(());
+    }
+    Err(AppError::BadRequest("cell is hidden by fog".into()))
+}
+
+pub async fn create_token(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, AppError> {
+    let dungeon_id = body_uuid(&body, "dungeon_id")?;
+    let character_id = body_uuid(&body, "character_id")?;
+    let session_id = member_for_dungeon(&state, auth.user_id, dungeon_id).await?;
+    let (owner_id, character_session) = authz::character_owner_session(state.pool(), character_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    // the composite fk enforces this too, but reject cleanly instead of 500ing
+    if character_session != Some(session_id) {
+        return Err(AppError::Forbidden);
+    }
+    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let x = body_cell(&body, "x")?;
+    let y = body_cell(&body, "y")?;
+    ensure_cell_placeable(&state, auth.user_id, session_id, dungeon_id, x, y).await?;
+    let metadata = auth.metadata();
+    let row = retry_tx!(state.pool(), |tx| {
+        token_projection::create(&mut tx, dungeon_id, session_id, &body, &metadata).await
+    })?;
+    Ok(Json(row))
+}
+
+pub async fn update_token(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(patch): Json<Value>,
+) -> Result<StatusCode, AppError> {
+    let (owner_id, session_id, dungeon_id) = authz::dungeon_token_owner_session(state.pool(), id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    if patch.get("x").is_some() || patch.get("y").is_some() {
+        let x = body_cell(&patch, "x")?;
+        let y = body_cell(&patch, "y")?;
+        ensure_cell_placeable(&state, auth.user_id, session_id, dungeon_id, x, y).await?;
+    }
+    let metadata = auth.metadata();
+    retry_tx!(state.pool(), |tx| {
+        token_projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_token(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let (owner_id, session_id, _) = authz::dungeon_token_owner_session(state.pool(), id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let metadata = auth.metadata();
+    retry_tx!(state.pool(), |tx| {
+        token_projection::delete(&mut tx, id, &metadata).await
     })?;
     Ok(StatusCode::NO_CONTENT)
 }

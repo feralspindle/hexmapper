@@ -1,3 +1,4 @@
+pub mod activity_projection;
 pub mod container_projection;
 pub mod handlers;
 pub mod item_projection;

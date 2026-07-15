@@ -14,6 +14,8 @@ export const MARKER_KINDS = [
   { id: "city", label: "City" },
   { id: "dungeon", label: "Dungeon" },
   { id: "landmark", label: "Landmark" },
+  { id: "cache", label: "Cache" },
+  { id: "quest", label: "Quest Location" },
 ];
 
 export const GM_MARKER_KINDS = [
@@ -92,6 +94,7 @@ export const useHexStore = defineStore("hex", () => {
   let playerRefreshTimer = null;
   let playerRefreshDebounce = null;
   let playerRefreshInFlight = false;
+  let noteCountRefreshDebounce = null;
   let initGeneration = 0;
 
   const selectedCell = computed(() => {
@@ -167,6 +170,25 @@ export const useHexStore = defineStore("hex", () => {
     if (playerRefreshDebounce) clearTimeout(playerRefreshDebounce);
     playerRefreshDebounce = null;
     playerRefreshInFlight = false;
+    if (noteCountRefreshDebounce) clearTimeout(noteCountRefreshDebounce);
+    noteCountRefreshDebounce = null;
+  }
+
+  // note_count is computed by the snapshot query; upsert responses and
+  // hex_cell realtime payloads never carry it, so replacing a cell from
+  // those sources must keep the previous count or the note dot flickers off.
+  function _withNoteCount(row, key) {
+    if (row.note_count !== undefined) return row;
+    const prior = hexCells.value.get(key)?.note_count;
+    return prior === undefined ? row : { ...row, note_count: prior };
+  }
+
+  function noteCountsChanged() {
+    if (noteCountRefreshDebounce) return;
+    noteCountRefreshDebounce = setTimeout(() => {
+      noteCountRefreshDebounce = null;
+      void refresh();
+    }, 100);
   }
 
   function _notifyHexChanged() {
@@ -243,6 +265,16 @@ export const useHexStore = defineStore("hex", () => {
           filter: `map_id=eq.${mapId}`,
         },
         handleRealtimeEvent,
+      );
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "hex_notes",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        () => noteCountsChanged(),
       );
     } else {
       playerRefreshTimer = setInterval(
@@ -407,7 +439,10 @@ export const useHexStore = defineStore("hex", () => {
         q,
         r,
       }, "explore_hex");
-      if (data?.cell) hexCells.value.set(cellKey(q, r), data.cell);
+      if (data?.cell) {
+        const key = cellKey(q, r);
+        hexCells.value.set(key, _withNoteCount(data.cell, key));
+      }
       if (data?.generated) _notifyHexChanged();
       return data;
     } catch (error) {
@@ -447,12 +482,13 @@ export const useHexStore = defineStore("hex", () => {
         hexCells.value.set(cellKey(row.q, row.r), hiddenCellSentinel(row));
         return;
       }
+      const key = cellKey(row.q, row.r);
       if (isGM) {
-        hexCells.value.set(cellKey(row.q, row.r), row);
+        hexCells.value.set(key, _withNoteCount(row, key));
       } else {
         const stripped = { ...row };
         delete stripped.gm_markers;
-        hexCells.value.set(cellKey(row.q, row.r), stripped);
+        hexCells.value.set(key, _withNoteCount(stripped, key));
       }
     } else if (eventType === "DELETE") {
       hexCells.value.delete(cellKey(old.q, old.r));
@@ -522,7 +558,7 @@ export const useHexStore = defineStore("hex", () => {
       // hexCells is reactive, so .get() returns a proxy — compare against the
       // raw object or this stale-response guard never matches anything.
       if (toRaw(hexCells.value.get(key)) === merged) {
-        hexCells.value.set(key, stored);
+        hexCells.value.set(key, _withNoteCount(stored, key));
       }
       _notifyHexChanged();
     } catch (error) {
@@ -631,7 +667,7 @@ export const useHexStore = defineStore("hex", () => {
           source_client: CLIENT_ID,
         }, "create_dungeon");
         hexId = data.id;
-        hexCells.value.set(key, data);
+        hexCells.value.set(key, _withNoteCount(data, key));
       } catch (error) {
         console.error("createDungeon upsert hex error:", error instanceof ApiError ? error.message : error);
         return;
@@ -673,7 +709,7 @@ export const useHexStore = defineStore("hex", () => {
         r,
         source_client: CLIENT_ID,
       }, "ensure_hex");
-      hexCells.value.set(key, data);
+      hexCells.value.set(key, _withNoteCount(data, key));
       return data.id;
     } catch (error) {
       console.error("ensureCellExists error:", error instanceof ApiError ? error.message : error);
@@ -802,6 +838,7 @@ export const useHexStore = defineStore("hex", () => {
     exploreHex,
     markUnexplored,
     markExplored,
+    noteCountsChanged,
     cleanup,
   };
 });

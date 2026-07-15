@@ -10,6 +10,7 @@
     :data-visible-to-player="visibleToPlayer ? 'true' : 'false'"
     :data-terrain="cell?.terrain_type ?? ''"
     :data-marker-count="markerCount"
+    :data-note-count="noteCount"
     :class="{ 'cursor-pointer': true }"
     @click.stop="emit('click')"
     @contextmenu.prevent.stop="emit('contextmenu')"
@@ -71,7 +72,12 @@
       </template>
     </g>
 
-    <g v-if="blankMode && visibleToPlayer && markerCount" v-tooltip="markerTooltip">
+    <g
+      v-if="prefs.showHexMarkers && visibleToPlayer && markerCount"
+      v-tooltip="markerTooltip"
+      :style="overlayShadow"
+      data-testid="hex-marker-icon"
+    >
       <circle
         cx="0" cy="0"
         :r="markerR"
@@ -96,6 +102,15 @@
         <template v-else-if="firstMarker?.kind === 'landmark'">
           <path d="M12 3l3 6 6 .8-4.5 4 1 6.2-5.5-3-5.5 3 1-6.2L3 9.8 9 9z"/>
         </template>
+        <template v-else-if="firstMarker?.kind === 'cache'">
+          <path d="M4 21V11a8 6 0 0116 0v10z"/>
+          <rect x="4" y="11" width="16" height="1.5" fill="var(--paper, #f4e8cc)"/>
+          <rect x="10.8" y="12.5" width="2.4" height="3.5" fill="var(--paper, #f4e8cc)"/>
+        </template>
+        <template v-else-if="firstMarker?.kind === 'quest'">
+          <rect x="5" y="3" width="2.2" height="18" rx="1"/>
+          <path d="M7.2 4h11.5l-3 4 3 4H7.2z"/>
+        </template>
       </g>
       <g v-if="markerCount > 1" :transform="`translate(${badgeX}, ${badgeY})`">
         <circle :r="badgeR" fill="var(--accent, #8a4a1c)" stroke="var(--paper, #f4e8cc)" :stroke-width="1 / (size / 48)" />
@@ -106,7 +121,7 @@
         text-anchor="middle"
         :y="markerR + size * 0.2"
         :font-size="10 * (size / 48)"
-        fill="var(--ink, #1a0f06)"
+        :fill="blankMode ? 'var(--ink, #1a0f06)' : 'var(--paper, #f4e8cc)'"
         style="font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 600;"
       >{{ firstMarker.label.slice(0, 16) }}</text>
     </g>
@@ -145,6 +160,28 @@
         fill="var(--paper, #f4e8cc)"
         style="font-family: var(--font-mono, monospace); font-weight: 700;"
       >M</text>
+    </g>
+
+    <g
+      v-if="visibleToPlayer && noteCount"
+      :transform="`translate(${-size * 0.42}, ${size * 0.28})`"
+      :style="overlayShadow"
+      data-testid="hex-note-indicator"
+      v-tooltip="noteTooltip"
+    >
+      <circle
+        :r="size * 0.09"
+        fill="var(--paper, #f4e8cc)"
+        stroke="var(--ink, #1a0f06)"
+        :stroke-width="1 / (size / 48)"
+      />
+      <path
+        :d="`M${-size * 0.045},${-size * 0.022} H${size * 0.045} M${-size * 0.045},${size * 0.026} H${size * 0.015}`"
+        stroke="var(--ink, #1a0f06)"
+        :stroke-width="1 / (size / 48)"
+        stroke-linecap="round"
+        fill="none"
+      />
     </g>
 
     <template v-if="visibleToPlayer && !imageMode">
@@ -202,7 +239,7 @@
     />
 
     <g
-      v-if="isGM && gmMarkerCount"
+      v-if="prefs.showHexMarkers && isGM && gmMarkerCount"
       :transform="`translate(${size * 0.42}, ${size * 0.08})`"
       style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))"
       v-tooltip="gmMarkerTooltip"
@@ -254,6 +291,9 @@
 import { computed } from 'vue'
 import { hexToPixel, hexCorners, cornersToPoints, HEX_SIZE } from '@/composables/useHexGeometry.js'
 import { TERRAIN_TYPES, MARKER_KINDS, GM_MARKER_KINDS, parseMarkers } from '@/stores/hexStore.js'
+import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
+
+const prefs = useUserPrefsStore()
 
 const props = defineProps({
   q: Number,
@@ -338,6 +378,10 @@ const terrainIconColor = computed(() => {
   return luma > 100 ? 'rgba(26,20,16,.7)' : 'rgba(237,225,199,.6)'
 })
 
+const overlayShadow = computed(() =>
+  blankMode.value ? undefined : 'filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55))'
+)
+
 const markerKinds       = computed(() => parseMarkers(props.cell?.marker_color))
 const firstMarker       = computed(() => markerKinds.value[0] ?? null)
 const markerCount       = computed(() => markerKinds.value.length)
@@ -355,6 +399,11 @@ const markerTooltip = computed(() =>
       return m.label ? `${kindLabel}: ${m.label}` : kindLabel
     })
     .join('\n')
+)
+
+const noteCount   = computed(() => props.cell?.note_count ?? 0)
+const noteTooltip = computed(() =>
+  `${noteCount.value} note${noteCount.value === 1 ? '' : 's'}`
 )
 
 const gmMarkerKinds  = computed(() => props.isGM ? parseMarkers(props.cell?.gm_markers) : [])

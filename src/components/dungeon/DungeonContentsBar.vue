@@ -41,6 +41,9 @@ const NpcIcon      = make([h('circle', { cx: 12, cy: 8, r: 4 }), h('path', { d: 
 const DoorIcon2    = make([h('path', { d: 'M6 21V4a1 1 0 011-1h10a1 1 0 011 1v17M4 21h16M14 12h.01' })])
 const SecretIcon   = make([h('path', { d: 'M3 12s3-7 9-7 9 7 9 7-3 7-9 7-9-7-9-7z' }), h('circle', { cx: 12, cy: 12, r: 2.5, fill: 'var(--ink)' })])
 const AltarIcon    = make([h('path', { d: 'M5 20V10h14v10z', opacity: '.3' }), h('path', { d: 'M5 20V10h14v10M3 10h18M9 10V6h6v4' })])
+const CacheIcon    = make([h('path', { d: 'M4 21V11a8 6 0 0116 0v10z' }), h('rect', { x: 4, y: 11, width: 16, height: 1.5, fill: 'var(--ink)' }), h('rect', { x: 10.8, y: 12.5, width: 2.4, height: 3.5, fill: 'var(--ink)' })])
+const QuestIcon    = make([h('rect', { x: 5, y: 3, width: 2.2, height: 18, rx: 1 }), h('path', { d: 'M7.2 4h11.5l-3 4 3 4H7.2z' })])
+const NoteIcon     = make([h('path', { d: 'M6 2h8l5 5v15H6z' }), h('path', { d: 'M9 12h7M9 15.5h7M9 19h4', stroke: 'var(--ink)', 'stroke-width': 1.4, 'stroke-linecap': 'round' })])
 
 const STAMP_TYPES = [
   { type: 'monster',  label: 'Monster',  icon: MonsterIcon,  faClass: 'ra ra-monster-skull' },
@@ -49,8 +52,11 @@ const STAMP_TYPES = [
   { type: 'feature',  label: 'Feature',  icon: FeatureIcon,  faClass: 'ra ra-scroll-unfurled' },
   { type: 'npc',      label: 'NPC',      icon: NpcIcon,      faClass: 'ra ra-hood' },
   { type: 'body',     label: 'Body',     icon: DoorIcon2,    faClass: 'ra ra-skull' },
-  { type: 'secret',   label: 'Secret',   icon: SecretIcon,   faClass: 'ra ra-eye' },
+  { type: 'secret',   label: 'Secret',   icon: SecretIcon,   faClass: 'ra ra-eyeball' },
   { type: 'key',      label: 'Key',      icon: AltarIcon,    faClass: 'ra ra-key' },
+  { type: 'cache',    label: 'Cache',    icon: CacheIcon,    faClass: 'fa-solid fa-box' },
+  { type: 'quest',    label: 'Quest',    icon: QuestIcon,    faClass: 'fa-solid fa-flag' },
+  { type: 'note',     label: 'Note',     icon: NoteIcon,     faClass: 'ra ra-quill-ink' },
 ]
 
 function selectStamp(type) {

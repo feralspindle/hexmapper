@@ -81,6 +81,19 @@
     </div>
 
     <div class="ds-tool-group">
+      <button
+        class="ds-tool"
+        :aria-pressed="dungeonStore.drawMode === 'token' ? 'true' : 'false'"
+        data-testid="dungeon-tool-token"
+        @click="dungeonStore.drawMode = dungeonStore.drawMode === 'token' ? 'select' : 'token'"
+      >
+        <component :is="TokenIcon" :size="18" />
+        <span class="ds-tool-key">T</span>
+        <span class="ds-tip">Place token<kbd>T</kbd></span>
+      </button>
+    </div>
+
+    <div class="ds-tool-group">
       <span class="ds-tool-label">Party</span>
       <ToolbarToggleButton kind="party" />
       <ToolbarToggleButton kind="vault" testid="dungeon-vault-toggle" />
@@ -129,12 +142,16 @@
 import { h } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useCharacterStore } from '@/stores/characterStore.js'
+import { useAuthStore } from '@/stores/authStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { useToolTooltip } from '@/composables/useToolTooltip.js'
 import ToolbarToggleButton from '@/components/common/ToolbarToggleButton.vue'
 
 const dungeonStore = useD()
 const sessionStore = useSessionStore()
+const characterStore = useCharacterStore()
+const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
 const { tip, onHover, onLeave } = useToolTooltip()
 
@@ -156,6 +173,7 @@ const TrashIcon   = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24
 const UndoIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('polyline',{points:'9 14 4 9 9 4'}),h('path',{d:'M20 20v-7a4 4 0 0 0-4-4H4'})]) }
 const MapImageIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('rect',{x:3,y:3,width:18,height:18,rx:2}),h('path',{d:'M3 9l5-5 4 4 4-4 5 5'}),h('circle',{cx:16,cy:15,r:2})]) }
 const FogBrushIcon = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('path',{d:'M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 15.25'}),h('path',{d:'M8 16h.01M12 19h.01M16 16h.01'})]) }
+const TokenIcon    = { render: () => h('svg', {width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round'},[h('circle',{cx:12,cy:8,r:4}),h('path',{d:'M4 21c0-4 3.6-7 8-7s8 3 8 7'})]) }
 
 const selectionTools = [
   { mode: 'select',   icon: CursorIcon,   label: 'Select',   key: 'V' },
@@ -175,6 +193,11 @@ function deleteSelected() {
   const { type, id, roomId } = dungeonStore.selectedElement
   if (type === 'room') confirm('Delete this room?', () => dungeonStore.deleteRoom(id))
   else if (type === 'door') { dungeonStore.removeDoor(roomId, id); dungeonStore.deselect() }
+  else if (type === 'token') {
+    const token = dungeonStore.tokens.get(id)
+    const char = token && characterStore.characters.find(c => c.id === token.character_id)
+    if (sessionStore.isGM || char?.user_id === authStore.user?.id) dungeonStore.removeToken(id)
+  }
   else dungeonStore.deleteCorridor(id)
 }
 

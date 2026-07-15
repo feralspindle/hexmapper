@@ -20,6 +20,7 @@ export const useD = defineStore('dungeon', () => {
   const dungeon = ref(null)
   const rooms = ref(new Map())
   const corridors = ref(new Map())
+  const tokens = ref(new Map())
   const loading = ref(true)
   const loadError = ref(null)
   const drawMode = ref('select')
@@ -37,6 +38,7 @@ export const useD = defineStore('dungeon', () => {
 
   let roomChannel = null
   let corridorChannel = null
+  let tokenChannel = null
   let dungeonChannel = null
   let presenceChannel = null
   let fogChannel = null
@@ -291,11 +293,12 @@ export const useD = defineStore('dungeon', () => {
     const generation = _initGeneration
     if (!dungeonId) return
     try {
-      const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }, { data: fogData }] = await Promise.all([
+      const [{ data: dungeonData, error: e1 }, { data: roomData }, { data: corridorData }, { data: fogData }, { data: tokenData }] = await Promise.all([
         supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
         supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_fog_cells').select('cell_x, cell_y').eq('dungeon_id', dungeonId),
+        supabase.from('dungeon_tokens').select('*').eq('dungeon_id', dungeonId),
       ])
       if (e1) throw new Error(e1.message)
       if (_dungeonId !== dungeonId || generation !== _initGeneration) return
@@ -315,6 +318,7 @@ export const useD = defineStore('dungeon', () => {
       rooms.value = nextRooms
       corridors.value = new Map((corridorData ?? []).map(c => [c.id, c]))
       fogCells.value = new Set((fogData ?? []).map(r => _fogKey(r.cell_x, r.cell_y)))
+      tokens.value = new Map((tokenData ?? []).map(t => [t.id, t]))
       loadError.value = null
     } catch (err) {
       console.error('dungeonStore.refresh error:', err)
@@ -327,6 +331,7 @@ export const useD = defineStore('dungeon', () => {
     if (dungeonChannel)  { realtime.removeChannel(dungeonChannel); dungeonChannel = null }
     if (roomChannel)     { realtime.removeChannel(roomChannel); roomChannel = null }
     if (corridorChannel) { realtime.removeChannel(corridorChannel); corridorChannel = null }
+    if (tokenChannel)    { realtime.removeChannel(tokenChannel); tokenChannel = null }
     if (presenceChannel) { realtime.removeChannel(presenceChannel); presenceChannel = null }
     if (fogChannel)      { realtime.removeChannel(fogChannel); fogChannel = null }
     if (undoChannel)     { realtime.removeChannel(undoChannel); undoChannel = null }
@@ -343,20 +348,23 @@ export const useD = defineStore('dungeon', () => {
     _removeChannels()
 
     try {
-      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }] = await Promise.all([
+      const [{ data: dungeonData, error: e1 }, { data: roomData, error: e2 }, { data: corridorData, error: e3 }, { data: tokenData, error: e4 }] = await Promise.all([
         supabase.from('dungeons').select('*').eq('id', dungeonId).single(),
         supabase.from('dungeon_rooms').select('*').eq('dungeon_id', dungeonId),
         supabase.from('dungeon_corridors').select('*').eq('dungeon_id', dungeonId),
+        supabase.from('dungeon_tokens').select('*').eq('dungeon_id', dungeonId),
       ])
 
       if (generation !== _initGeneration) return
       if (e1) throw new Error(e1.message)
       if (e2) throw new Error(e2.message)
       if (e3) throw new Error(e3.message)
+      if (e4) throw new Error(e4.message)
 
       dungeon.value = dungeonData
       rooms.value = new Map((roomData ?? []).map(r => [r.id, r]))
       corridors.value = new Map((corridorData ?? []).map(c => [c.id, c]))
+      tokens.value = new Map((tokenData ?? []).map(t => [t.id, t]))
 
       const { data: fogData } = await supabase
         .from('dungeon_fog_cells')
@@ -466,6 +474,24 @@ export const useD = defineStore('dungeon', () => {
             corridors.value.set(row.id, row)
           } else if (eventType === 'DELETE') {
             corridors.value.delete(old.id)
+            if (selectedElement.value?.id === old.id) selectedElement.value = null
+          }
+        },
+      )
+      .subscribe()
+
+    tokenChannel = realtime
+      .channel(`session:${sessionId}:dungeon:${dungeonId}:tokens`, { sessionId })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dungeon_tokens', filter: `dungeon_id=eq.${dungeonId}` },
+        ({ eventType, new: row, old }) => {
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            if (row.source_client === CLIENT_ID &&
+                (eventType === 'INSERT' || _pendingWrites.has(`token:${row.id}`))) return
+            tokens.value.set(row.id, row)
+          } else if (eventType === 'DELETE') {
+            tokens.value.delete(old.id)
             if (selectedElement.value?.id === old.id) selectedElement.value = null
           }
         },
@@ -740,6 +766,82 @@ export const useD = defineStore('dungeon', () => {
     updateRoom(roomId, { items })
   }
 
+  // tokens stay off the shared undo stack - popping someone else's token move
+  // as part of undoing your own drawing would be surprising
+  function tokenForCharacter(characterId) {
+    for (const token of tokens.value.values()) {
+      if (token.character_id === characterId) return token
+    }
+    return null
+  }
+
+  // fog verdict only - the GM exemption is the caller's call (sessionStore.isGM)
+  function isCellPlaceable(cellX, cellY) {
+    if (!fogMode.value || fogRevealAll.value) return true
+    return isCellRevealed(cellX, cellY)
+  }
+
+  async function placeToken(characterId, x, y) {
+    if (!dungeon.value?.id) return
+    const existing = tokenForCharacter(characterId)
+    if (existing) return moveToken(existing.id, { x, y })
+
+    const tempId = crypto.randomUUID()
+    const optimistic = {
+      id: tempId,
+      dungeon_id: dungeon.value.id,
+      session_id: dungeon.value.session_id,
+      character_id: characterId,
+      x, y,
+      source_client: CLIENT_ID,
+    }
+    tokens.value.set(tempId, optimistic)
+    try {
+      const data = await apiClient.post('/dungeon-tokens', {
+        dungeon_id: dungeon.value.id,
+        character_id: characterId,
+        x, y,
+        source_client: CLIENT_ID,
+      }, 'place_token')
+      tokens.value.delete(tempId)
+      if (!tokens.value.has(data.id)) tokens.value.set(data.id, data)
+      useActivityStore().record('placed token', '')
+    } catch (error) {
+      tokens.value.delete(tempId)
+      console.error('placeToken error:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
+  async function moveToken(id, patch) {
+    const existing = tokens.value.get(id)
+    if (!existing) return
+    const optimistic = { ...existing, ...patch }
+    tokens.value.set(id, optimistic)
+
+    _pendingWrites.begin([`token:${id}`])
+    try {
+      await apiClient.patch(`/dungeon-tokens/${id}`, { ...patch, source_client: CLIENT_ID }, 'move_token')
+    } catch (error) {
+      if (toRaw(tokens.value.get(id)) === optimistic) tokens.value.set(id, existing)
+      console.error('moveToken error:', error instanceof ApiError ? error.message : error)
+    } finally {
+      _pendingWrites.end([`token:${id}`])
+    }
+  }
+
+  async function removeToken(id) {
+    const backup = tokens.value.get(id)
+    tokens.value.delete(id)
+    if (selectedElement.value?.id === id) selectedElement.value = null
+    try {
+      await apiClient.delete(`/dungeon-tokens/${id}`, 'remove_token')
+      useActivityStore().record('removed token', '')
+    } catch (error) {
+      if (backup && !tokens.value.has(id)) tokens.value.set(id, backup)
+      console.error('removeToken error:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
   function selectElement(type, id, extra = {}) {
     selectedElement.value = { type, id, ...extra }
     _trackPresence?.()
@@ -796,6 +898,7 @@ export const useD = defineStore('dungeon', () => {
     dungeon.value = null
     rooms.value = new Map()
     corridors.value = new Map()
+    tokens.value = new Map()
     viewers.value = []
     selectedElement.value = null
     loadError.value = null
@@ -809,6 +912,7 @@ export const useD = defineStore('dungeon', () => {
     dungeon,
     rooms,
     corridors,
+    tokens,
     loading,
     loadError,
     drawMode,
@@ -849,6 +953,11 @@ export const useD = defineStore('dungeon', () => {
     updateDungeon,
     applyDungeonLocalPatch,
     isCellRevealed,
+    isCellPlaceable,
+    tokenForCharacter,
+    placeToken,
+    moveToken,
+    removeToken,
     revealFogCell,
     hideFogCell,
     revealFogCells,

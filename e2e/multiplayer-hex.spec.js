@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
+  closeSessionPanel,
   createThreeRoleCampaign,
   hexCell,
   prepareHexInteractions,
@@ -12,6 +13,7 @@ const missingEnv = missingE2EAccountEnv()
 async function addGmMarker(page, q, r, kind) {
   await selectHexAndOpenInspector(page, q, r)
   await page.getByTestId(`gm-marker-add-${kind}`).click()
+  await closeSessionPanel(page)
 }
 
 // Records everything that crosses a player's wire: hex-cell/api REST bodies and
@@ -131,6 +133,43 @@ test.describe.serial('hex map multiplayer sync', () => {
 
       await expect(hexCell(room.gm.page, 0, 0)).toHaveAttribute('data-marker-count', '1')
       await expect(hexCell(room.player1.page, 0, 0)).toHaveAttribute('data-marker-count', '1')
+    } finally {
+      await room.close()
+    }
+  })
+
+  test('markers and note indicators show on revealed fog hexes for everyone', async ({ browser }) => {
+    const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
+      mode: 'fow',
+      name: uniqueCampaignName('E2E Fog Markers'),
+    })
+
+    try {
+      await prepareHexInteractions(room.gm.page)
+      await room.gm.page.getByTestId('hex-tool-reveal').click()
+      await hexCell(room.gm.page, 0, 0).click()
+      await expect(hexCell(room.player1.page, 0, 0)).toHaveAttribute('data-visible-to-player', 'true')
+
+      await selectHexAndOpenInspector(room.gm.page, 0, 0)
+      await room.gm.page.getByTitle('Add Landmark').click()
+
+      await expect(hexCell(room.gm.page, 0, 0).getByTestId('hex-marker-icon')).toBeVisible()
+      await expect(hexCell(room.player1.page, 0, 0).getByTestId('hex-marker-icon')).toBeVisible()
+      await expect(hexCell(room.player2.page, 0, 0)).toHaveAttribute('data-marker-count', '1')
+
+      await room.gm.page.getByPlaceholder('What did the party learn here? (Ctrl+Enter)').fill('the ford is passable in summer')
+      await room.gm.page.getByRole('button', { name: 'Save note' }).click()
+
+      await expect(hexCell(room.gm.page, 0, 0)).toHaveAttribute('data-note-count', '1')
+      await expect(hexCell(room.gm.page, 0, 0).getByTestId('hex-note-indicator')).toBeVisible()
+      await expect(hexCell(room.player1.page, 0, 0)).toHaveAttribute('data-note-count', '1')
+      await expect(hexCell(room.player2.page, 0, 0)).toHaveAttribute('data-note-count', '1')
+
+      // a later edit to the same cell must not clobber the count client-side
+      await closeSessionPanel(room.gm.page)
+      await room.gm.page.getByTestId('hex-tool-reveal').click()
+      await hexCell(room.gm.page, 1, 0).click()
+      await expect(hexCell(room.gm.page, 0, 0)).toHaveAttribute('data-note-count', '1')
     } finally {
       await room.close()
     }

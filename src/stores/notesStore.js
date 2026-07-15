@@ -5,6 +5,7 @@ import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
+import { useHexStore } from '@/stores/hexStore.js'
 
 export const useNotesStore = defineStore('notes', () => {
   const notes = ref([])
@@ -124,6 +125,7 @@ export const useNotesStore = defineStore('notes', () => {
       notes.value = replaced.filter((n, i) => replaced.findIndex(x => x.id === n.id) === i)
       const where = ctx?.type === 'hex' ? 'hex cell' : (ctx?.elementType ?? 'element')
       useActivityStore().record('added note to', where)
+      if (ctx.type === 'hex') useHexStore().noteCountsChanged()
     } catch (error) {
       notes.value = notes.value.filter(n => n.id !== optimisticId)
       console.error('addNote error:', error instanceof ApiError ? error.message : (error.message ?? error))
@@ -160,6 +162,7 @@ export const useNotesStore = defineStore('notes', () => {
     try {
       if (isHex) {
         await apiClient.delete(`/hex-notes/${id}`)
+        useHexStore().noteCountsChanged()
       } else {
         await apiClient.delete(`/dungeon-element-notes/${id}`)
       }

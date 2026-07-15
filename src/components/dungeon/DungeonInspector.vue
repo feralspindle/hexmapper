@@ -147,6 +147,10 @@
           <input v-model="roomLabel" class="ds-input" placeholder="e.g. Main passage" @input="debouncedSave" />
         </div>
       </template>
+
+      <template v-else-if="selectedToken">
+        <TokenInspectorSection :token="selectedToken" />
+      </template>
     </div>
   </div>
 </template>
@@ -163,6 +167,7 @@ import { faClassForType } from '@/lib/roomItems.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { useTimeAgo } from '@/composables/useTimeAgo.js'
 import { useNoteEditing } from '@/composables/useNoteEditing.js'
+import TokenInspectorSection from '@/components/dungeon/TokenInspectorSection.vue'
 
 const dungeonStore   = useD()
 const notesStore     = useNotesStore()
@@ -178,12 +183,14 @@ defineExpose({ openSection: () => { open.value = true } })
 
 const selectedRoom     = computed(() => dungeonStore.selectedElement?.type === 'room' ? dungeonStore.rooms.get(dungeonStore.selectedElement.id) ?? null : null)
 const selectedCorridor = computed(() => dungeonStore.selectedElement?.type === 'corridor' ? dungeonStore.corridors.get(dungeonStore.selectedElement.id) ?? null : null)
+const selectedToken    = computed(() => dungeonStore.selectedElement?.type === 'token' ? dungeonStore.tokens.get(dungeonStore.selectedElement.id) ?? null : null)
 
 const roomLabel   = ref('')
 const { newNote, savingNote, editingNoteId, editingNoteBody, saveNote, startEditNote, saveEditNote } = useNoteEditing(notesStore)
 
 watch(() => dungeonStore.selectedElement, (el) => {
   if (!el) { roomLabel.value = ''; return }
+  if (el.type === 'token') { roomLabel.value = ''; return }
   const item = el.type === 'room' ? dungeonStore.rooms.get(el.id) : dungeonStore.corridors.get(el.id)
   roomLabel.value = item?.label ?? ''
   notesStore.initForDungeonElement(el.id, el.type, sessionStore.sessionId)
