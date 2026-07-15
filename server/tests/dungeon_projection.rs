@@ -8,7 +8,7 @@
 //! Gated on `DATABASE_URL`: skipped when unset. It (re)creates throwaway
 //! tables, so point it ONLY at a disposable database.
 
-use hexmap_server::domains::dungeon::{corridor_projection, fog_projection, room_projection, token_projection};
+use hexmap_server::domains::dungeon::{corridor_projection, fog_projection, icon_projection, room_projection, token_projection};
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -20,11 +20,13 @@ drop table if exists dungeon_rooms cascade;
 drop table if exists dungeon_corridors cascade;
 drop table if exists dungeon_fog_cells cascade;
 drop table if exists dungeon_tokens cascade;
+drop table if exists dungeon_icons cascade;
 drop table if exists characters cascade;
 drop table if exists shadow_rooms cascade;
 drop table if exists shadow_corridors cascade;
 drop table if exists shadow_fog cascade;
 drop table if exists shadow_tokens cascade;
+drop table if exists shadow_icons cascade;
 
 create table dungeon_rooms (
     id            uuid primary key,
@@ -89,6 +91,20 @@ create table dungeon_tokens (
     unique (dungeon_id, character_id)
 );
 
+create table dungeon_icons (
+    id            uuid primary key default gen_random_uuid(),
+    dungeon_id    uuid not null,
+    session_id    uuid not null,
+    type          text not null,
+    label         text,
+    notes         text,
+    x             int not null,
+    y             int not null,
+    source_client text,
+    created_at    timestamptz not null default now(),
+    updated_at    timestamptz not null default now()
+);
+
 create table events (
     id             bigserial primary key,
     aggregate_type text not null,
@@ -106,6 +122,7 @@ create table shadow_rooms     (like dungeon_rooms including defaults);
 create table shadow_corridors (like dungeon_corridors including defaults);
 create table shadow_fog       (like dungeon_fog_cells including defaults);
 create table shadow_tokens    (like dungeon_tokens including defaults);
+create table shadow_icons     (like dungeon_icons including defaults);
 "#;
 
 async fn setup() -> Option<PgPool> {
@@ -416,6 +433,53 @@ async fn dungeon_projections_round_trip_and_replay_from_events() {
     token_projection::delete(&mut tx, doomed_token_id, &meta()).await.unwrap();
     tx.commit().await.unwrap();
 
+    // --- icons: create rounds coords, updates patch, deletes stay deleted ---
+    let mut tx = pool.begin().await.unwrap();
+    let icon = icon_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "type": "treasure", "label": "chest", "x": 4.6, "y": 9.2, "source_client": "client-a" }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    let icon_id: Uuid = icon["id"].as_str().unwrap().parse().unwrap();
+    assert_eq!(icon["type"], "treasure");
+    assert_eq!(icon["x"], 5);
+    assert_eq!(icon["y"], 9);
+
+    let mut tx = pool.begin().await.unwrap();
+    icon_projection::update(&mut tx, icon_id, &json!({ "x": 1, "y": 2, "notes": "locked" }), &meta())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    let (icon_x, icon_notes, icon_label): (i32, String, String) =
+        sqlx::query_as("select x, notes, label from dungeon_icons where id = $1")
+            .bind(icon_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((icon_x, icon_notes.as_str(), icon_label.as_str()), (1, "locked", "chest"));
+
+    let mut tx = pool.begin().await.unwrap();
+    let doomed_icon = icon_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "type": "trap", "x": 8, "y": 8 }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    let doomed_icon_id: Uuid = doomed_icon["id"].as_str().unwrap().parse().unwrap();
+    icon_projection::delete(&mut tx, doomed_icon_id, &meta()).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(count(&pool, "select count(*) from dungeon_icons").await, 1);
+
     // --- replay: every read model rebuilds from the event log alone ---------
     sqlx::query(&room_projection::replay_select("shadow_rooms"))
         .execute(&pool)
@@ -433,10 +497,18 @@ async fn dungeon_projections_round_trip_and_replay_from_events() {
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query(&icon_projection::replay_select("shadow_icons"))
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let shadow_tokens: Vec<(Uuid, i32, i32)> =
         sqlx::query_as("select id, x, y from shadow_tokens").fetch_all(&pool).await.unwrap();
     assert_eq!(shadow_tokens, vec![(token_id, 1, 1)]);
+
+    let shadow_icons: Vec<(Uuid, String, i32, i32)> =
+        sqlx::query_as("select id, type, x, y from shadow_icons").fetch_all(&pool).await.unwrap();
+    assert_eq!(shadow_icons, vec![(icon_id, "treasure".to_string(), 1, 2)]);
 
     let shadow_rooms: Vec<(Uuid, String)> =
         sqlx::query_as("select id, label from shadow_rooms").fetch_all(&pool).await.unwrap();

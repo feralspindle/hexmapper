@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::authz;
-use crate::domains::dungeon::{corridor_projection, fog_projection, projection, room_projection, token_projection};
+use crate::domains::dungeon::{corridor_projection, fog_projection, icon_projection, projection, room_projection, token_projection};
 use crate::error::AppError;
 use crate::retry_tx;
 use crate::state::AppState;
@@ -247,7 +247,7 @@ fn body_cell(body: &Value, key: &str) -> Result<f64, AppError> {
 // they can stage tokens anywhere; fog-less (collaborative) dungeons and
 // reveal-all skip the check entirely. One query - token moves are the highest
 // frequency dungeon write.
-async fn ensure_cell_placeable(
+pub(crate) async fn ensure_cell_placeable(
     state: &AppState,
     user_id: Uuid,
     session_id: Uuid,
@@ -343,6 +343,73 @@ pub async fn delete_token(
     let metadata = auth.metadata();
     retry_tx!(state.pool(), |tx| {
         token_projection::delete(&mut tx, id, &metadata).await
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- icons -------------------------------------------------------------------
+
+// Free-placed grid icons for fog-mode dungeons. Collaborative like rooms (any
+// member writes), but placement is held to revealed ground for players the
+// same way tokens are - a player can't decorate fog they can't see.
+pub async fn create_icon(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, AppError> {
+    let dungeon_id = body_uuid(&body, "dungeon_id")?;
+    let session_id = member_for_dungeon(&state, auth.user_id, dungeon_id).await?;
+    if body.get("type").and_then(Value::as_str).map(str::trim).unwrap_or("").is_empty() {
+        return Err(AppError::BadRequest("type required".into()));
+    }
+    let x = body_cell(&body, "x")?;
+    let y = body_cell(&body, "y")?;
+    ensure_cell_placeable(&state, auth.user_id, session_id, dungeon_id, x, y).await?;
+    let metadata = auth.metadata();
+    let row = retry_tx!(state.pool(), |tx| {
+        icon_projection::create(&mut tx, dungeon_id, session_id, &body, &metadata).await
+    })?;
+    Ok(Json(row))
+}
+
+pub async fn update_icon(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(patch): Json<Value>,
+) -> Result<StatusCode, AppError> {
+    let (session_id, dungeon_id) = authz::dungeon_icon_session(state.pool(), id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    if patch.get("x").is_some() || patch.get("y").is_some() {
+        let x = body_cell(&patch, "x")?;
+        let y = body_cell(&patch, "y")?;
+        ensure_cell_placeable(&state, auth.user_id, session_id, dungeon_id, x, y).await?;
+    }
+    let metadata = auth.metadata();
+    retry_tx!(state.pool(), |tx| {
+        icon_projection::update(&mut tx, id, &patch, &metadata).await
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_icon(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let (session_id, _) = authz::dungeon_icon_session(state.pool(), id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let metadata = auth.metadata();
+    retry_tx!(state.pool(), |tx| {
+        icon_projection::delete(&mut tx, id, &metadata).await
     })?;
     Ok(StatusCode::NO_CONTENT)
 }

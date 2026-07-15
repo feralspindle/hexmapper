@@ -71,14 +71,18 @@ async fn dispatch_row(state: &AppState, mut row: EventRow) -> Result<(), sqlx::E
         }
     }
     // visible_event decides per viewer but has no pool, so resolve fog state
-    // for token events here and stamp it into metadata - metadata never
-    // reaches clients, the payload does (#153)
-    if row.aggregate_type == "dungeon_token"
-        && matches!(
-            row.event_type.as_str(),
-            "dungeon_token.created" | "dungeon_token.updated"
-        )
-    {
+    // for grid-anchored events here and stamp it into metadata - metadata
+    // never reaches clients, the payload does (#153). Tokens, icons, and cell
+    // notes all share the rule: on unrevealed ground the row is GM-only.
+    let fog_coord_keys = match (row.aggregate_type.as_str(), row.event_type.as_str()) {
+        ("dungeon_token", "dungeon_token.created" | "dungeon_token.updated") => Some(("x", "y")),
+        ("dungeon_icon", "dungeon_icon.created" | "dungeon_icon.updated") => Some(("x", "y")),
+        ("dungeon_cell_note", "dungeon_cell_note.created" | "dungeon_cell_note.edited") => {
+            Some(("cell_x", "cell_y"))
+        }
+        _ => None,
+    };
+    if let Some((x_key, y_key)) = fog_coord_keys {
         let dungeon_id = row
             .payload
             .get("dungeon_id")
@@ -86,9 +90,9 @@ async fn dispatch_row(state: &AppState, mut row: EventRow) -> Result<(), sqlx::E
             .and_then(|s| s.parse::<uuid::Uuid>().ok());
         let cell = row
             .payload
-            .get("x")
+            .get(x_key)
             .and_then(Value::as_i64)
-            .zip(row.payload.get("y").and_then(Value::as_i64));
+            .zip(row.payload.get(y_key).and_then(Value::as_i64));
         if let (Some(dungeon_id), Some((x, y))) = (dungeon_id, cell) {
             let fogged: Option<bool> = retry_query(
                 || {
@@ -106,7 +110,7 @@ async fn dispatch_row(state: &AppState, mut row: EventRow) -> Result<(), sqlx::E
                     .bind(y as i32)
                     .fetch_optional(state.pool())
                 },
-                "dungeon_token_fog",
+                "dungeon_cell_fog",
             )
             .await?;
             if let (Some(fogged), Value::Object(metadata)) = (fogged, &mut row.metadata) {

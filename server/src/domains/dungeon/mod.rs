@@ -1,6 +1,7 @@
 pub mod corridor_projection;
 pub mod fog_projection;
 pub mod handlers;
+pub mod icon_projection;
 pub mod projection;
 pub mod room_projection;
 pub mod routes;

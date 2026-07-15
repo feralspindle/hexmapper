@@ -8,6 +8,7 @@
     :data-fog-revealed="dungeonStore.fogCells.size"
     :data-fog-mode="dungeonStore.fogMode ? 'true' : 'false'"
     :data-token-count="dungeonStore.tokens.size"
+    :data-icon-count="dungeonStore.icons.size"
   >
 
     <canvas
@@ -164,6 +165,63 @@
             style="pointer-events:none"
           />
         </template>
+      </g>
+
+      <g v-if="draggingIcon?.moved" style="pointer-events:none">
+        <rect
+          :x="Math.floor(draggingIcon.ghostX) * cellPx - viewport.offsetX"
+          :y="Math.floor(draggingIcon.ghostY) * cellPx - viewport.offsetY"
+          :width="cellPx"
+          :height="cellPx"
+          :fill="iconDropAllowed ? 'rgba(110,190,90,.18)' : 'rgba(200,60,50,.22)'"
+          :stroke="iconDropAllowed ? '#6ebe5a' : '#c83c32'"
+          stroke-width="1.5"
+        />
+      </g>
+      <g
+        v-for="ic in iconModels"
+        :key="ic.id"
+        data-testid="dungeon-icon"
+        :transform="iconTransform(ic)"
+      >
+        <circle
+          v-if="dungeonStore.selectedElement?.type === 'icon' && dungeonStore.selectedElement.id === ic.id"
+          cx="0" cy="0" :r="iconR + 4"
+          fill="none"
+          :stroke="styleColors.selectedColor"
+          stroke-width="2"
+          stroke-dasharray="5 3"
+          style="pointer-events:none"
+        />
+        <circle
+          cx="0" cy="0" :r="iconR"
+          :fill="stampBg(ic.type)"
+          :stroke="stampBorder(ic.type)"
+          stroke-width="1.5"
+          style="pointer-events:none"
+        />
+        <foreignObject
+          :x="-iconR" :y="-iconR"
+          :width="iconR * 2" :height="iconR * 2"
+          :class="tokensInteractive ? 'pointer-events-auto' : ''"
+          :style="{ cursor: 'grab' }"
+          @mousedown.stop="onIconMouseDown($event, ic)"
+        >
+          <i
+            xmlns="http://www.w3.org/1999/xhtml"
+            :class="faClassForType(ic.type)"
+            :style="{ fontSize: Math.max(10, Math.round(iconR * 1.15)) + 'px', color: stampFg(ic.type), display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', pointerEvents: 'none' }"
+          />
+        </foreignObject>
+        <text
+          v-if="ic.label"
+          x="0" :y="iconR + 11"
+          text-anchor="middle"
+          fill="#ede1c7"
+          font-size="10"
+          font-family="'Crimson Text', serif"
+          style="pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.9))"
+        >{{ ic.label }}</text>
       </g>
 
       <g v-if="draggingToken" style="pointer-events:none">
@@ -881,6 +939,16 @@ function dropItem(type, clientX, clientY) {
   let x = gx
   let y = gy
 
+  // in fog mode the grid itself is the map - a drop outside any room lands as
+  // a free icon on the cell instead of snapping into the nearest room
+  if (!roomId && dungeonStore.fogMode) {
+    const cellX = Math.floor(gx)
+    const cellY = Math.floor(gy)
+    if (!sessionStore.isGM && !dungeonStore.isCellPlaceable(cellX, cellY)) return
+    dungeonStore.addIcon(type, cellX, cellY)
+    return
+  }
+
   if (!roomId) {
     let minDist = Infinity
     for (const [id, room] of dungeonStore.rooms) {
@@ -907,6 +975,11 @@ function dropItem(type, clientX, clientY) {
 
 function addToSelectedRoom(type) {
   const sel = dungeonStore.selectedElement
+  if (sel?.type === 'cell') {
+    if (!sessionStore.isGM && !dungeonStore.isCellPlaceable(sel.x, sel.y)) return
+    dungeonStore.addIcon(type, sel.x, sel.y)
+    return
+  }
   if (sel?.type !== 'room') return
   const room = dungeonStore.rooms.get(sel.id)
   if (!room) return
@@ -949,6 +1022,8 @@ let didCorridorDrag = false
 const hoveredCorridorPoint = ref(-1)
 
 const draggingItem = ref(null)
+
+const draggingIcon = ref(null)
 
 const draggingToken = ref(null)
 const tokenPlacementCharId = ref(null)
@@ -1024,6 +1099,79 @@ const tokenModels = computed(() => {
   }
   return models
 })
+
+const iconR = computed(() => Math.max(8, cellPx.value * 0.32))
+
+// free-placed grid icons (fog-mode annotation layer). same visibility rule as
+// tokens: players never see one parked in unrevealed fog - RLS withholds the
+// row, this is the defense-in-depth mirror.
+const iconModels = computed(() => {
+  const models = []
+  const isGM = sessionStore.isGM
+  for (const icon of dungeonStore.icons.values()) {
+    if (!isGM && dungeonStore.fogMode && !dungeonStore.fogRevealAll &&
+        !dungeonStore.isCellRevealed(icon.x, icon.y)) continue
+    models.push(icon)
+  }
+  return models
+})
+
+function iconTransform(ic) {
+  const cs = cellPx.value
+  const d = draggingIcon.value
+  const gx = d?.id === ic.id && d.moved ? d.ghostX : ic.x + 0.5
+  const gy = d?.id === ic.id && d.moved ? d.ghostY : ic.y + 0.5
+  return `translate(${gx * cs - viewport.value.offsetX}, ${gy * cs - viewport.value.offsetY})`
+}
+
+const iconDropAllowed = computed(() => {
+  const d = draggingIcon.value
+  if (!d?.moved) return false
+  return sessionStore.isGM || dungeonStore.isCellPlaceable(Math.floor(d.ghostX), Math.floor(d.ghostY))
+})
+
+function onIconMouseDown(e, icon) {
+  if (!tokensInteractive.value) return
+  draggingIcon.value = {
+    id: icon.id,
+    ghostX: icon.x + 0.5,
+    ghostY: icon.y + 0.5,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+    moved: false,
+  }
+  window.addEventListener('mousemove', onIconDragMove)
+  window.addEventListener('mouseup', onIconDragUp)
+}
+
+function onIconDragMove(e) {
+  const d = draggingIcon.value
+  if (!d) return
+  if (!d.moved && Math.hypot(e.clientX - d.startClientX, e.clientY - d.startClientY) <= 4) return
+  const rect = getRect()
+  const { gx, gy } = pixelToGrid(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
+  draggingIcon.value = { ...d, ghostX: gx, ghostY: gy, moved: true }
+}
+
+function onIconDragUp() {
+  const d = draggingIcon.value
+  draggingIcon.value = null
+  window.removeEventListener('mousemove', onIconDragMove)
+  window.removeEventListener('mouseup', onIconDragUp)
+  if (!d) return
+  if (!d.moved) {
+    dungeonStore.selectElement('icon', d.id)
+    return
+  }
+  const icon = dungeonStore.icons.get(d.id)
+  if (!icon) return
+  const cellX = Math.floor(d.ghostX)
+  const cellY = Math.floor(d.ghostY)
+  if (cellX === icon.x && cellY === icon.y) return
+  // snap back when a player drops into fog - the server rejects it anyway
+  if (!sessionStore.isGM && !dungeonStore.isCellPlaceable(cellX, cellY)) return
+  dungeonStore.updateIcon(d.id, { x: cellX, y: cellY })
+}
 
 function tokenTransform(t) {
   const cs = cellPx.value
@@ -2277,6 +2425,17 @@ function onClick(e) {
       if (dungeonStore.drawMode === 'edit') dungeonStore.drawMode = 'select'
       return
     }
+    // fog mode has no rooms to select - the revealed cell is the annotation
+    // target (GMs can annotate through fog, players only revealed ground)
+    if (dungeonStore.fogMode) {
+      const cellX = Math.floor(gx)
+      const cellY = Math.floor(gy)
+      if (sessionStore.isGM || dungeonStore.isCellPlaceable(cellX, cellY)) {
+        dungeonStore.selectElement('cell', `${cellX}:${cellY}`, { x: cellX, y: cellY })
+        if (dungeonStore.drawMode === 'edit') dungeonStore.drawMode = 'select'
+        return
+      }
+    }
     dungeonStore.deselect()
     if (dungeonStore.drawMode === 'edit') dungeonStore.drawMode = 'select'
   }
@@ -2503,6 +2662,10 @@ function onKeyDown(e) {
       dungeonStore.deselect()
     } else if (type === 'token') {
       if (canDeleteToken(id)) dungeonStore.removeToken(id)
+    } else if (type === 'icon') {
+      confirm('Remove this icon?', () => dungeonStore.removeIcon(id))
+    } else if (type === 'cell') {
+      dungeonStore.deselect()
     } else {
       dungeonStore.deleteCorridor(id)
     }

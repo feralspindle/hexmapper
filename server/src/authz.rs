@@ -195,6 +195,38 @@ pub async fn dungeon_token_owner_session(pool: &PgPool, token_id: Uuid) -> Resul
     Ok(row)
 }
 
+/// Returns (session_id, dungeon_id) for a dungeon_icon, or None if it does not
+/// exist. Icons have no owner (any member writes them, like rooms); the dungeon
+/// id rides along for the fog placement check.
+pub async fn dungeon_icon_session(pool: &PgPool, icon_id: Uuid) -> Result<Option<(Uuid, Uuid)>, AppError> {
+    let row: Option<(Uuid, Uuid)> = sqlx::query_as(
+        "select session_id, dungeon_id from dungeon_icons where id = $1",
+    )
+    .bind(icon_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
+
+/// Returns (user_id, session_id, dungeon_id, cell_x, cell_y) for a
+/// dungeon_cell_note, or None if it does not exist. Enforces the same
+/// `owner or session GM` update/delete policy as the other note tables; the
+/// cell coordinates ride along so event payloads can carry them.
+pub async fn dungeon_cell_note_owner_session(
+    pool: &PgPool,
+    note_id: Uuid,
+) -> Result<Option<(Uuid, Uuid, Uuid, i32, i32)>, AppError> {
+    let row: Option<(Uuid, Uuid, Uuid, i32, i32)> = sqlx::query_as(
+        "select user_id, session_id, dungeon_id, cell_x, cell_y from dungeon_cell_notes where id = $1",
+    )
+    .bind(note_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
+
 /// Returns (author_user_id, session_id) for a party_session_note, or None if it does
 /// not exist. Enforces the `author or session GM` update/delete policy. author_user_id
 /// is stored as text.

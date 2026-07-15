@@ -19,12 +19,15 @@ export const useNotesStore = defineStore('notes', () => {
     if (!ctx || !session.key) return
     const query = ctx.type === 'hex'
       ? supabase.from('hex_notes').select('*').eq('hex_cell_id', ctx.hexCellId)
-      : supabase.from('dungeon_element_notes').select('*').eq('element_id', ctx.elementId)
+      : ctx.type === 'dungeonCell'
+        ? supabase.from('dungeon_cell_notes').select('*')
+            .eq('dungeon_id', ctx.dungeonId).eq('cell_x', ctx.cellX).eq('cell_y', ctx.cellY)
+        : supabase.from('dungeon_element_notes').select('*').eq('element_id', ctx.elementId)
     const { data } = await query.order('created_at', { ascending: true })
     if (data && session.isCurrent(generation)) notes.value = data
   }
 
-  async function _init(key, ctx, { table, filter, channelName }) {
+  async function _init(key, ctx, { table, filter, extraFilters = [], channelName }) {
     if (key === session.key) {
       if (_pendingInit) await _pendingInit
       return
@@ -36,15 +39,18 @@ export const useNotesStore = defineStore('notes', () => {
     _pendingInit = (async () => {
       try {
         loading.value = true
-        const { data } = await supabase
+        let query = supabase
           .from(table)
           .select('*')
           .eq(...filter)
-          .order('created_at', { ascending: true })
+        for (const extra of extraFilters) query = query.eq(...extra)
+        const { data } = await query.order('created_at', { ascending: true })
         loading.value = false
         if (!session.isCurrent(generation)) return
         if (data) notes.value = data
 
+        // postgres_changes takes a single column filter, so contexts keyed by
+        // more than one column (cell notes) narrow the rest client-side
         session.open(channelName, { sessionId: ctx.sessionId, refresh }, ch => ch
           .on('postgres_changes', {
             event: '*',
@@ -79,11 +85,29 @@ export const useNotesStore = defineStore('notes', () => {
     })
   }
 
+  // fog-mode annotations hang off a grid cell, not a room/corridor row
+  async function initForDungeonCell(dungeonId, cellX, cellY, sessionId) {
+    await _init(`dungeonCell:${dungeonId}:${cellX}:${cellY}`, { type: 'dungeonCell', dungeonId, cellX, cellY, sessionId }, {
+      table: 'dungeon_cell_notes',
+      filter: ['dungeon_id', dungeonId],
+      extraFilters: [['cell_x', cellX], ['cell_y', cellY]],
+      channelName: `notes:dungeonCell:${dungeonId}:${cellX}:${cellY}:${crypto.randomUUID()}`,
+    })
+  }
+
+  function _rowInContext(row) {
+    const ctx = _ctx
+    if (ctx?.type !== 'dungeonCell') return true
+    return row.cell_x === ctx.cellX && row.cell_y === ctx.cellY
+  }
+
   function handleRealtimeEvent({ eventType, new: row, old }) {
     if (eventType === 'INSERT') {
+      if (!_rowInContext(row)) return
       if (notes.value.some(n => n.id === row.id)) return
       notes.value = [...notes.value, row]
     } else if (eventType === 'UPDATE') {
+      if (!_rowInContext(row)) return
       notes.value = notes.value.map(n => (n.id === row.id ? row : n))
     } else if (eventType === 'DELETE') {
       notes.value = notes.value.filter(n => n.id !== old.id)
@@ -113,6 +137,13 @@ export const useNotesStore = defineStore('notes', () => {
           session_id: ctx.sessionId,
           body: body.trim(),
         })
+      } else if (ctx.type === 'dungeonCell') {
+        data = await apiClient.post('/dungeon-cell-notes', {
+          dungeon_id: ctx.dungeonId,
+          cell_x: ctx.cellX,
+          cell_y: ctx.cellY,
+          body: body.trim(),
+        })
       } else {
         data = await apiClient.post('/dungeon-element-notes', {
           element_id: ctx.elementId,
@@ -123,7 +154,9 @@ export const useNotesStore = defineStore('notes', () => {
       }
       const replaced = notes.value.map(n => (n.id === optimisticId ? data : n))
       notes.value = replaced.filter((n, i) => replaced.findIndex(x => x.id === n.id) === i)
-      const where = ctx?.type === 'hex' ? 'hex cell' : (ctx?.elementType ?? 'element')
+      const where = ctx?.type === 'hex' ? 'hex cell'
+        : ctx?.type === 'dungeonCell' ? 'map cell'
+        : (ctx?.elementType ?? 'element')
       useActivityStore().record('added note to', where)
       if (ctx.type === 'hex') useHexStore().noteCountsChanged()
     } catch (error) {
@@ -141,13 +174,11 @@ export const useNotesStore = defineStore('notes', () => {
       n.id === id ? { ...n, body: body.trim(), updated_at: new Date().toISOString() } : n,
     )
 
-    const isHex = _ctx?.type === 'hex'
+    const notePath = _ctx?.type === 'hex' ? '/hex-notes'
+      : _ctx?.type === 'dungeonCell' ? '/dungeon-cell-notes'
+      : '/dungeon-element-notes'
     try {
-      if (isHex) {
-        await apiClient.patch(`/hex-notes/${id}`, { body: body.trim() })
-      } else {
-        await apiClient.patch(`/dungeon-element-notes/${id}`, { body: body.trim() })
-      }
+      await apiClient.patch(`${notePath}/${id}`, { body: body.trim() })
     } catch (error) {
       notes.value = notes.value.map(n => (n.id === id ? existing : n))
       console.error('updateNote error:', error instanceof ApiError ? error.message : (error.message ?? error))
@@ -159,13 +190,12 @@ export const useNotesStore = defineStore('notes', () => {
     notes.value = notes.value.filter(n => n.id !== id)
 
     const isHex = _ctx?.type === 'hex'
+    const notePath = isHex ? '/hex-notes'
+      : _ctx?.type === 'dungeonCell' ? '/dungeon-cell-notes'
+      : '/dungeon-element-notes'
     try {
-      if (isHex) {
-        await apiClient.delete(`/hex-notes/${id}`)
-        useHexStore().noteCountsChanged()
-      } else {
-        await apiClient.delete(`/dungeon-element-notes/${id}`)
-      }
+      await apiClient.delete(`${notePath}/${id}`)
+      if (isHex) useHexStore().noteCountsChanged()
     } catch (error) {
       if (backup) notes.value = [...notes.value, backup].sort((a, b) => a.created_at.localeCompare(b.created_at))
       console.error('deleteNote error:', error instanceof ApiError ? error.message : (error.message ?? error))
@@ -179,5 +209,5 @@ export const useNotesStore = defineStore('notes', () => {
     _pendingInit = null
   }
 
-  return { notes, loading, initForHex, initForDungeonElement, refresh, addNote, updateNote, deleteNote, cleanup }
+  return { notes, loading, initForHex, initForDungeonElement, initForDungeonCell, refresh, addNote, updateNote, deleteNote, cleanup }
 })

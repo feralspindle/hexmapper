@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::authz;
-use crate::domains::notes::{dungeon_projection, projection};
+use crate::domains::notes::{cell_projection, dungeon_projection, projection};
 use crate::error::AppError;
 use crate::events::NewEvent;
 use crate::retry_tx;
@@ -237,6 +237,125 @@ pub async fn delete_dungeon_note(
 
     retry_tx!(state.pool(), |tx| {
         dungeon_projection::append_and_unproject(&mut tx, &event).await
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDungeonCellNoteRequest {
+    pub dungeon_id: Uuid,
+    pub cell_x: i32,
+    pub cell_y: i32,
+    pub body: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct DungeonCellNoteRow {
+    pub id: Uuid,
+    pub dungeon_id: Uuid,
+    pub session_id: Uuid,
+    pub cell_x: i32,
+    pub cell_y: i32,
+    pub user_id: Uuid,
+    pub display_name: String,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// Cell notes are the fog-mode annotation layer: no rooms exist to note, so the
+// thread hangs off the grid cell itself. Players can only note revealed ground
+// (same rule as token placement); the GM notes anywhere.
+pub async fn create_dungeon_cell_note(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(req): Json<CreateDungeonCellNoteRequest>,
+) -> Result<Json<DungeonCellNoteRow>, AppError> {
+    let session_id = authz::dungeon_session_id(state.pool(), req.dungeon_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    crate::domains::dungeon::handlers::ensure_cell_placeable(
+        &state, auth.user_id, session_id, req.dungeon_id, req.cell_x as f64, req.cell_y as f64,
+    )
+    .await?;
+    let body = validate_body(&req.body)?;
+    let display_name = authz::resolve_display_name(state.pool(), auth.user_id).await?;
+
+    let event = NewEvent {
+        aggregate_type: "dungeon_cell_note",
+        aggregate_id: Uuid::new_v4(),
+        session_id: Some(session_id),
+        event_type: "dungeon_cell_note.created",
+        payload: json!({ "dungeon_id": req.dungeon_id, "cell_x": req.cell_x, "cell_y": req.cell_y, "body": body }),
+        metadata: auth.metadata_with(json!({ "display_name": display_name })),
+    };
+
+    let row = retry_tx!(state.pool(), |tx| {
+        cell_projection::append_and_project(&mut tx, &event).await
+    })?;
+
+    Ok(Json(row))
+}
+
+pub async fn edit_dungeon_cell_note(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(note_id): Path<Uuid>,
+    Json(req): Json<EditNoteRequest>,
+) -> Result<Json<DungeonCellNoteRow>, AppError> {
+    let (owner_id, session_id, dungeon_id, cell_x, cell_y) =
+        authz::dungeon_cell_note_owner_session(state.pool(), note_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let body = validate_body(&req.body)?;
+
+    let event = NewEvent {
+        aggregate_type: "dungeon_cell_note",
+        aggregate_id: note_id,
+        session_id: Some(session_id),
+        event_type: "dungeon_cell_note.edited",
+        payload: json!({ "dungeon_id": dungeon_id, "cell_x": cell_x, "cell_y": cell_y, "body": body }),
+        metadata: auth.metadata(),
+    };
+
+    let row = retry_tx!(state.pool(), |tx| {
+        cell_projection::append_and_edit(&mut tx, &event).await
+    })?;
+
+    Ok(Json(row))
+}
+
+pub async fn delete_dungeon_cell_note(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(note_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let (owner_id, session_id, dungeon_id, cell_x, cell_y) =
+        authz::dungeon_cell_note_owner_session(state.pool(), note_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
+        return Err(AppError::Forbidden);
+    }
+
+    let event = NewEvent {
+        aggregate_type: "dungeon_cell_note",
+        aggregate_id: note_id,
+        session_id: Some(session_id),
+        event_type: "dungeon_cell_note.deleted",
+        payload: json!({ "dungeon_id": dungeon_id, "cell_x": cell_x, "cell_y": cell_y }),
+        metadata: auth.metadata(),
+    };
+
+    retry_tx!(state.pool(), |tx| {
+        cell_projection::append_and_unproject(&mut tx, &event).await
     })?;
 
     Ok(StatusCode::NO_CONTENT)
