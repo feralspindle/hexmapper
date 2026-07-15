@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Gates pushes to origin behind the full local test suite (scripts/test-all.sh).
-# Installed via `git config core.hooksPath .githooks` (the npm prepare script
-# does this on install). Emergency bypass: git push --no-verify
+# Gates pushes to origin: first a cheap check that the branch's PR is still
+# open (scripts/check-pr-open.sh), then the full local test suite
+# (scripts/test-all.sh). Installed via `git config core.hooksPath .githooks`
+# (the npm prepare script does this on install).
+# Emergency bypass: git push --no-verify
 
 set -euo pipefail
 
@@ -10,11 +12,23 @@ remote="${1:-}"
 
 zero=0000000000000000000000000000000000000000
 pushing_commits=0
-while read -r _local_ref local_sha _remote_ref _remote_sha; do
-  [ "$local_sha" = "$zero" ] || pushing_commits=1
+branches=()
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  pushing_commits=1
+  case "$remote_ref" in
+    refs/heads/*) branches+=("${remote_ref#refs/heads/}") ;;
+  esac
 done
 [ "$pushing_commits" -eq 1 ] || exit 0
 
+root=$(git rev-parse --show-toplevel)
+
+# fail fast on a dead PR before spending minutes on the test suite
+if [ "${#branches[@]}" -gt 0 ]; then
+  bash "$root/scripts/check-pr-open.sh" "${branches[@]}"
+fi
+
 echo "pre-push: running the full test suite before pushing to origin"
 echo "pre-push: (bypass in an emergency with: git push --no-verify)"
-bash "$(git rev-parse --show-toplevel)/scripts/test-all.sh"
+bash "$root/scripts/test-all.sh"
