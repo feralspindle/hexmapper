@@ -20,6 +20,8 @@ describe('realtimeProtocol', () => {
     expect(REALTIME_TABLES.hex_cell).toBe('hex_cells')
     expect(REALTIME_TABLES.dungeon_fog_cell).toBe('dungeon_fog_cells')
     expect(REALTIME_TABLES.party_calendar_day).toBe('party_calendar_days')
+    expect(REALTIME_TABLES.dungeon_icon).toBe('dungeon_icons')
+    expect(REALTIME_TABLES.dungeon_cell_note).toBe('dungeon_cell_notes')
   })
 
   test('applies equality filters strictly, with leniency reserved for sparse delete payloads', () => {
