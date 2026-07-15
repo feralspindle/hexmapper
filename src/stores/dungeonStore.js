@@ -162,6 +162,21 @@ export const useD = defineStore('dungeon', () => {
     return true
   }
 
+  // the alignment fields belong to the image being cleared, so they reset to
+  // their column defaults along with it. extraPatch lets callers fold in other
+  // changes (eg fogMode) so it all lands as one event
+  function clearMapImage(extraPatch = {}) {
+    return updateDungeon({
+      ...extraPatch,
+      mapImagePath: null,
+      mapImageOffsetX: 0,
+      mapImageOffsetY: 0,
+      mapImageScale: 1,
+      mapImageRotation: 0,
+      mapOffsetLocked: false,
+    })
+  }
+
   function applyDungeonLocalPatch(patch) {
     if (!dungeon.value?.id) return
     const id = dungeon.value.id
@@ -1084,6 +1099,7 @@ export const useD = defineStore('dungeon', () => {
     cleanup,
     uploadDungeonImage,
     updateDungeon,
+    clearMapImage,
     applyDungeonLocalPatch,
     isCellRevealed,
     isCellPlaceable,
