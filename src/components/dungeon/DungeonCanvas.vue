@@ -17,7 +17,6 @@
       @mousedown="onMouseDown"
       @mousedown.middle.prevent
       @mousemove="onMouseMove"
-      @mouseleave="broadcastCursorHidden"
       @mouseup="onMouseUp"
       @click="onClick"
       @wheel.prevent="onWheel"
@@ -573,6 +572,7 @@ let skipNextDoorClick = false
 let cursorChannel = null
 let cursorRafQueued = false
 let pendingCursor = null
+let cursorBroadcastVisible = false
 let _stopCursorWatch = null
 
 function cursorColorFor(userId) {
@@ -607,8 +607,29 @@ function initCursorChannel(dungeonId) {
 
 function broadcastCursorHidden() {
   pendingCursor = null
+  cursorBroadcastVisible = false
   if (!cursorChannel || !authStore.user?.id) return
   cursorChannel.send({ type: 'broadcast', event: 'cursor', payload: { userId: authStore.user.id, hidden: true } })
+}
+
+// Tracked on window rather than the canvas so panels and pointer-events-auto
+// overlays (labels, door handles) don't swallow moves and flicker the cursor
+// for everyone else.
+function onCursorTrack(e) {
+  if (!prefs.showCursors || !canvasEl.value) return
+  const rect = getRect()
+  const inside = e.clientX >= rect.left && e.clientX < rect.right
+    && e.clientY >= rect.top && e.clientY < rect.bottom
+  if (!inside) {
+    if (cursorBroadcastVisible) broadcastCursorHidden()
+    return
+  }
+  cursorBroadcastVisible = true
+  broadcastCursor(e.clientX - rect.left, e.clientY - rect.top)
+}
+
+function onDocumentMouseLeave() {
+  if (cursorBroadcastVisible) broadcastCursorHidden()
 }
 
 watch(() => dungeonStore.viewers, (viewers) => {
@@ -1921,11 +1942,6 @@ function onMouseDown(e) {
 }
 
 function onMouseMove(e) {
-  if (prefs.showCursors) {
-    const rect = getRect()
-    broadcastCursor(e.clientX - rect.left, e.clientY - rect.top)
-  }
-
   if (isPanning && props.mapMoveMode === 'image') {
     const dx = (e.clientX - panStart.x) / viewport.value.zoom
     const dy = (e.clientY - panStart.y) / viewport.value.zoom
@@ -2442,6 +2458,8 @@ onMounted(() => {
   canvasEl.value.height = canvasHeight.value
   resizeObserver.observe(containerEl.value)
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('mousemove', onCursorTrack)
+  document.addEventListener('mouseleave', onDocumentMouseLeave)
   if (props.dungeonId) initCursorChannel(props.dungeonId)
   rafId = requestAnimationFrame(renderFrame)
 })
@@ -2450,6 +2468,8 @@ onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId)
   resizeObserver.disconnect()
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('mousemove', onCursorTrack)
+  document.removeEventListener('mouseleave', onDocumentMouseLeave)
   broadcastCursorHidden()
   if (cursorChannel) realtime.removeChannel(cursorChannel)
   if (_stopCursorWatch) _stopCursorWatch()
