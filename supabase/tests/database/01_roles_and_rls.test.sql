@@ -59,6 +59,12 @@ where session_id = '10000000-0000-0000-0000-000000000001'
 insert into public.dungeon_tokens (session_id, dungeon_id, character_id, x, y)
 values ('10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', 0, 0);
 
+insert into public.dungeon_icons (session_id, dungeon_id, type, x, y)
+values ('10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 'monster', 0, 0);
+
+insert into public.dungeon_cell_notes (session_id, dungeon_id, cell_x, cell_y, user_id, display_name, body)
+values ('10000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 0, 0, '00000000-0000-0000-0000-000000000001', 'GM', 'cell note');
+
 insert into public.chat_messages (session_id, user_id, display_name, body)
 values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'hello');
 

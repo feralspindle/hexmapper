@@ -200,6 +200,22 @@ select throws_ok(
   'token rejects a character from another session'
 );
 
+select throws_ok(
+  $sql$insert into public.dungeon_icons (session_id, dungeon_id, type, x, y)
+       values ('11000000-0000-0000-0000-000000000001', '41000000-0000-0000-0000-000000000002', 'monster', 0, 0)$sql$,
+  '23503',
+  NULL,
+  'icon rejects a dungeon from another session'
+);
+
+select throws_ok(
+  $sql$insert into public.dungeon_cell_notes (session_id, dungeon_id, cell_x, cell_y, user_id, display_name, body)
+       values ('11000000-0000-0000-0000-000000000001', '41000000-0000-0000-0000-000000000002', 0, 0, '00000000-0000-0000-0000-000000000011', 'GM', 'bad link')$sql$,
+  '23503',
+  NULL,
+  'cell note rejects a dungeon from another session'
+);
+
 select is(
   (
     select count(distinct tablename)
@@ -208,8 +224,8 @@ select is(
       and policyname in ('es_lock_no_insert', 'es_lock_no_update', 'es_lock_no_delete')
       and permissive = 'RESTRICTIVE'
   ),
-  30::bigint,
-  'all 30 event-sourced projections have restrictive client write locks'
+  32::bigint,
+  'all 32 event-sourced projections have restrictive client write locks'
 );
 
 select is(
@@ -220,7 +236,7 @@ select is(
       and policyname in ('es_lock_no_insert', 'es_lock_no_update', 'es_lock_no_delete')
       and permissive = 'RESTRICTIVE'
   ),
-  90::bigint,
+  96::bigint,
   'every event-sourced projection blocks insert, update, and delete'
 );
 

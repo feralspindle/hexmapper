@@ -15,7 +15,7 @@
 
       <div v-if="!dungeonStore.selectedElement" class="ds-inspector-empty">
         <span class="ds-glyph">✦</span>
-        Select a room to inspect
+        {{ dungeonStore.fogMode ? 'Select a room or cell to inspect' : 'Select a room to inspect' }}
       </div>
 
       <template v-else-if="selectedRoom">
@@ -151,6 +151,115 @@
       <template v-else-if="selectedToken">
         <TokenInspectorSection :token="selectedToken" />
       </template>
+
+      <template v-else-if="selectedCell">
+        <div class="ds-dims-readout">
+          <span style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">Cell</span>
+          <span style="background:var(--paper);border:1px solid var(--rule-strong);padding:3px 8px;letter-spacing:.04em">
+            {{ selectedCell.x }}, {{ selectedCell.y }}
+          </span>
+        </div>
+
+        <div v-if="cellIcons.length">
+          <label class="ds-field-label">Icons</label>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div
+              v-for="icon in cellIcons"
+              :key="icon.id"
+              class="ds-content-card"
+              :class="`kind-${icon.type}`"
+            >
+              <div class="ds-content-head">
+                <div class="ds-content-stamp">
+                  <i :class="faClassForType(icon.type)" style="font-size:12px" />
+                </div>
+                <span class="ds-content-kind">{{ icon.type }}</span>
+                <input
+                  class="ds-input ds-content-name-input"
+                  :value="icon.label ?? ''"
+                  placeholder="Name…"
+                  @input="updateIconDebounced(icon.id, { label: $event.target.value })"
+                />
+                <button
+                  class="ds-x-btn"
+                  @click="confirm('Remove this icon?', () => dungeonStore.removeIcon(icon.id))"
+                >×</button>
+              </div>
+              <textarea
+                class="ds-input"
+                :value="icon.notes ?? ''"
+                placeholder="Notes about this…"
+                rows="2"
+                style="resize:vertical;min-height:36px"
+                @input="updateIconDebounced(icon.id, { notes: $event.target.value })"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="ds-field-label">Notes</label>
+          <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">
+            <div
+              v-if="!notesStore.notes.length && !notesStore.loading"
+              style="font-family:var(--font-body);font-style:italic;font-size:13px;color:var(--ink-mute);padding:8px 0"
+            >No notes yet.</div>
+            <div
+              v-for="note in notesStore.notes"
+              :key="note.id"
+              class="ds-note"
+              :style="{ '--note-color': noteColor(note.user_id) }"
+            >
+              <div class="ds-note-meta">
+                <span class="ds-note-author">{{ note.display_name }}</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span class="ds-note-time">{{ timeAgo(note.created_at) }}</span>
+                  <button
+                    v-if="note.user_id === authStore.user?.id && editingNoteId !== note.id"
+                    class="ds-x-btn"
+                    style="width:16px;height:16px;font-size:11px"
+                    title="Edit note"
+                    @click="startEditNote(note)"
+                  >✎</button>
+                  <button
+                    v-if="note.user_id === authStore.user?.id"
+                    class="ds-x-btn"
+                    style="width:16px;height:16px;font-size:11px"
+                    @click="confirm('Delete this note?', () => notesStore.deleteNote(note.id))"
+                  >×</button>
+                </div>
+              </div>
+              <template v-if="editingNoteId === note.id">
+                <textarea
+                  v-model="editingNoteBody"
+                  class="ds-input"
+                  rows="2"
+                  @keydown.ctrl.enter.prevent="saveEditNote"
+                  @keydown.escape="editingNoteId = null"
+                />
+                <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px">
+                  <button class="ds-btn tiny" :disabled="!editingNoteBody.trim()" @click="saveEditNote">Save</button>
+                  <button class="ds-btn tiny" @click="editingNoteId = null">Cancel</button>
+                </div>
+              </template>
+              <p v-else style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:13px">{{ note.body }}</p>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <textarea
+              v-model="newNote"
+              class="ds-input"
+              placeholder="Add a note… (Ctrl+Enter)"
+              rows="2"
+              @keydown.ctrl.enter.prevent="saveNote"
+            />
+            <div style="display:flex;justify-content:flex-end">
+              <button class="ds-btn tiny" :disabled="!newNote.trim() || savingNote" @click="saveNote">Save</button>
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -185,12 +294,34 @@ const selectedRoom     = computed(() => dungeonStore.selectedElement?.type === '
 const selectedCorridor = computed(() => dungeonStore.selectedElement?.type === 'corridor' ? dungeonStore.corridors.get(dungeonStore.selectedElement.id) ?? null : null)
 const selectedToken    = computed(() => dungeonStore.selectedElement?.type === 'token' ? dungeonStore.tokens.get(dungeonStore.selectedElement.id) ?? null : null)
 
+// fog-mode selection: a bare grid cell, or an icon (which stands on one - the
+// inspector shows its cell so the notes thread and neighbours come along)
+const selectedCell = computed(() => {
+  const el = dungeonStore.selectedElement
+  if (el?.type === 'cell') return { x: el.x, y: el.y }
+  if (el?.type === 'icon') {
+    const icon = dungeonStore.icons.get(el.id)
+    return icon ? { x: icon.x, y: icon.y } : null
+  }
+  return null
+})
+const cellIcons = computed(() =>
+  selectedCell.value ? dungeonStore.iconsAtCell(selectedCell.value.x, selectedCell.value.y) : []
+)
+
 const roomLabel   = ref('')
 const { newNote, savingNote, editingNoteId, editingNoteBody, saveNote, startEditNote, saveEditNote } = useNoteEditing(notesStore)
 
 watch(() => dungeonStore.selectedElement, (el) => {
   if (!el) { roomLabel.value = ''; return }
   if (el.type === 'token') { roomLabel.value = ''; return }
+  if (el.type === 'cell' || el.type === 'icon') {
+    roomLabel.value = ''
+    const cell = el.type === 'cell' ? el : dungeonStore.icons.get(el.id)
+    if (cell && dungeonStore.dungeon?.id)
+      notesStore.initForDungeonCell(dungeonStore.dungeon.id, cell.x, cell.y, sessionStore.sessionId)
+    return
+  }
   const item = el.type === 'room' ? dungeonStore.rooms.get(el.id) : dungeonStore.corridors.get(el.id)
   roomLabel.value = item?.label ?? ''
   notesStore.initForDungeonElement(el.id, el.type, sessionStore.sessionId)
@@ -227,6 +358,19 @@ function updateItem(itemId, patch) {
     if (selectedRoom.value) dungeonStore.updateRoomItem(selectedRoom.value.id, itemId, patch)
   }, 400))
 }
-onUnmounted(() => { _itemTimers.forEach(clearTimeout); _itemTimers.clear() })
+
+const _iconTimers = new Map()
+function updateIconDebounced(iconId, patch) {
+  clearTimeout(_iconTimers.get(iconId))
+  _iconTimers.set(iconId, setTimeout(() => {
+    _iconTimers.delete(iconId)
+    dungeonStore.updateIcon(iconId, patch)
+  }, 400))
+}
+
+onUnmounted(() => {
+  _itemTimers.forEach(clearTimeout); _itemTimers.clear()
+  _iconTimers.forEach(clearTimeout); _iconTimers.clear()
+})
 
 </script>

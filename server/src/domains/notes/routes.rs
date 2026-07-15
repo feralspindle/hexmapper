@@ -12,4 +12,7 @@ pub fn router() -> Router<AppState> {
         .route("/dungeon-element-notes", post(handlers::create_dungeon_note))
         .route("/dungeon-element-notes/{id}", patch(handlers::edit_dungeon_note))
         .route("/dungeon-element-notes/{id}", delete(handlers::delete_dungeon_note))
+        .route("/dungeon-cell-notes", post(handlers::create_dungeon_cell_note))
+        .route("/dungeon-cell-notes/{id}", patch(handlers::edit_dungeon_cell_note))
+        .route("/dungeon-cell-notes/{id}", delete(handlers::delete_dungeon_cell_note))
 }
