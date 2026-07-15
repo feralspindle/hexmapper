@@ -33,7 +33,7 @@
       <button class="pn-tab" :class="{ active: activeTab === 'calendar' }" data-testid="notebook-tab-calendar" @click="activeTab = 'calendar'">
         Calendar
       </button>
-      <button class="pn-tab" :class="{ active: activeTab === 'journal' }" data-testid="notebook-tab-journal" @click="activeTab = 'journal'">
+      <button v-if="isSoloOrCoop" class="pn-tab" :class="{ active: activeTab === 'journal' }" data-testid="notebook-tab-journal" @click="activeTab = 'journal'">
         Journal
       </button>
     </div>
@@ -729,7 +729,7 @@
         <PartyCalendar :session-id="sessionId" />
       </template>
 
-      <template v-if="activeTab === 'journal'">
+      <template v-if="activeTab === 'journal' && isSoloOrCoop">
         <JournalPanel :session-id="sessionId" />
       </template>
 
@@ -744,7 +744,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import PartyCalendar from '@/components/common/PartyCalendar.vue'
 import JournalPanel from '@/components/common/JournalPanel.vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
@@ -766,6 +766,12 @@ const characterStore  = useCharacterStore()
 const vaultStore      = useVaultStore()
 const sessionStore    = useSessionStore()
 const authStore       = useAuthStore()
+
+// the journal is a solo/co-op tool, same gate as the oracle and travel panels
+const isSoloOrCoop = computed(() => sessionStore.playMode === 'gm_less')
+watch(isSoloOrCoop, (solo) => {
+  if (!solo && activeTab.value === 'journal') activeTab.value = 'quests'
+}, { immediate: true })
 
 const showCompleted = ref(false)
 const POS_KEY  = 'dm.partyNotebook.pos'
