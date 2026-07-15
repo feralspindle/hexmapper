@@ -288,6 +288,36 @@ export const useD = defineStore('dungeon', () => {
     return updateDungeon({ fogRevealAll: false })
   }
 
+  // fog changes flip which token rows RLS lets a player read (#153) - hidden
+  // tokens never arrive at all, so a reveal has to refetch them. debounced
+  // because the fog brush lands as a burst of cell events.
+  let _tokenRefetchTimer = null
+
+  function _scheduleTokenRefetch() {
+    if (_tokenRefetchTimer) clearTimeout(_tokenRefetchTimer)
+    _tokenRefetchTimer = setTimeout(() => {
+      _tokenRefetchTimer = null
+      void _refetchTokens()
+    }, 250)
+  }
+
+  async function _refetchTokens() {
+    const dungeonId = _dungeonId
+    const generation = _initGeneration
+    if (!dungeonId) return
+    const { data, error } = await supabase.from('dungeon_tokens').select('*').eq('dungeon_id', dungeonId)
+    if (error || _dungeonId !== dungeonId || generation !== _initGeneration) return
+    const next = new Map((data ?? []).map(t => [t.id, t]))
+    // keep optimistic rows whose write hasn't settled yet
+    for (const key of _pendingWrites.keys()) {
+      if (!key.startsWith('token:')) continue
+      const id = key.slice('token:'.length)
+      const current = tokens.value.get(id)
+      if (current) next.set(id, current)
+    }
+    tokens.value = next
+  }
+
   async function refresh() {
     const dungeonId = _dungeonId
     const generation = _initGeneration
@@ -392,6 +422,7 @@ export const useD = defineStore('dungeon', () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'dungeons', filter: `id=eq.${dungeonId}` },
         ({ new: row }) => {
+          const prev = dungeon.value
           const local = _localOverrides[row.id] ?? {}
           const merged = { ...row, ...local }
           if (dungeon.value?.id === row.id) {
@@ -400,6 +431,8 @@ export const useD = defineStore('dungeon', () => {
             }
           }
           dungeon.value = merged
+          if (prev && (prev.fog_mode !== merged.fog_mode || prev.fog_reveal_all !== merged.fog_reveal_all))
+            _scheduleTokenRefetch()
         },
       )
       .subscribe(status => {
@@ -420,6 +453,7 @@ export const useD = defineStore('dungeon', () => {
             if (pending) pending.confirmed = true
             if (row.source_client !== CLIENT_ID)
               fogCells.value = new Set(fogCells.value).add(key)
+            _scheduleTokenRefetch()
           } else if (eventType === 'DELETE') {
             const key = _fogKey(old.cell_x, old.cell_y)
             const pending = _pendingFogOps.get(key)
@@ -427,6 +461,7 @@ export const useD = defineStore('dungeon', () => {
             const next = new Set(fogCells.value)
             next.delete(key)
             fogCells.value = next
+            _scheduleTokenRefetch()
           }
         },
       )
@@ -889,6 +924,7 @@ export const useD = defineStore('dungeon', () => {
 
   function cleanup() {
     _initGeneration += 1
+    if (_tokenRefetchTimer) { clearTimeout(_tokenRefetchTimer); _tokenRefetchTimer = null }
     _removeChannels()
     _cleanupImageUrl()
     _dungeonId  = null
