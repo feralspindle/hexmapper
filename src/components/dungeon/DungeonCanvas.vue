@@ -167,6 +167,17 @@
         </template>
       </g>
 
+      <g v-if="itemDropCell" style="pointer-events:none">
+        <rect
+          :x="itemDropCell.cellX * cellPx - viewport.offsetX"
+          :y="itemDropCell.cellY * cellPx - viewport.offsetY"
+          :width="cellPx"
+          :height="cellPx"
+          :fill="itemDropCell.allowed ? 'rgba(110,190,90,.18)' : 'rgba(200,60,50,.22)'"
+          :stroke="itemDropCell.allowed ? '#6ebe5a' : '#c83c32'"
+          stroke-width="1.5"
+        />
+      </g>
       <g v-if="draggingIcon?.moved" style="pointer-events:none">
         <rect
           :x="Math.floor(draggingIcon.ghostX) * cellPx - viewport.offsetX"
@@ -585,6 +596,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
+import { useItemDrag } from '@/composables/useItemDrag.js'
 import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { conditionBadge } from '@/lib/conditions.js'
@@ -1128,6 +1140,21 @@ const iconDropAllowed = computed(() => {
   const d = draggingIcon.value
   if (!d?.moved) return false
   return sessionStore.isGM || dungeonStore.isCellPlaceable(Math.floor(d.ghostX), Math.floor(d.ghostY))
+})
+
+const { state: itemDrag } = useItemDrag()
+
+const itemDropCell = computed(() => {
+  if (!itemDrag.active || !dungeonStore.fogMode || !canvasEl.value) return null
+  const rect = getRect()
+  const mx = itemDrag.x - rect.left
+  const my = itemDrag.y - rect.top
+  if (mx < 0 || my < 0 || mx >= rect.width || my >= rect.height) return null
+  const { gx, gy } = pixelToGrid(mx, my, viewport.value)
+  if (draw.hitTestRoom(gx, gy, dungeonStore.rooms)) return null
+  const cellX = Math.floor(gx)
+  const cellY = Math.floor(gy)
+  return { cellX, cellY, allowed: sessionStore.isGM || dungeonStore.isCellPlaceable(cellX, cellY) }
 })
 
 function onIconMouseDown(e, icon) {
