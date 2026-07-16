@@ -96,8 +96,8 @@
                             </span>
                             <svg
                                 v-else
-                                width="11"
-                                height="11"
+                                width="40"
+                                height="40"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -123,8 +123,8 @@
                             @click="dropTokenInDungeon"
                         >
                             <svg
-                                width="11"
-                                height="11"
+                                width="40"
+                                height="40"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
