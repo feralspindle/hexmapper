@@ -43,21 +43,6 @@ export async function loginByEmail(page, account) {
     .toBe('signed-in')
 }
 
-async function dismissWelcomeOnce(page) {
-  if ((await page.locator('.ds-wm-overlay').count()) === 0) return
-
-  const ok = page.getByTestId('welcome-ok')
-  if (await ok.isVisible().catch(() => false)) {
-    await ok.click({ timeout: 1000 }).catch(() => {})
-    return
-  }
-
-  const close = page.getByTestId('welcome-close')
-  if (await close.isVisible().catch(() => false)) {
-    await close.click({ timeout: 1000 }).catch(() => {})
-  }
-}
-
 async function closeMapSettingsOnce(page) {
   if ((await page.locator('.map-settings-panel').count()) === 0) return
   await page.getByTestId('map-settings-close').click({ timeout: 1000 }).catch(() => {})
@@ -82,9 +67,6 @@ export async function closeSessionPanel(page) {
 
 async function closePartyPanelOnce(page) {
   if ((await page.locator('.ds-party-panel').count()) === 0) return
-  // The welcome overlay sits on top of everything; let dismissWelcomeOnce
-  // clear it on the next pass instead of clicking into the scrim.
-  if ((await page.locator('.ds-wm-overlay').count()) > 0) return
 
   const close = page.getByTestId('party-panel-close')
   if (await close.isVisible().catch(() => false)) {
@@ -115,14 +97,12 @@ export async function prepareHexInteractions(page) {
   // inside the poll until everything stays shut, rather than burning a fixed
   // number of attempts and then asserting while a panel is still up.
   await expect(async () => {
-    await dismissWelcomeOnce(page)
     // The floating party panel sits above the map settings panel, so it must
     // go first or it intercepts the settings close click. The session-panel
     // scrim sits above the settings panel too, so it goes before that close.
     await closePartyPanelOnce(page)
     await closeSessionPanelOnce(page)
     await closeMapSettingsOnce(page)
-    await expect(page.locator('.ds-wm-overlay')).toHaveCount(0, { timeout: 1000 })
     await expect(page.locator('.ds-panel-scrim')).not.toBeVisible({ timeout: 1000 })
     await expect(page.locator('.map-settings-panel')).toHaveCount(0, { timeout: 1000 })
     await expect(page.locator('.ds-party-panel')).toHaveCount(0, { timeout: 1000 })
