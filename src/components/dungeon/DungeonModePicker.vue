@@ -4,7 +4,7 @@
             <h1>Begin dungeon</h1>
             <p>
                 Pick how the party will map this dungeon.
-                <b>You can switch at any time</b> — the drawing tools work in
+                <b>You can switch at any time.</b> The drawing tools work in
                 both modes.
             </p>
         </div>
@@ -101,7 +101,7 @@
                         "
                         @click="$emit('pick-fow', pendingFile)"
                     >
-                        Begin with this map →
+                        Begin with this map
                     </button>
                     <button
                         class="ds-btn ghost"
@@ -136,7 +136,7 @@
                     </svg>
                 </div>
                 <h2>Blank Slate</h2>
-                <p class="hm-mode-tagline">No fog. The party sees it all.</p>
+                <p class="hm-mode-tagline">No fog. The party maps the dungeon as they go.</p>
                 <ul class="hm-mode-bullets">
                     <li>Empty grid to start</li>
                     <li>Draw rooms, corridors &amp; doors</li>
@@ -163,7 +163,7 @@
                     "
                     @click="$emit('pick-blank')"
                 >
-                    Begin with empty grid →
+                    Begin with empty grid
                 </button>
             </div>
         </div>
