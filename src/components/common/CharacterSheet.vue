@@ -2895,8 +2895,8 @@ function rollDamage(atk) {
     color: var(--ink, #1a1410);
 }
 .cs-token-thumb {
-    width: 27px;
-    height: 27px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     overflow: hidden;
     border: 1px solid var(--rule-strong, #c8baa0);
