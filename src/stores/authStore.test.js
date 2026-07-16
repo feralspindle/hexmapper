@@ -21,7 +21,6 @@ vi.mock('@/lib/supabase', () => ({
       signUp: vi.fn(() => Promise.resolve(state.signUpResult)),
       signInWithOAuth: vi.fn(() => Promise.resolve({ error: null })),
       signOut: vi.fn(() => Promise.resolve({ error: null })),
-      updateUser: vi.fn(() => Promise.resolve({ data: { user: { id: 'me', user_metadata: { welcome_seen: true } } } })),
     },
   },
 }))
@@ -160,10 +159,4 @@ describe('authStore', () => {
     expect(router.push).toHaveBeenCalledWith({ name: 'home' })
   })
 
-  test('markWelcomeSeen refreshes the local user from the update result', async () => {
-    const store = useAuthStore()
-    await store.markWelcomeSeen()
-
-    expect(store.user.user_metadata.welcome_seen).toBe(true)
-  })
 })

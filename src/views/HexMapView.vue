@@ -184,7 +184,6 @@
         </div>
 
         <PhotoBroadcastModal v-if="photoStore.currentBroadcast" />
-        <WelcomeModal v-if="showWelcome" @close="showWelcome = false" />
         <ConfirmDialog />
 
         <CharacterDrawer
@@ -203,7 +202,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
-import { useAuthStore } from "@/stores/authStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useMapStore } from "@/stores/mapStore.js";
 import { useHexStore } from "@/stores/hexStore.js";
@@ -222,7 +220,6 @@ import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import JoinToast from "@/components/common/JoinToast.vue";
 import PartyFollowBanner from "@/components/common/PartyFollowBanner.vue";
 import PhotoBroadcastModal from "@/components/common/PhotoBroadcastModal.vue";
-import WelcomeModal from "@/components/common/WelcomeModal.vue";
 import CharacterDrawer from "@/components/common/CharacterDrawer.vue";
 import DungeonPartyPanel from "@/components/common/DungeonPartyPanel.vue";
 import PartyNotebook       from "@/components/common/PartyNotebook.vue";
@@ -236,7 +233,6 @@ const gridDims = ref({ cols: null, rows: null });
 const charOpen = ref(false);
 const showMapSettings = ref(false);
 const moveMode = ref("none");
-const showWelcome = ref(false);
 
 const hexMode = ref(null);
 const showModePicker = ref(false);
@@ -247,7 +243,6 @@ const activeMarkerColor = ref("town");
 const route = useRoute();
 const sessionId = route.params.sessionId;
 
-const authStore = useAuthStore();
 const sessionStore = useSessionStore();
 const mapStore = useMapStore();
 const hexStore = useHexStore();
@@ -389,8 +384,6 @@ onMounted(async () => {
     await joinSession();
     await bootstrapMaps();
     initServices();
-
-    if (!authStore.user?.user_metadata?.welcome_seen) showWelcome.value = true;
 
     loadMode();
     await nextTick();
