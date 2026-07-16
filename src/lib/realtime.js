@@ -153,6 +153,7 @@ class RustRealtime {
     })
     window.addEventListener('pageshow', () => this.resume())
     window.addEventListener('online', () => this.resume())
+    window.addEventListener('offline', () => this.dropped())
     supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.access_token && this.ready) this.send({ type: 'reauthenticate', token: session.access_token })
     })
@@ -228,7 +229,10 @@ class RustRealtime {
         console.warn('[realtime] message handler failed', error)
       }
     })
-    socket.addEventListener('close', () => this.closed())
+    // identity guard: dropped() tears down before the socket's own close
+    // event arrives, and a stale socket's late close must not touch the
+    // connection that replaced it
+    socket.addEventListener('close', () => { if (this.socket === socket) this.closed() })
     socket.addEventListener('error', () => socket.close())
   }
 
@@ -402,6 +406,18 @@ class RustRealtime {
         }
       })
     return this.refreshing
+  }
+
+  // the browser knows the network is gone before the socket does: with
+  // traffic blackholed, close() dangles in the closing handshake and the
+  // disconnected banner would hang off that timeout instead of the outage.
+  // tear down now; the socket's late close event no-ops via the identity
+  // guard in connect()
+  dropped() {
+    const socket = this.socket
+    if (!socket) return
+    this.closed()
+    try { socket.close() } catch { /* already closing */ }
   }
 
   closed() {

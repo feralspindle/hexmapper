@@ -177,6 +177,45 @@ describe('RustRealtime connection lifecycle', () => {
     expect(statusEvents).toContain(false)
   })
 
+  test('browser offline event tears down without waiting for the socket close event', async () => {
+    const { channel, socket, statuses } = await connectedRealtime()
+    const statusEvents = []
+    window.addEventListener('hexmap:realtime-status', e => statusEvents.push(e.detail.connected))
+
+    // a blackholed connection: close() starts the handshake but the close
+    // event never comes back
+    socket.close = () => { socket.readyState = 2 }
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('offline'))
+
+    expect(statusEvents).toContain(false)
+    expect(statuses).toContain('CLOSED')
+    expect(channel.hasPresenceSnapshot).toBe(false)
+  })
+
+  test('a stale socket\'s late close event does not disturb the replacement connection', async () => {
+    const { socket } = await connectedRealtime()
+    socket.close = () => { socket.readyState = 2 }
+
+    vi.useFakeTimers()
+    window.dispatchEvent(new Event('offline'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    vi.useRealTimers()
+    await vi.waitFor(() => {
+      if (FakeWebSocket.instances.length < 2) throw new Error('no reconnect socket')
+    })
+    const socket2 = FakeWebSocket.instances.at(-1)
+    socket2.open()
+    socket2.receive({ type: 'ready', connection_id: 'conn-2' })
+
+    const statusEvents = []
+    window.addEventListener('hexmap:realtime-status', e => statusEvents.push(e.detail.connected))
+    socket.emit('close', {})
+
+    expect(statusEvents).not.toContain(false)
+    expect(socket2.sent).toContainEqual({ type: 'subscribe', session_id: 's1' })
+  })
+
   test('removing the last channel for a session unsubscribes it', async () => {
     const { realtime, channel, socket } = await connectedRealtime()
     await realtime.removeChannel(channel)
