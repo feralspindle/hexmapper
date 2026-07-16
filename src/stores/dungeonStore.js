@@ -26,6 +26,10 @@ export const useD = defineStore('dungeon', () => {
   const loadError = ref(null)
   const drawMode = ref('select')
   const selectedElement = ref(null)
+  // the character sheet's "drop token" button lives far from the canvas, and
+  // only the canvas knows the viewport - it watches this and places the token
+  // in view
+  const tokenDropRequest = ref(null)
   const viewers = ref([])
   const undoStack = ref([])
   const _editingRoom = ref(null)
@@ -858,6 +862,10 @@ export const useD = defineStore('dungeon', () => {
     return isCellRevealed(cellX, cellY)
   }
 
+  function requestTokenDrop(characterId) {
+    tokenDropRequest.value = { characterId, requestId: crypto.randomUUID() }
+  }
+
   async function placeToken(characterId, x, y) {
     if (!dungeon.value?.id) return
     const existing = tokenForCharacter(characterId)
@@ -1048,6 +1056,7 @@ export const useD = defineStore('dungeon', () => {
     icons.value = new Map()
     viewers.value = []
     selectedElement.value = null
+    tokenDropRequest.value = null
     loadError.value = null
     loading.value = true
     undoStack.value = []
@@ -1104,6 +1113,8 @@ export const useD = defineStore('dungeon', () => {
     isCellRevealed,
     isCellPlaceable,
     tokenForCharacter,
+    tokenDropRequest,
+    requestTokenDrop,
     placeToken,
     moveToken,
     removeToken,
