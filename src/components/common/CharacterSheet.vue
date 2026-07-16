@@ -96,8 +96,8 @@
                             </span>
                             <svg
                                 v-else
-                                width="11"
-                                height="11"
+                                width="40"
+                                height="40"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -123,8 +123,8 @@
                             @click="dropTokenInDungeon"
                         >
                             <svg
-                                width="11"
-                                height="11"
+                                width="40"
+                                height="40"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -2895,8 +2895,8 @@ function rollDamage(atk) {
     color: var(--ink, #1a1410);
 }
 .cs-token-thumb {
-    width: 27px;
-    height: 27px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     overflow: hidden;
     border: 1px solid var(--rule-strong, #c8baa0);
