@@ -89,6 +89,58 @@
                             </svg>
                         </button>
                     </div>
+                    <div v-if="canManageToken" class="cs-token-row">
+                        <label class="cs-token-link" data-testid="char-token-upload">
+                            <span v-if="tokenImgUrl" class="cs-token-thumb">
+                                <img :src="tokenImgUrl" alt="" />
+                            </span>
+                            <svg
+                                v-else
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                            </svg>
+                            {{ tokenImgUrl ? "Replace token image" : "Upload token image" }}
+                            <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                style="display: none"
+                                data-testid="char-token-image-input"
+                                @change="onTokenImageChange"
+                            />
+                        </label>
+                        <button
+                            v-if="inDungeon"
+                            class="cs-token-link"
+                            data-testid="char-token-drop"
+                            @click="dropTokenInDungeon"
+                        >
+                            <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0118 0z" />
+                                <circle cx="12" cy="10" r="3" />
+                            </svg>
+                            Drop token in dungeon
+                        </button>
+                    </div>
+                    <p v-if="tokenUploadError" class="cs-token-error">
+                        {{ tokenUploadError }}
+                    </p>
                 </template>
                 <template v-else>
                     <div class="cs-form-stack">
@@ -2152,9 +2204,11 @@ import { useDiceStore } from "@/stores/diceStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useVaultStore } from "@/stores/vaultStore.js";
+import { useD } from "@/stores/dungeonStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
+import { uploadTokenImage, tokenImageUrl } from "@/lib/tokenImage.js";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
@@ -2172,6 +2226,37 @@ const isGmCharacter = computed(() => {
     const authId = characterStore.activeCharacter?.user_id;
     return isGM.value && authId === authStore.user?.id;
 });
+
+const dungeonStore = useD();
+const tokenUploadError = ref("");
+// token controls follow token permissions (GM or owner), not sheet-edit
+// permissions - a GM can manage a player's token without owning the sheet
+const canManageToken = computed(
+    () =>
+        isGM.value ||
+        characterStore.activeCharacter?.user_id === authStore.user?.id,
+);
+const inDungeon = computed(() => !!dungeonStore.dungeon);
+const tokenImgUrl = computed(() => tokenImageUrl(char.value?.tokenImagePath));
+
+async function onTokenImageChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    const charId = characterStore.activeCharacter?.id;
+    if (!file || !charId) return;
+    tokenUploadError.value = "";
+    try {
+        const path = await uploadTokenImage(file, sessionStore.sessionId);
+        characterStore.updateFieldForChar(charId, "tokenImagePath", path);
+    } catch (err) {
+        tokenUploadError.value = err.message ?? "Upload failed";
+    }
+}
+
+function dropTokenInDungeon() {
+    const charId = characterStore.activeCharacter?.id;
+    if (charId) dungeonStore.requestTokenDrop(charId);
+}
 
 const subTab = ref("stats");
 const subTabs = [
@@ -2782,6 +2867,52 @@ function rollDamage(atk) {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.cs-token-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 7px;
+}
+.cs-token-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    font-family: var(--font-zine, "Special Elite", serif);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft, #6b5e4e);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    transition: color 0.12s;
+}
+.cs-token-link:hover {
+    color: var(--ink, #1a1410);
+}
+.cs-token-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 1px solid var(--rule-strong, #c8baa0);
+    flex: 0 0 auto;
+}
+.cs-token-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.cs-token-error {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    color: var(--accent, #8a1c1c);
+    margin: 4px 0 0;
 }
 
 .cs-tab-bar {

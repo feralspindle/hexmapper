@@ -539,23 +539,6 @@
       </div>
     </div>
 
-    <Transition name="ds-banner">
-      <div v-if="dungeonStore.drawMode === 'token'" class="ds-fog-size-picker" data-testid="token-picker">
-        <span class="ds-fog-size-label">Token</span>
-        <button
-          v-for="c in placeableCharacters"
-          :key="c.id"
-          :class="['ds-fog-size-btn', tokenPlacementCharId === c.id && 'ds-fog-size-btn--active']"
-          :data-testid="`token-pick-${c.id}`"
-          @click="tokenPlacementCharId = c.id"
-        >{{ c.data?.name || 'Unnamed' }}</button>
-        <span
-          v-if="!placeableCharacters.length"
-          style="font-family:var(--font-mono,'JetBrains Mono',monospace);font-size:11px;color:rgba(237,225,199,.55)"
-        >no characters yet</span>
-      </div>
-    </Transition>
-
     <div
       v-if="dimEntry"
       class="ds-dim-input"
@@ -643,7 +626,6 @@ const TOOL_HINTS = {
   corridor: [{ type: 'text', text: 'Click to place points along the corridor. Double-click to finish. ' }, { type: 'kbd', text: 'Esc' }, { type: 'text', text: ' to cancel.' }],
   door:     [{ type: 'text', text: 'Click a wall to place a door. ' }],
   fog:      [{ type: 'text', text: 'Click or drag to reveal cells. Hold ' }, { type: 'kbd', text: 'Shift' }, { type: 'text', text: ' to hide.' }],
-  token:    [{ type: 'text', text: 'Pick a character, then click the map to place their token. Drag a token to move it.' }],
 }
 const statusBanner = computed(() => TOOL_HINTS[dungeonStore.drawMode] ?? null)
 
@@ -1038,7 +1020,6 @@ const draggingItem = ref(null)
 const draggingIcon = ref(null)
 
 const draggingToken = ref(null)
-const tokenPlacementCharId = ref(null)
 const hoveredTokenId = ref(null)
 const lastPointerType = ref('mouse')
 
@@ -1049,20 +1030,43 @@ const tokenHpH = computed(() => Math.max(4, tokenR.value * 0.3))
 // tokens only take pointer events in modes where grabbing one can't hijack a
 // drawing gesture (the fog brush especially - a token would eat brush strokes)
 const tokensInteractive = computed(() =>
-  ['select', 'edit', 'token'].includes(dungeonStore.drawMode)
+  ['select', 'edit'].includes(dungeonStore.drawMode)
 )
 
-const placeableCharacters = computed(() =>
-  sessionStore.isGM ? characterStore.characters : characterStore.myCharacters
-)
-
-watch(() => dungeonStore.drawMode, (mode) => {
-  if (mode !== 'token') return
-  const candidates = placeableCharacters.value
-  if (!candidates.some(c => c.id === tokenPlacementCharId.value)) {
-    tokenPlacementCharId.value =
-      candidates.find(c => c.id === characterStore.activeId)?.id ?? candidates[0]?.id ?? null
+// the character sheet's "drop token" button. lands the token at the viewport
+// center; players in fog mode get the nearest revealed cell instead (any
+// revealed cell as a last resort - the center of view may be all fog)
+watch(() => dungeonStore.tokenDropRequest, (req) => {
+  if (!req) return
+  dungeonStore.tokenDropRequest = null
+  const cs = cellPx.value
+  const centerX = Math.floor((viewport.value.offsetX + canvasWidth.value / 2) / cs)
+  const centerY = Math.floor((viewport.value.offsetY + canvasHeight.value / 2) / cs)
+  let target = null
+  if (sessionStore.isGM || dungeonStore.isCellPlaceable(centerX, centerY)) {
+    target = { x: centerX, y: centerY }
+  } else {
+    outer:
+    for (let r = 1; r <= 50; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          if (dungeonStore.isCellPlaceable(centerX + dx, centerY + dy)) {
+            target = { x: centerX + dx, y: centerY + dy }
+            break outer
+          }
+        }
+      }
+    }
+    if (!target) {
+      const first = dungeonStore.fogCells.values().next().value
+      if (first) {
+        const [x, y] = first.split(':').map(Number)
+        target = { x, y }
+      }
+    }
   }
+  if (target) dungeonStore.placeToken(req.characterId, target.x, target.y)
 })
 
 function hpColorFor(pct) {
@@ -2426,16 +2430,6 @@ function onClick(e) {
     return
   }
 
-  if (dungeonStore.drawMode === 'token') {
-    if (!tokenPlacementCharId.value) return
-    const rect = getRect()
-    const { cellX, cellY } = pixelToCell(e.clientX - rect.left, e.clientY - rect.top, viewport.value)
-    if (!sessionStore.isGM && !dungeonStore.isCellPlaceable(cellX, cellY)) return
-    dungeonStore.placeToken(tokenPlacementCharId.value, cellX, cellY)
-    dungeonStore.drawMode = 'select'
-    return
-  }
-
   if (dungeonStore.drawMode === 'select' || dungeonStore.drawMode === 'edit') {
     if (skipNextDoorClick) { skipNextDoorClick = false; return }
     const rect = getRect()
@@ -2667,10 +2661,6 @@ function onKeyDown(e) {
   if (e.key === 'p' || e.key === 'P') { dungeonStore.drawMode = 'pan'; return }
   if (e.key === 'd' || e.key === 'D') { dungeonStore.drawMode = 'door'; return }
   if (e.key === 'w' || e.key === 'W') { dungeonStore.drawMode = 'polygon'; return }
-  if (e.key === 't' || e.key === 'T') {
-    dungeonStore.drawMode = dungeonStore.drawMode === 'token' ? 'select' : 'token'
-    return
-  }
   // generation is a solo/co-op feature, gated like the toolbar button.
   // generateRoom also guards itself (store-level generating flag), so key
   // repeat can't mass-produce rooms
