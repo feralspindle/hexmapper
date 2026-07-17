@@ -523,6 +523,24 @@ export const useCharacterStore = defineStore('character', () => {
     _scheduleBroadcast(id)
   }
 
+  // coin splits write to characters the caller does not own, and the sheet
+  // PATCH is owner/gm-only server-side - this goes through the member-allowed
+  // adjust-currency endpoint instead of the debounced full-blob save
+  async function adjustCurrencyForChar(id, currency, amount) {
+    const char = characters.value.find(c => c.id === id)
+    if (!char || !amount) return
+    const current = char.data[currency] ?? 0
+    characters.value = characters.value.map(c =>
+      c.id === id ? { ...c, data: { ...c.data, [currency]: Math.max(0, current + amount) } } : c
+    )
+    _scheduleBroadcast(id)
+    try {
+      await apiClient.post(`/characters/${id}/adjust-currency`, { currency, delta: amount }, 'adjust_currency')
+    } catch (error) {
+      console.error('characterStore.adjustCurrencyForChar:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
   // same damage semantics as adjustHp (temp hp absorbs first), for any
   // character the caller may edit - the token inspector uses this for
   // gm-side hp changes
@@ -767,7 +785,7 @@ export const useCharacterStore = defineStore('character', () => {
     luckEvents,
     gmInitiative,
     loadAll, refresh, setActive, importCharacter, deleteCharacter,
-    updateField, updateFieldForChar, adjustHpForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
+    updateField, updateFieldForChar, adjustCurrencyForChar, adjustHpForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
     renownValue, adjustRenown, setRenown, deleteRenownEntry, awardHaul,
     addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,

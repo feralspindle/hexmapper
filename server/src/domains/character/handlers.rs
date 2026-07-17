@@ -52,7 +52,54 @@ pub async fn update_character_data(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    // mirrors characters_update (owner) OR characters_update_member (session member)
+    // Owner or GM only. Member-wide access here would let any player replace
+    // another player's entire sheet (#187); the one party operation members
+    // legitimately trigger on other sheets (coin splits) goes through the
+    // narrower adjust-currency endpoint below.
+    let allowed = owner_id == auth.user_id
+        || match session_id {
+            Some(sid) => authz::is_session_gm(state.pool(), auth.user_id, sid).await?,
+            None => false,
+        };
+    if !allowed {
+        return Err(AppError::Forbidden);
+    }
+
+    let metadata = auth.metadata();
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::update_data(&mut tx, id, &req.data, &metadata).await
+    })?;
+
+    Ok(Json(row))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdjustCurrencyRequest {
+    pub currency: String,
+    pub delta: i64,
+}
+
+const MAX_CURRENCY_DELTA: i64 = 1_000_000;
+
+/// Session members may adjust a single currency field on any party member's
+/// character (loot splits). Unlike the full-blob PATCH this cannot touch hp,
+/// gear, or anything else, and the delta is bounded.
+pub async fn adjust_character_currency(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<AdjustCurrencyRequest>,
+) -> Result<Json<Value>, AppError> {
+    if !matches!(req.currency.as_str(), "gold" | "silver" | "copper") {
+        return Err(AppError::BadRequest("unknown currency".into()));
+    }
+    if req.delta == 0 || req.delta.abs() > MAX_CURRENCY_DELTA {
+        return Err(AppError::BadRequest("delta out of range".into()));
+    }
+
+    let (owner_id, session_id) = authz::character_owner_session(state.pool(), id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let allowed = owner_id == auth.user_id
         || match session_id {
             Some(sid) => authz::is_session_member(state.pool(), auth.user_id, sid).await?,
@@ -64,7 +111,7 @@ pub async fn update_character_data(
 
     let metadata = auth.metadata();
     let row = retry_tx!(state.pool(), |tx| {
-        projection::update_data(&mut tx, id, &req.data, &metadata).await
+        projection::adjust_currency(&mut tx, id, &req.currency, req.delta, &metadata).await
     })?;
 
     Ok(Json(row))

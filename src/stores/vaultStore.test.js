@@ -50,6 +50,7 @@ describe('vaultStore', () => {
       addGearItem: vi.fn(),
       addGearItemToChar: vi.fn(),
       updateFieldForChar: vi.fn(),
+      adjustCurrencyForChar: vi.fn(),
       deleteGearItem: vi.fn(),
     }
   })
@@ -212,11 +213,10 @@ describe('vaultStore', () => {
 
     await store.splitLoot(store.loot[0], chars)
 
-    expect(kit.character.updateFieldForChar).toHaveBeenCalledTimes(3)
-    const amounts = kit.character.updateFieldForChar.mock.calls.map(([id, field, value]) => {
-      const char = chars.find(c => c.id === id)
+    expect(kit.character.adjustCurrencyForChar).toHaveBeenCalledTimes(3)
+    const amounts = kit.character.adjustCurrencyForChar.mock.calls.map(([, field, amount]) => {
       expect(field).toBe('gold')
-      return value - (char.data.gold ?? 0)
+      return amount
     })
     expect(amounts.reduce((a, b) => a + b, 0)).toBe(10)
     expect(Math.min(...amounts)).toBe(3)
