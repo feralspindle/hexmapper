@@ -154,7 +154,19 @@ class RustRealtime {
     window.addEventListener('pageshow', () => this.resume())
     window.addEventListener('online', () => this.resume())
     window.addEventListener('offline', () => this.dropped())
+    this.authUserId = null
     supabase.auth.onAuthStateChange((_event, session) => {
+      const userId = session?.user?.id ?? null
+      // sign-out or account switch: the server would keep honoring the old
+      // identity until its token expired, so tear the socket down instead.
+      // queued publishes belong to the previous account and must not replay.
+      if (this.authUserId && this.authUserId !== userId) {
+        this.authUserId = userId
+        this.pendingPublishes = []
+        this.dropped()
+        return
+      }
+      this.authUserId = userId
       if (session?.access_token && this.ready) this.send({ type: 'reauthenticate', token: session.access_token })
     })
   }

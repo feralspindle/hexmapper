@@ -277,6 +277,7 @@ async fn send_farewell(
         "frame_too_large" => "Message exceeds the frame size limit",
         "pong_timeout" => "No pong received; connection presumed dead",
         "authz_revalidation" => "Session membership could not be revalidated; reconnect",
+        "identity_changed" => "Token subject changed; reconnect as the new account",
         _ => "Connection closed by server",
     };
     let _ = send_json_bounded(

@@ -93,6 +93,10 @@ impl RealtimeHub {
         })
     }
 
+    // A reauth whose subject differs is an account switch, not a refresh.
+    // Silently ignoring it would leave the socket authorized as the previous
+    // user until that token expired, so kick the connection instead; the
+    // client reconnects and authenticates as the new account.
     pub(super) async fn refresh_identity(
         &self,
         id: Uuid,
@@ -104,6 +108,9 @@ impl RealtimeHub {
             if client.user_id == user_id {
                 client.display_name = display_name;
                 client.expires_at = expires_at;
+            } else {
+                metrics::counter!("realtime_identity_switch_kicks_total").increment(1);
+                let _ = client.close.try_send("identity_changed");
             }
         }
     }
@@ -772,6 +779,46 @@ mod tests {
 
         assert_eq!(slow_close_rx.recv().await, Some("slow_consumer"));
         assert!(!hub.0.lock().await.clients.contains_key(&slow_id));
+    }
+
+    #[tokio::test]
+    async fn subject_changing_reauth_kicks_the_connection() {
+        let hub = RealtimeHub::default();
+        let connection_id = Uuid::new_v4();
+        let original_user = Uuid::new_v4();
+        let (tx, _rx) = mpsc::channel(8);
+        let (close, mut close_rx) = mpsc::channel(1);
+
+        hub.register(connection_id, original_user, "A".into(), 100, tx, close)
+            .await;
+        hub.refresh_identity(connection_id, Uuid::new_v4(), "B".into(), 200)
+            .await;
+
+        assert_eq!(close_rx.recv().await, Some("identity_changed"));
+        let state = hub.0.lock().await;
+        let client = state.clients.get(&connection_id).unwrap();
+        assert_eq!(client.user_id, original_user);
+        assert_eq!(client.expires_at, 100);
+    }
+
+    #[tokio::test]
+    async fn same_subject_reauth_refreshes_expiry_and_name() {
+        let hub = RealtimeHub::default();
+        let connection_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let (tx, _rx) = mpsc::channel(8);
+        let (close, mut close_rx) = mpsc::channel(1);
+
+        hub.register(connection_id, user_id, "A".into(), 100, tx, close)
+            .await;
+        hub.refresh_identity(connection_id, user_id, "A2".into(), 200)
+            .await;
+
+        assert!(close_rx.try_recv().is_err());
+        let state = hub.0.lock().await;
+        let client = state.clients.get(&connection_id).unwrap();
+        assert_eq!(client.display_name, "A2");
+        assert_eq!(client.expires_at, 200);
     }
 
     #[tokio::test]
