@@ -13,8 +13,10 @@ import { useNotesStore }     from '@/stores/notesStore.js'
 import { usePhotoStore }     from '@/stores/photoStore.js'
 import { useActivityStore }  from '@/stores/activityStore.js'
 import { useMacroStore }     from '@/stores/macroStore.js'
+import { clearReferencePhotoUrls } from '@/lib/referencePhotoUrl.js'
 
 function cleanupAllStores() {
+  try { clearReferencePhotoUrls()     } catch { /* */ }
   try { useSessionStore().cleanup()   } catch { /* */ }
   try { useCharacterStore().cleanup() } catch { /* */ }
   try { useHexStore().cleanup()       } catch { /* */ }

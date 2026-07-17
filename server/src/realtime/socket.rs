@@ -21,6 +21,40 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const OUTBOUND_CAPACITY: usize = 256;
 const INBOUND_CAPACITY: usize = 64;
 const MAX_FRAME_BYTES: usize = 64 * 1024;
+const MAX_PRESENCE_PAYLOAD_BYTES: usize = 8 * 1024;
+// Cursor broadcasts are rAF-throttled (~60/s); the refill leaves 2x headroom
+// so the bucket only empties on a client pumping messages faster than any
+// real flow.
+const INBOUND_BURST: f64 = 240.0;
+const INBOUND_REFILL_PER_SEC: f64 = 120.0;
+
+// Token bucket over inbound frames. A connection that overruns it gets
+// closed rather than throttled: silently dropping messages desyncs the
+// client, and a well-behaved client never gets near the refill rate.
+struct InboundRateLimit {
+    tokens: f64,
+    refilled_at: Instant,
+}
+
+impl InboundRateLimit {
+    fn new(now: Instant) -> Self {
+        Self {
+            tokens: INBOUND_BURST,
+            refilled_at: now,
+        }
+    }
+
+    fn allow(&mut self, now: Instant) -> bool {
+        let elapsed = now.duration_since(self.refilled_at).as_secs_f64();
+        self.tokens = (self.tokens + elapsed * INBOUND_REFILL_PER_SEC).min(INBOUND_BURST);
+        self.refilled_at = now;
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+}
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/realtime", get(upgrade))
@@ -106,7 +140,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
     let connection_id = Uuid::new_v4();
     let (tx, mut rx) = mpsc::channel(OUTBOUND_CAPACITY);
     let (close_tx, mut close_rx) = mpsc::channel(1);
-    state
+    let registered = state
         .realtime()
         .register(
             connection_id,
@@ -117,6 +151,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
             close_tx,
         )
         .await;
+    if !registered {
+        metrics::counter!("realtime_auth_failures_total", "reason" => "connection_limit")
+            .increment(1);
+        tracing::warn!(user_id = %claims.sub, %ip, "realtime auth failed: connection limit");
+        let error = ServerMessage::Error {
+            request_id: None,
+            code: "connection_limit".to_string(),
+            message: "Too many concurrent realtime connections for this account".to_string(),
+        };
+        let _ = send_json(&mut sink, &error).await;
+        return;
+    }
     metrics::gauge!("realtime_connections").increment(1.0);
     let user_id = claims.sub;
     let connected_at = Instant::now();
@@ -155,6 +201,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
         Duration::from_secs(25),
     );
     let mut last_pong = Instant::now();
+    let mut rate_limit = InboundRateLimit::new(Instant::now());
     let reason = loop {
         tokio::select! {
             outbound = rx.recv() => {
@@ -169,6 +216,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, ip: String) {
             inbound = stream.next() => {
                 match inbound {
                     Some(Ok(Message::Text(text))) => {
+                        if !rate_limit.allow(Instant::now()) {
+                            metrics::counter!("realtime_rate_limit_kicks_total").increment(1);
+                            send_farewell(&mut sink, "rate_limited").await;
+                            break "rate_limited";
+                        }
                         if text.len() > MAX_FRAME_BYTES {
                             send_farewell(&mut sink, "frame_too_large").await;
                             break "frame_too_large";
@@ -277,6 +329,8 @@ async fn send_farewell(
         "frame_too_large" => "Message exceeds the frame size limit",
         "pong_timeout" => "No pong received; connection presumed dead",
         "authz_revalidation" => "Session membership could not be revalidated; reconnect",
+        "identity_changed" => "Token subject changed; reconnect as the new account",
+        "rate_limited" => "Too many realtime messages; connection closed",
         _ => "Connection closed by server",
     };
     let _ = send_json_bounded(
@@ -415,11 +469,24 @@ async fn handle_client_message(connection_id: Uuid, message: ClientMessage, stat
             channel,
             payload,
         } => {
-            if valid_channel(&channel) {
-                state
-                    .realtime()
-                    .track_presence(connection_id, session_id, channel, payload)
-                    .await;
+            if !valid_channel(&channel)
+                || serde_json::to_vec(&payload).map_or(true, |p| p.len() > MAX_PRESENCE_PAYLOAD_BYTES)
+            {
+                if let Some(tx) = state.realtime().sender(connection_id).await {
+                    send_error(&tx, None, "invalid_presence", "Presence update was rejected").await;
+                }
+                return;
+            }
+            let tracked = state
+                .realtime()
+                .track_presence(connection_id, session_id, channel, payload)
+                .await;
+            if !tracked {
+                metrics::counter!("realtime_presence_rejections_total", "reason" => "channel_limit")
+                    .increment(1);
+                if let Some(tx) = state.realtime().sender(connection_id).await {
+                    send_error(&tx, None, "presence_limit", "Too many presence channels").await;
+                }
             }
         }
         ClientMessage::PresenceUntrack {
@@ -473,6 +540,26 @@ mod tests {
     fn broadcast_allowlist_covers_the_party_follow_event() {
         assert!(allowed_broadcast("dungeon_entered"));
         assert!(!allowed_broadcast("made_up_event"));
+    }
+
+    #[test]
+    fn rate_limit_allows_sustained_cursor_traffic_but_kicks_a_flood() {
+        let start = Instant::now();
+        let mut limit = InboundRateLimit::new(start);
+
+        // 60/s for 10 simulated seconds: always allowed
+        for tick in 0..600 {
+            let now = start + Duration::from_millis(tick * 1000 / 60);
+            assert!(limit.allow(now), "cursor-rate message {tick} was limited");
+        }
+
+        // a burst beyond capacity with no time passing gets cut off
+        let now = start + Duration::from_secs(10);
+        let allowed = (0..1000).filter(|_| limit.allow(now)).count();
+        assert!(allowed < 1000);
+
+        // and after a quiet second the budget refills
+        assert!(limit.allow(now + Duration::from_secs(1)));
     }
 
     #[test]

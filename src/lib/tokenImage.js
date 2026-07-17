@@ -1,8 +1,9 @@
-// Token portraits live in the public reference-photos bucket (members can
+// Token portraits live in the private reference-photos bucket (members can
 // upload there; session-maps insert is GM-only). Only the storage path is
 // persisted, on character.data.tokenImagePath.
 
 import { supabase } from '@/lib/supabase'
+import { referencePhotoUrl } from '@/lib/referencePhotoUrl.js'
 
 const BUCKET = 'reference-photos'
 const MAX_BYTES = 5 * 1024 * 1024
@@ -77,16 +78,8 @@ export async function uploadTokenImage(file, sessionId) {
   return path
 }
 
-// public urls are pure functions of the path; memoize so per-frame render
-// code can call this freely
-const _urlCache = new Map()
-
+// returns null until the signed url resolves; the reactive cache re-runs
+// calling computeds once it does, so per-frame render code can call this freely
 export function tokenImageUrl(path) {
-  if (!path) return null
-  let url = _urlCache.get(path)
-  if (!url) {
-    url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
-    _urlCache.set(path, url)
-  }
-  return url
+  return referencePhotoUrl(path)
 }

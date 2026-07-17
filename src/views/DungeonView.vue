@@ -15,6 +15,16 @@
       @switch-mode="onSwitchMode"
     />
 
+    <div
+      v-if="dungeonUploadError"
+      data-testid="dungeon-upload-error"
+      class="dv-upload-error"
+    >
+      <span>Dungeon map upload failed — the map was not changed.</span>
+      <button class="ds-btn" @click="retryDungeonUpload">Retry</button>
+      <button class="ds-btn" @click="dungeonUploadError = null">Dismiss</button>
+    </div>
+
     <div v-if="showModePicker" class="hm-setup-bg">
       <DungeonModePicker
         :has-map-image="!!dungeonStore.dungeon?.map_image_path"
@@ -182,19 +192,32 @@ function onSwitchMode() {
   dungeonStore.drawMode = 'select'
 }
 
+// a failed upload used to close the picker and vanish - keep the file so
+// retry works, and say something instead of pretending it succeeded
+const dungeonUploadError = ref(null)
+
+async function uploadDungeonImageFile(file) {
+  dungeonUploadError.value = null
+  try {
+    const path = await dungeonStore.uploadDungeonImage(sessionId, file)
+    await dungeonStore.updateDungeon({ mapImagePath: path })
+    mapSettingsOpen.value = true
+  } catch (e) {
+    console.error('Dungeon map upload failed:', e.message)
+    dungeonUploadError.value = { file }
+  }
+}
+
+function retryDungeonUpload() {
+  const file = dungeonUploadError.value?.file
+  if (file) uploadDungeonImageFile(file)
+}
+
 async function onPickFow(file) {
   showModePicker.value = false
   localStorage.setItem(modeKey, 'fow')
   await dungeonStore.updateDungeon({ fogMode: true, fogRevealAll: false })
-  if (file) {
-    try {
-      const path = await dungeonStore.uploadDungeonImage(sessionId, file)
-      await dungeonStore.updateDungeon({ mapImagePath: path })
-      mapSettingsOpen.value = true
-    } catch (e) {
-      console.error('Dungeon map upload failed:', e.message)
-    }
-  }
+  if (file) await uploadDungeonImageFile(file)
 }
 
 async function onPickBlank() {
@@ -224,14 +247,23 @@ watch(activeNavDropdown, (val) => {
 
 const { state: itemDrag, updatePosition, endDrag } = useItemDrag()
 
-async function onImageOffsetChange({ offsetX, offsetY }) {
+// updateDungeon writes to whatever dungeon the store holds when it runs, so
+// the pending offset flushes on unmount (before dungeonStore.cleanup swaps
+// the target) instead of firing into the next route's dungeon
+function onImageOffsetChange({ offsetX, offsetY }) {
   dungeonStore.applyDungeonLocalPatch({ mapImageOffsetX: offsetX, mapImageOffsetY: offsetY })
   clearTimeout(_imageOffsetTimer)
-  _imageOffsetTimer = setTimeout(() => {
-    dungeonStore.updateDungeon({ mapImageOffsetX: offsetX, mapImageOffsetY: offsetY })
-  }, 150)
+  _pendingImageOffset = { mapImageOffsetX: offsetX, mapImageOffsetY: offsetY }
+  _imageOffsetTimer = setTimeout(_flushImageOffset, 150)
 }
 let _imageOffsetTimer = null
+let _pendingImageOffset = null
+
+function _flushImageOffset() {
+  const pending = _pendingImageOffset
+  _pendingImageOffset = null
+  if (pending) dungeonStore.updateDungeon(pending)
+}
 
 function measureTopbar() {
   if (topbarEl.value?.$el) topbarHeight.value = topbarEl.value.$el.offsetHeight
@@ -246,22 +278,33 @@ function onKeyDown(e) {
   }
 }
 
+// a slow join or dungeon load can resolve after navigation away; every await
+// below hands control to code that mutates singleton stores, so bail as soon
+// as the view is gone instead of clobbering the next route's state
+let viewAlive = true
+
 onMounted(async () => {
   measureTopbar()
   window.addEventListener('resize', measureTopbar)
   window.addEventListener('keydown', onKeyDown)
 
   await joinSession()
+  if (!viewAlive) return
   await mapStore.init(sessionId)
+  if (!viewAlive) return
   await dungeonStore.init(sessionId, dungeonId)
+  if (!viewAlive) return
   loadMode()
   initServices()
   activityStore.init(sessionId, dungeonId)
 })
 
 onUnmounted(() => {
+  viewAlive = false
   window.removeEventListener('resize', measureTopbar)
   window.removeEventListener('keydown', onKeyDown)
+  clearTimeout(_imageOffsetTimer)
+  _flushImageOffset()
   dungeonStore.cleanup()
   activityStore.cleanup()
   cleanupServices()
@@ -301,4 +344,21 @@ watchEffect(() => {
 </script>
 
 <style scoped>
+.dv-upload-error {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--paper, #ede1c7);
+  border: 1px solid var(--rule, #c9b990);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink, #1a1410);
+}
 </style>

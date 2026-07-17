@@ -854,10 +854,17 @@ watch(
     },
 );
 
+// every debounced write below captures its target hex and payload at
+// schedule time - resolving the selection when the timer fires either lost
+// the edit (the selection watch resets the drafts) or wrote it into the
+// newly selected hex
 let saveTimer = null;
 function debouncedSave() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveHex, 500);
+    if (!hexStore.selectedHex) return;
+    const { q, r } = hexStore.selectedHex;
+    const patch = { label: hexLabel.value, terrain_type: hexTerrain.value };
+    saveTimer = setTimeout(() => hexStore.upsertHex(q, r, patch), 500);
 }
 
 function saveHex() {
@@ -892,11 +899,10 @@ function doRemoveMarker(markerId) {
 let markerLabelTimer = null;
 function debouncedUpdateMarker(marker) {
     clearTimeout(markerLabelTimer);
-    markerLabelTimer = setTimeout(() => {
-        if (!hexStore.selectedHex) return;
-        const { q, r } = hexStore.selectedHex;
-        hexStore.updateMarkerLabel(q, r, marker.id, marker.label);
-    }, 500);
+    if (!hexStore.selectedHex) return;
+    const { q, r } = hexStore.selectedHex;
+    const { id, label } = marker;
+    markerLabelTimer = setTimeout(() => hexStore.updateMarkerLabel(q, r, id, label), 500);
 }
 
 function doAddGmMarker(kind) {
@@ -917,11 +923,10 @@ function doRemoveGmMarker(markerId) {
 let gmMarkerLabelTimer = null;
 function debouncedUpdateGmMarker(marker) {
     clearTimeout(gmMarkerLabelTimer);
-    gmMarkerLabelTimer = setTimeout(() => {
-        if (!hexStore.selectedHex) return;
-        const { q, r } = hexStore.selectedHex;
-        hexStore.updateGmMarkerLabel(q, r, marker.id, marker.label);
-    }, 500);
+    if (!hexStore.selectedHex) return;
+    const { q, r } = hexStore.selectedHex;
+    const { id, label } = marker;
+    gmMarkerLabelTimer = setTimeout(() => hexStore.updateGmMarkerLabel(q, r, id, label), 500);
 }
 
 function clearHex() {

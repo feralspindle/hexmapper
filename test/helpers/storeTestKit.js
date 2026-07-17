@@ -36,7 +36,11 @@ export function createSupabaseMock(kit) {
       },
       storage: {
         from: () => ({
-          createSignedUrl: () => Promise.resolve({ data: { signedUrl: 'https://signed.example/x' }, error: null }),
+          createSignedUrl: path => Promise.resolve({ data: { signedUrl: `https://signed.example/${path}` }, error: null }),
+          createSignedUrls: paths => Promise.resolve({
+            data: paths.map(path => ({ path, signedUrl: `https://signed.example/${path}` })),
+            error: null,
+          }),
           getPublicUrl: path => ({ data: { publicUrl: `https://public.example/${path}` } }),
           upload: (path, file, options) => {
             ;(kit.uploads ??= []).push({ path, file, options })
@@ -75,12 +79,14 @@ export function createRealtimeMock(kit) {
       untrack: vi.fn(() => Promise.resolve('ok')),
       presenceState: () => ({}),
       emitPostgres(table, eventType, row, oldRow = {}) {
+        const results = []
         for (const h of ch.handlers) {
           if (h.type !== 'postgres_changes') continue
           if (h.filter?.table !== table) continue
           if (h.filter.event !== '*' && h.filter.event !== eventType) continue
-          h.callback({ eventType, new: row, old: oldRow })
+          results.push(h.callback({ eventType, new: row, old: oldRow }))
         }
+        return Promise.all(results)
       },
       emitBroadcast(event, payload) {
         for (const h of ch.handlers) {
