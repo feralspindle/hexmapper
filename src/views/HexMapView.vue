@@ -356,9 +356,15 @@ watch(
 
 const mapsBlocked = ref(false);
 
+// a slow session join or map load can resolve after navigation away; every
+// await below hands control to code that mutates singleton stores, so bail
+// as soon as the view is gone instead of clobbering the next route's state
+let viewAlive = true;
+
 async function bootstrapMaps() {
     mapsBlocked.value = false;
     const mapsLoaded = await mapStore.init(sessionId);
+    if (!viewAlive) return;
     const action = mapBootstrapAction({
         mapsLoaded,
         mapsCount: mapStore.maps.length,
@@ -372,7 +378,7 @@ async function bootstrapMaps() {
             name: "World Map",
             mapType: "hex",
         });
-        if (map) await mapStore.setActiveMap(map.id);
+        if (map && viewAlive) await mapStore.setActiveMap(map.id);
     } else if (action === "adopt_first") {
         await mapStore.setActiveMap(mapStore.maps[0].id);
     } else if (action === "init") {
@@ -382,11 +388,14 @@ async function bootstrapMaps() {
 
 onMounted(async () => {
     await joinSession();
+    if (!viewAlive) return;
     await bootstrapMaps();
+    if (!viewAlive) return;
     initServices();
 
     loadMode();
     await nextTick();
+    if (!viewAlive) return;
     if (hexStore.partyHex) {
         hexGridEl.value?.centerOnHex(hexStore.partyHex.q, hexStore.partyHex.r);
     }
@@ -394,6 +403,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    viewAlive = false;
     hexStore.cleanup();
     cleanupServices();
     sessionStore.cleanup();

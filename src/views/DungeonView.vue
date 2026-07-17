@@ -246,20 +246,29 @@ function onKeyDown(e) {
   }
 }
 
+// a slow join or dungeon load can resolve after navigation away; every await
+// below hands control to code that mutates singleton stores, so bail as soon
+// as the view is gone instead of clobbering the next route's state
+let viewAlive = true
+
 onMounted(async () => {
   measureTopbar()
   window.addEventListener('resize', measureTopbar)
   window.addEventListener('keydown', onKeyDown)
 
   await joinSession()
+  if (!viewAlive) return
   await mapStore.init(sessionId)
+  if (!viewAlive) return
   await dungeonStore.init(sessionId, dungeonId)
+  if (!viewAlive) return
   loadMode()
   initServices()
   activityStore.init(sessionId, dungeonId)
 })
 
 onUnmounted(() => {
+  viewAlive = false
   window.removeEventListener('resize', measureTopbar)
   window.removeEventListener('keydown', onKeyDown)
   dungeonStore.cleanup()
