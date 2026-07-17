@@ -88,12 +88,16 @@ select throws_ok(
 delete from storage.objects
 where id = 'b0000000-0000-0000-0000-000000000003';
 
+-- count as superuser: the private bucket hides the row from the nonmember,
+-- so the survivor check has to look with unrestricted eyes
+reset role;
 select is(
   (select count(*) from storage.objects where id = 'b0000000-0000-0000-0000-000000000003'),
   1::bigint,
   'non-owner cannot delete another user reference photo'
 );
 
+set local role authenticated;
 select set_config(
   'request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-000000000022","role":"authenticated"}',
