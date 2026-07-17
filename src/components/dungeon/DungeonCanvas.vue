@@ -1646,10 +1646,10 @@ function drawGrid(W, H) {
   const alignMode = props.imageSettingsOpen
   const hasMapImage = mapImageLoaded.value && dungeonStore.dungeon?.map_image_path
 
-  const gridColor       = alignMode ? 'rgba(255, 210, 60, 0.55)' : hasMapImage ? 'rgba(0,0,0,.18)' : sc.grid
-  const gridStrongColor = alignMode ? 'rgba(255, 210, 60, 0.95)' : hasMapImage ? 'rgba(0,0,0,.32)' : sc.gridStrong
-  const gridWidth       = alignMode ? 1.0 : (mapStyle.value === 'blueprint' ? 0.7 : 0.5)
-  const gridStrongWidth = alignMode ? 1.8 : (mapStyle.value === 'blueprint' ? 1.0 : 0.8)
+  const gridColor       = alignMode ? 'rgba(255, 210, 60, 0.55)' : hasMapImage ? 'rgba(0,0,0,.28)' : sc.grid
+  const gridStrongColor = alignMode ? 'rgba(255, 210, 60, 0.95)' : hasMapImage ? 'rgba(0,0,0,.45)' : sc.gridStrong
+  const gridWidth       = alignMode ? 1.0 : hasMapImage ? 1.0 : (mapStyle.value === 'blueprint' ? 0.7 : 0.5)
+  const gridStrongWidth = alignMode ? 1.8 : hasMapImage ? 1.4 : (mapStyle.value === 'blueprint' ? 1.0 : 0.8)
 
   ctx.strokeStyle = gridColor
   ctx.lineWidth = gridWidth
