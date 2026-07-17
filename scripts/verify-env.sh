@@ -23,7 +23,22 @@ API_PORT=${HEXMAP_VERIFY_API_PORT:-8091}
 DB=hexmap_verify
 PGTAP_VERSION=1.3.3
 
-PGPKG=$VHOME/pgbin/node_modules/@embedded-postgres/linux-$(uname -m | sed 's/aarch64/arm64/;s/x86_64/x64/')
+# pick the embedded-postgres package for this OS/arch instead of assuming
+# linux; an unsupported platform is a loud failure (exit 2), never a skip.
+# exit codes here matter to test-db-local.sh: 2 = harness broken, 3 = network
+# unavailable for a one-time download (the only skippable condition).
+case "$(uname -s)" in
+  Linux)  PG_OS=linux ;;
+  Darwin) PG_OS=darwin ;;
+  *) echo "unsupported platform for the embedded-postgres harness: $(uname -s)" >&2; exit 2 ;;
+esac
+case "$(uname -m)" in
+  x86_64)        PG_ARCH=x64 ;;
+  aarch64|arm64) PG_ARCH=arm64 ;;
+  *) echo "unsupported architecture for the embedded-postgres harness: $(uname -m)" >&2; exit 2 ;;
+esac
+PGPKG_NAME=@embedded-postgres/$PG_OS-$PG_ARCH
+PGPKG=$VHOME/pgbin/node_modules/$PGPKG_NAME
 PGBIN=$PGPKG/native/bin
 PGDATA=$VHOME/pgdata
 export PGHOST=127.0.0.1 PGPORT=$PG_PORT PGUSER=postgres
@@ -33,7 +48,22 @@ mkdir -p "$VHOME"
 ensure_pg() {
   if [ ! -x "$PGBIN/initdb" ]; then
     echo "==> installing embedded postgres (one-time)"
-    npm install --prefix "$VHOME/pgbin" "@embedded-postgres/linux-$(uname -m | sed 's/aarch64/arm64/;s/x86_64/x64/')" >/dev/null
+    local out
+    if ! out=$(npm install --prefix "$VHOME/pgbin" "$PGPKG_NAME" 2>&1); then
+      echo "$out" | tail -5
+      if echo "$out" | grep -qiE "EAI_AGAIN|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network"; then
+        echo "embedded postgres install failed: network unavailable"
+        return 3
+      fi
+      echo "embedded postgres install failed ($PGPKG_NAME) — harness broken, not skippable"
+      return 2
+    fi
+  fi
+  # a package that installed but does not run here (wrong platform, missing
+  # libs) must fail visibly rather than let a wrapper report success
+  if ! "$PGBIN/initdb" --version >/dev/null 2>&1; then
+    echo "installed postgres binaries do not run on this platform ($PGPKG_NAME)"
+    return 2
   fi
   if [ ! -d "$PGDATA" ]; then
     "$PGBIN/initdb" -D "$PGDATA" -U postgres --auth=trust -E UTF8 >/dev/null
@@ -66,13 +96,13 @@ install_pgtap() {
   if [ ! -f "$zip" ]; then
     echo "==> fetching pgtap $PGTAP_VERSION"
     curl -fsSL -o "$zip" "https://github.com/theory/pgtap/archive/refs/tags/v$PGTAP_VERSION.zip" || {
-      echo "could not download pgtap (no network?)"; rm -f "$zip"; return 1
+      echo "could not download pgtap: network unavailable"; rm -f "$zip"; return 3
     }
   fi
   rm -rf "$VHOME/pgtap-$PGTAP_VERSION"
   unzip -oq "$zip" -d "$VHOME"
   mkdir -p "$extdir"
-  sed -e 's/__VERSION__/1.3/g' -e 's/__OS__/linux/g' \
+  sed -e 's/__VERSION__/1.3/g' -e "s/__OS__/$PG_OS/g" \
     "$VHOME/pgtap-$PGTAP_VERSION/sql/pgtap.sql.in" > "$extdir/pgtap--$PGTAP_VERSION.sql"
   cp "$VHOME/pgtap-$PGTAP_VERSION/pgtap.control" "$extdir/"
 }
