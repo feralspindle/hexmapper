@@ -21,6 +21,7 @@ vi.mock('@/stores/authStore.js', () => ({
 }))
 
 import { usePhotoStore } from './photoStore.js'
+import { clearReferencePhotoUrls } from '@/lib/referencePhotoUrl.js'
 
 const file = (overrides = {}) => ({ name: 'goblin.png', type: 'image/png', size: 1024, ...overrides })
 
@@ -28,6 +29,7 @@ describe('photoStore upload/delete behavior', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     resetKit(kit)
+    clearReferencePhotoUrls()
   })
 
   test('uploadPhoto rejects oversized and unsupported files before touching storage', async () => {
@@ -51,7 +53,7 @@ describe('photoStore upload/delete behavior', () => {
     expect(kit.uploads).toHaveLength(1)
     expect(kit.uploads[0].path).toMatch(/^s1\/[0-9a-f-]+\.png$/)
     expect(kit.apiClient.post).toHaveBeenCalledWith('/reference-photos', expect.objectContaining({ name: 'goblin' }))
-    expect(photo.url).toContain('https://public.example/')
+    expect(photo.url).toContain('https://signed.example/')
     expect(store.photos[0].id).toBe('p1')
     expect(store.uploading).toBe(false)
   })
@@ -114,7 +116,7 @@ describe('photoStore upload/delete behavior', () => {
   test('dismissBroadcast clears only the live broadcast, not the history', async () => {
     const store = usePhotoStore()
     await store.init('s1')
-    kit.channels[0].emitPostgres('photo_broadcasts', 'INSERT', { id: 'b1', photo_url: 's1/live.png', created_at: '2026-07-04T00:00:00Z' })
+    await kit.channels[0].emitPostgres('photo_broadcasts', 'INSERT', { id: 'b1', photo_url: 's1/live.png', created_at: '2026-07-04T00:00:00Z' })
 
     expect(store.currentBroadcast).not.toBeNull()
     store.dismissBroadcast()

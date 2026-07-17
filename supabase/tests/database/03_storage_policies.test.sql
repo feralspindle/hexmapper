@@ -26,7 +26,7 @@ values ('12000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000
 insert into storage.buckets (id, name, public) values
   ('bug-screenshots', 'bug-screenshots', false),
   ('dungeon-images', 'dungeon-images', false),
-  ('reference-photos', 'reference-photos', true),
+  ('reference-photos', 'reference-photos', false),
   ('session-maps', 'session-maps', false)
 on conflict (id) do update set public = excluded.public;
 
@@ -40,19 +40,10 @@ insert into storage.objects (id, bucket_id, name, owner) values
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 
--- Scoped to this test's session path: the bucket is public, so on a local dev
--- DB anon also sees real reference photos uploaded outside this test.
 select is(
-  (select count(*) from storage.objects
-    where bucket_id = 'reference-photos'
-      and name like '12000000-0000-0000-0000-000000000001/%'),
-  1::bigint,
-  'anonymous users can read the intentionally public reference-photo bucket'
-);
-select is(
-  (select count(*) from storage.objects where bucket_id <> 'reference-photos'),
+  (select count(*) from storage.objects),
   0::bigint,
-  'anonymous users cannot read private photo and map buckets'
+  'anonymous users cannot read any storage bucket, reference photos included'
 );
 select throws_ok(
   $sql$insert into storage.objects (bucket_id, name)
@@ -73,6 +64,13 @@ select is(
   (select count(*) from storage.objects where bucket_id = 'session-maps'),
   0::bigint,
   'nonmember cannot read any session map'
+);
+select is(
+  (select count(*) from storage.objects
+    where bucket_id = 'reference-photos'
+      and name like '12000000-0000-0000-0000-000000000001/%'),
+  0::bigint,
+  'nonmember cannot read another session reference photos'
 );
 select is(
   (select count(*) from storage.objects where bucket_id = 'bug-screenshots'),
@@ -106,6 +104,13 @@ select is(
   (select count(*) from storage.objects where bucket_id = 'session-maps'),
   1::bigint,
   'player can read the map for their session but not a foreign map'
+);
+select is(
+  (select count(*) from storage.objects
+    where bucket_id = 'reference-photos'
+      and name like '12000000-0000-0000-0000-000000000001/%'),
+  1::bigint,
+  'session member can read reference photos for their session'
 );
 select lives_ok(
   $sql$insert into storage.objects (bucket_id, name, owner)
@@ -158,6 +163,25 @@ select is(
   (select count(*) from storage.objects where id = 'b0000000-0000-0000-0000-000000000002'),
   0::bigint,
   'GM can delete a dungeon image for their session'
+);
+
+-- membership revocation cuts off reads immediately, even for photos the
+-- removed member uploaded
+reset role;
+delete from public.session_members
+where session_id = '12000000-0000-0000-0000-000000000001'
+  and user_id = '00000000-0000-0000-0000-000000000022';
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"00000000-0000-0000-0000-000000000022","role":"authenticated"}',
+  true
+);
+select is(
+  (select count(*) from storage.objects where bucket_id = 'reference-photos'),
+  0::bigint,
+  'removed member can no longer read session reference photos'
 );
 
 reset role;
