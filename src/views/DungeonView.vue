@@ -224,14 +224,23 @@ watch(activeNavDropdown, (val) => {
 
 const { state: itemDrag, updatePosition, endDrag } = useItemDrag()
 
-async function onImageOffsetChange({ offsetX, offsetY }) {
+// updateDungeon writes to whatever dungeon the store holds when it runs, so
+// the pending offset flushes on unmount (before dungeonStore.cleanup swaps
+// the target) instead of firing into the next route's dungeon
+function onImageOffsetChange({ offsetX, offsetY }) {
   dungeonStore.applyDungeonLocalPatch({ mapImageOffsetX: offsetX, mapImageOffsetY: offsetY })
   clearTimeout(_imageOffsetTimer)
-  _imageOffsetTimer = setTimeout(() => {
-    dungeonStore.updateDungeon({ mapImageOffsetX: offsetX, mapImageOffsetY: offsetY })
-  }, 150)
+  _pendingImageOffset = { mapImageOffsetX: offsetX, mapImageOffsetY: offsetY }
+  _imageOffsetTimer = setTimeout(_flushImageOffset, 150)
 }
 let _imageOffsetTimer = null
+let _pendingImageOffset = null
+
+function _flushImageOffset() {
+  const pending = _pendingImageOffset
+  _pendingImageOffset = null
+  if (pending) dungeonStore.updateDungeon(pending)
+}
 
 function measureTopbar() {
   if (topbarEl.value?.$el) topbarHeight.value = topbarEl.value.$el.offsetHeight
@@ -271,6 +280,8 @@ onUnmounted(() => {
   viewAlive = false
   window.removeEventListener('resize', measureTopbar)
   window.removeEventListener('keydown', onKeyDown)
+  clearTimeout(_imageOffsetTimer)
+  _flushImageOffset()
   dungeonStore.cleanup()
   activityStore.cleanup()
   cleanupServices()

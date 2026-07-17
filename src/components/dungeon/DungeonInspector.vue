@@ -327,21 +327,24 @@ watch(() => dungeonStore.selectedElement, (el) => {
   notesStore.initForDungeonElement(el.id, el.type, sessionStore.sessionId)
 }, { immediate: true })
 
+// capture the target and value at schedule time - resolving the selection
+// when the timer fires wrote the label into whatever got selected next
 let saveTimer = null
 function debouncedSave() {
   clearTimeout(saveTimer)
+  const el = dungeonStore.selectedElement
+  if (!el) return
+  const target = { id: el.id, type: el.type }
+  const newLabel = roomLabel.value
   saveTimer = setTimeout(() => {
-    const el = dungeonStore.selectedElement
-    if (!el) return
-    if (el.type === 'room') {
-      const newLabel = roomLabel.value
-      const oldLabel = dungeonStore.rooms.get(el.id)?.label ?? ''
-      dungeonStore.updateRoom(el.id, { label: newLabel })
+    if (target.type === 'room') {
+      const oldLabel = dungeonStore.rooms.get(target.id)?.label ?? ''
+      dungeonStore.updateRoom(target.id, { label: newLabel })
       if (newLabel.trim() && newLabel !== oldLabel) {
         activityStore.record('renamed', `${oldLabel || 'Unnamed Room'} → ${newLabel}`)
       }
     } else {
-      dungeonStore.updateCorridor(el.id, { label: roomLabel.value })
+      dungeonStore.updateCorridor(target.id, { label: newLabel })
     }
   }, 500)
 }
@@ -352,10 +355,12 @@ function noteColor(userId) {
 
 const _itemTimers = new Map()
 function updateItem(itemId, patch) {
+  const roomId = selectedRoom.value?.id
+  if (!roomId) return
   clearTimeout(_itemTimers.get(itemId))
   _itemTimers.set(itemId, setTimeout(() => {
     _itemTimers.delete(itemId)
-    if (selectedRoom.value) dungeonStore.updateRoomItem(selectedRoom.value.id, itemId, patch)
+    dungeonStore.updateRoomItem(roomId, itemId, patch)
   }, 400))
 }
 
