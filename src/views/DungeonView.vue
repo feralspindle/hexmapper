@@ -15,6 +15,16 @@
       @switch-mode="onSwitchMode"
     />
 
+    <div
+      v-if="dungeonUploadError"
+      data-testid="dungeon-upload-error"
+      class="dv-upload-error"
+    >
+      <span>Dungeon map upload failed — the map was not changed.</span>
+      <button class="ds-btn" @click="retryDungeonUpload">Retry</button>
+      <button class="ds-btn" @click="dungeonUploadError = null">Dismiss</button>
+    </div>
+
     <div v-if="showModePicker" class="hm-setup-bg">
       <DungeonModePicker
         :has-map-image="!!dungeonStore.dungeon?.map_image_path"
@@ -182,19 +192,32 @@ function onSwitchMode() {
   dungeonStore.drawMode = 'select'
 }
 
+// a failed upload used to close the picker and vanish - keep the file so
+// retry works, and say something instead of pretending it succeeded
+const dungeonUploadError = ref(null)
+
+async function uploadDungeonImageFile(file) {
+  dungeonUploadError.value = null
+  try {
+    const path = await dungeonStore.uploadDungeonImage(sessionId, file)
+    await dungeonStore.updateDungeon({ mapImagePath: path })
+    mapSettingsOpen.value = true
+  } catch (e) {
+    console.error('Dungeon map upload failed:', e.message)
+    dungeonUploadError.value = { file }
+  }
+}
+
+function retryDungeonUpload() {
+  const file = dungeonUploadError.value?.file
+  if (file) uploadDungeonImageFile(file)
+}
+
 async function onPickFow(file) {
   showModePicker.value = false
   localStorage.setItem(modeKey, 'fow')
   await dungeonStore.updateDungeon({ fogMode: true, fogRevealAll: false })
-  if (file) {
-    try {
-      const path = await dungeonStore.uploadDungeonImage(sessionId, file)
-      await dungeonStore.updateDungeon({ mapImagePath: path })
-      mapSettingsOpen.value = true
-    } catch (e) {
-      console.error('Dungeon map upload failed:', e.message)
-    }
-  }
+  if (file) await uploadDungeonImageFile(file)
 }
 
 async function onPickBlank() {
@@ -321,4 +344,21 @@ watchEffect(() => {
 </script>
 
 <style scoped>
+.dv-upload-error {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--paper, #ede1c7);
+  border: 1px solid var(--rule, #c9b990);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink, #1a1410);
+}
 </style>

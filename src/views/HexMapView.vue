@@ -12,6 +12,34 @@
             @toggle-char="charOpen = !charOpen"
         />
 
+        <div
+            v-if="mapUploadError"
+            data-testid="map-upload-error"
+            style="
+                position: fixed;
+                top: 64px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 60;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 10px 16px;
+                background: var(--paper, #ede1c7);
+                border: 1px solid var(--rule, #c9b990);
+                border-radius: 4px;
+                font-family: var(--font-mono);
+                font-size: 12px;
+                color: var(--ink, #1a1410);
+            "
+        >
+            <span>Map image upload failed — the map was not changed.</span>
+            <button class="ds-btn" @click="retryMapUpload">Retry</button>
+            <button class="ds-btn" @click="mapUploadError = null">
+                Dismiss
+            </button>
+        </div>
+
         <div v-if="mapsBlocked" class="hm-setup-bg">
             <div
                 data-testid="maps-blocked"
@@ -281,6 +309,29 @@ function onSwitchMode() {
     activeTool.value = "select";
 }
 
+// a failed upload used to close the picker and vanish - keep the file so
+// retry works, and say something instead of pretending it succeeded
+const mapUploadError = ref(null);
+
+async function uploadMapImageFile(file) {
+    mapUploadError.value = null;
+    try {
+        const path = await mapStore.uploadMapImage(file);
+        await mapStore.updateActiveMap({
+            mapImagePath: path,
+            mapType: "image",
+        });
+    } catch (e) {
+        console.error("Map upload failed:", e.message);
+        mapUploadError.value = { file };
+    }
+}
+
+function retryMapUpload() {
+    const file = mapUploadError.value?.file;
+    if (file) uploadMapImageFile(file);
+}
+
 async function onPickFow(file) {
     showModePicker.value = false;
     hexMode.value = "fow";
@@ -288,17 +339,7 @@ async function onPickFow(file) {
     activeTool.value = "select";
     await sessionStore.setHexMode("fow");
     await mapStore.setFogRevealAll(false);
-    if (file) {
-        try {
-            const path = await mapStore.uploadMapImage(file);
-            await mapStore.updateActiveMap({
-                mapImagePath: path,
-                mapType: "image",
-            });
-        } catch (e) {
-            console.error("Map upload failed:", e.message);
-        }
-    }
+    if (file) await uploadMapImageFile(file);
 }
 
 async function onPickBlank() {
