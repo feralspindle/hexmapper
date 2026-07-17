@@ -426,7 +426,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function assignLoot(lootItem, assignments) {
     const characterStore = useCharacterStore()
     for (const { char, qty } of assignments) {
-      characterStore.addGearItemToChar(char.id, { name: lootItem.name, slots: 1, quantity: qty, type: 'sundry' })
+      characterStore.grantGearItemToChar(char.id, { name: lootItem.name, slots: 1, quantity: qty, type: 'sundry' })
     }
     const shares = assignments.map(({ char, qty }) => `${char.data?.name || 'Player'} ×${qty}`).join(', ')
     _logActivity('assigned', `${lootItem.name} to ${shares}`)

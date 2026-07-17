@@ -48,7 +48,7 @@ describe('vaultStore', () => {
       memberSelections: [{ user_id: 'me', display_name: 'Hero' }],
       adjustMoney: vi.fn(),
       addGearItem: vi.fn(),
-      addGearItemToChar: vi.fn(),
+      grantGearItemToChar: vi.fn(),
       updateFieldForChar: vi.fn(),
       adjustCurrencyForChar: vi.fn(),
       deleteGearItem: vi.fn(),
@@ -244,7 +244,8 @@ describe('vaultStore', () => {
       { char: { id: 'c2' }, qty: 1 },
     ])
 
-    expect(kit.character.addGearItemToChar).toHaveBeenCalledTimes(2)
+    expect(kit.character.grantGearItemToChar).toHaveBeenCalledTimes(2)
+    expect(kit.character.grantGearItemToChar).toHaveBeenCalledWith('c1', expect.objectContaining({ quantity: 2 }))
     expect(kit.apiClient.patch).toHaveBeenCalledWith('/vault-loot/loot-1', expect.objectContaining({ quantity: 2 }))
     expect(store.loot[0]).toMatchObject({ id: 'loot-1', quantity: 2 })
   })

@@ -388,18 +388,28 @@ export const useCharacterStore = defineStore('character', () => {
     _logSheet(`${charName} added gear: ${newItem.name} (${newItem.slots} slot${newItem.slots !== 1 ? 's' : ''} ×${newItem.quantity}) · total slots: ${slotsBefore} → ${slotsAfter} (${delta >= 0 ? '+' : ''}${delta})`)
   }
 
-  function addGearItemToChar(charId, item) {
-    const char = characters.value.find(c => c.id === charId)
-    if (!char?.data) return
-    const newItem = {
-      instanceId: crypto.randomUUID(),
-      name:       item.name,
-      slots:      Math.round(Math.max(0, Number(item.slots) || 0)),
-      quantity:   Number(item.quantity) || 1,
-      type:       item.type ?? 'sundry',
-      disabled:   false,
+  // vault assignments hand gear to characters the caller does not own, and
+  // the sheet PATCH is owner/gm-only server-side - like adjustCurrencyForChar
+  // this goes through a member-allowed endpoint. adopts the server's copy of
+  // the sheet on return unless a local save is pending (same rule as the
+  // realtime echo path)
+  async function grantGearItemToChar(charId, item) {
+    if (!characters.value.some(c => c.id === charId)) return
+    try {
+      const row = await apiClient.post(`/characters/${charId}/grant-gear`, {
+        name:     item.name,
+        slots:    Math.round(Math.max(0, Number(item.slots) || 0)),
+        quantity: Number(item.quantity) || 1,
+        type:     item.type ?? 'sundry',
+      }, 'grant_gear')
+      if (_saveTimers.has(charId)) return
+      characters.value = characters.value.map(c =>
+        c.id === charId ? { ...c, data: _augment(row.data) } : c
+      )
+      _scheduleBroadcast(charId)
+    } catch (error) {
+      console.error('characterStore.grantGearItemToChar:', error instanceof ApiError ? error.message : error)
     }
-    updateFieldForChar(charId, 'gear', [...(char.data.gear ?? []), newItem])
   }
 
   function moveGearItem(instanceId, direction) {
@@ -787,7 +797,7 @@ export const useCharacterStore = defineStore('character', () => {
     loadAll, refresh, setActive, importCharacter, deleteCharacter,
     updateField, updateFieldForChar, adjustCurrencyForChar, adjustHpForChar, adjustHp, adjustTempHp, setTempHp, adjustMoney, adjustStat, adjustMaxHp,
     renownValue, adjustRenown, setRenown, deleteRenownEntry, awardHaul,
-    addGearItem, addGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
+    addGearItem, grantGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,
     cleanup,
   }

@@ -117,6 +117,75 @@ pub async fn adjust_character_currency(
     Ok(Json(row))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct GrantGearRequest {
+    pub name: String,
+    #[serde(default)]
+    pub slots: i64,
+    #[serde(default = "default_quantity")]
+    pub quantity: i64,
+    #[serde(default = "default_gear_type", rename = "type")]
+    pub gear_type: String,
+}
+
+fn default_quantity() -> i64 {
+    1
+}
+
+fn default_gear_type() -> String {
+    "sundry".to_string()
+}
+
+/// Session members may hand a gear item to any party member's character
+/// (vault loot assignment). Like adjust-currency, this only appends one
+/// bounded item — it cannot touch the rest of the sheet.
+pub async fn grant_character_gear(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<GrantGearRequest>,
+) -> Result<Json<Value>, AppError> {
+    let name = req.name.trim();
+    if name.is_empty() || name.len() > 120 {
+        return Err(AppError::BadRequest("invalid item name".into()));
+    }
+    if !(0..=100).contains(&req.slots) {
+        return Err(AppError::BadRequest("slots out of range".into()));
+    }
+    if !(1..=1_000).contains(&req.quantity) {
+        return Err(AppError::BadRequest("quantity out of range".into()));
+    }
+    if !matches!(req.gear_type.as_str(), "weapon" | "armor" | "sundry") {
+        return Err(AppError::BadRequest("unknown gear type".into()));
+    }
+
+    let (owner_id, session_id) = authz::character_owner_session(state.pool(), id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let allowed = owner_id == auth.user_id
+        || match session_id {
+            Some(sid) => authz::is_session_member(state.pool(), auth.user_id, sid).await?,
+            None => false,
+        };
+    if !allowed {
+        return Err(AppError::Forbidden);
+    }
+
+    let item = serde_json::json!({
+        "name": name,
+        "slots": req.slots,
+        "quantity": req.quantity,
+        "type": req.gear_type,
+        "disabled": false,
+    });
+    let metadata = auth.metadata();
+    let row = retry_tx!(state.pool(), |tx| {
+        projection::grant_gear(&mut tx, id, &item, &metadata).await
+    })?;
+
+    Ok(Json(row))
+}
+
 pub async fn delete_character(
     State(state): State<AppState>,
     auth: AuthUser,

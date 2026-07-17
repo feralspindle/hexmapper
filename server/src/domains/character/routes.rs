@@ -14,5 +14,9 @@ pub fn router() -> Router<AppState> {
             "/characters/{id}/adjust-currency",
             post(handlers::adjust_character_currency),
         )
+        .route(
+            "/characters/{id}/grant-gear",
+            post(handlers::grant_character_gear),
+        )
         .route("/character-sheet-log", post(handlers::record_sheet_log))
 }

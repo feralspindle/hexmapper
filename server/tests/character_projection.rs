@@ -1,7 +1,8 @@
-//! Integration test for the character projection's `adjust_currency` path
-//! against a real Postgres: the in-place single-field increment, its floor at
-//! zero, initialization of a missing currency key, and the `data_updated`
-//! snapshot it appends so replay stays consistent.
+//! Integration test for the character projection's narrow member-write paths
+//! (`adjust_currency`, `grant_gear`) against a real Postgres: the in-place
+//! single-field edits, currency's floor at zero, gear's server-side
+//! instanceId, and the `data_updated` snapshots they append so replay stays
+//! consistent.
 //!
 //! Gated on `DATABASE_URL` exactly like `hex_projection.rs`: skipped when
 //! unset, and it (re)creates throwaway tables — point it ONLY at a disposable
@@ -80,10 +81,19 @@ async fn adjust(pool: &PgPool, id: Uuid, currency: &str, delta: i64) -> Value {
     row
 }
 
+async fn grant(pool: &PgPool, id: Uuid, item: Value) -> Value {
+    let mut tx = pool.begin().await.unwrap();
+    let row = projection::grant_gear(&mut tx, id, &item, &json!({}))
+        .await
+        .expect("grant gear");
+    tx.commit().await.unwrap();
+    row
+}
+
 // One test per file, like hex_projection.rs: tests in a binary run on parallel
 // threads, and they would race on the shared throwaway schema.
 #[tokio::test]
-async fn adjust_currency_touches_one_field_floors_at_zero_and_snapshots() {
+async fn narrow_member_writes_touch_one_field_and_snapshot() {
     let Some(pool) = setup().await else {
         eprintln!("DATABASE_URL not set; skipping");
         return;
@@ -115,4 +125,32 @@ async fn adjust_currency_touches_one_field_floors_at_zero_and_snapshots() {
     assert_eq!(event_type, "character.data_updated");
     assert_eq!(payload["data"]["silver"], json!(4));
     assert_eq!(payload["data"]["gold"], json!(0));
+
+    // grant_gear appends one item (with a server-generated instanceId) even
+    // when the sheet has no gear array yet, and leaves the rest alone
+    let item = json!({"name": "Rope", "slots": 1, "quantity": 2, "type": "sundry", "disabled": false});
+    let row = grant(&pool, id, item.clone()).await;
+    let gear = row["data"]["gear"].as_array().unwrap();
+    assert_eq!(gear.len(), 1);
+    assert_eq!(gear[0]["name"], json!("Rope"));
+    assert_eq!(gear[0]["quantity"], json!(2));
+    assert!(gear[0]["instanceId"].as_str().unwrap().len() >= 32);
+    assert_eq!(row["data"]["name"], json!("Rook"));
+
+    let row = grant(&pool, id, item).await;
+    let gear = row["data"]["gear"].as_array().unwrap();
+    assert_eq!(gear.len(), 2);
+    assert_ne!(gear[0]["instanceId"], gear[1]["instanceId"]);
+
+    let (event_type, payload): (String, Value) = sqlx::query_as(
+        "select event_type, payload from events
+         where aggregate_type = 'character' and aggregate_id = $1
+         order by sequence desc limit 1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(event_type, "character.data_updated");
+    assert_eq!(payload["data"]["gear"].as_array().unwrap().len(), 2);
 }

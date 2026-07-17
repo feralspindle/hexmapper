@@ -205,6 +205,28 @@ describe('characterStore', () => {
     expect(kit.apiClient.patch).not.toHaveBeenCalled()
   })
 
+  test('grantGearItemToChar posts to the narrow endpoint and adopts the server sheet', async () => {
+    kit.api['post /characters/other/grant-gear'] = () => ({
+      id: 'other',
+      data: { gear: [{ instanceId: 'srv-1', name: 'Rope', slots: 1, quantity: 2, type: 'sundry', disabled: false }] },
+    })
+    const store = await loadedStore([
+      char('c1'),
+      char('other', { user_id: 'them', data: {} }),
+    ])
+
+    await store.grantGearItemToChar('other', { name: 'Rope', slots: 1, quantity: 2 })
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith(
+      '/characters/other/grant-gear',
+      { name: 'Rope', slots: 1, quantity: 2, type: 'sundry' },
+      'grant_gear',
+    )
+    expect(store.characters.find(c => c.id === 'other').data.gear).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(800)
+    expect(kit.apiClient.patch).not.toHaveBeenCalled()
+  })
+
   test('a realtime echo of a stale save cannot revert edits made while the save was in flight', async () => {
     let resolvePatch
     kit.api['patch /characters/c1'] = () => new Promise(resolve => { resolvePatch = resolve })
