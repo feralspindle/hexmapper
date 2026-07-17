@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -13,10 +13,12 @@ pub fn spawn_event_listener(database_url: String, state: AppState) {
         // catch_up instead of re-seeding at max(id), so a listener blip no longer
         // needs disconnect_all() — clients keep their sockets and the missed
         // events are dispatched on recovery. Broadcasts and presence never flow
-        // through this listener, so nothing else is lost during the gap.
-        let mut resume_from: Option<i64> = None;
+        // through this listener, so nothing else is lost during the gap. The
+        // gap set rides along so ids that committed out of order during the
+        // outage are still delivered (#193).
+        let mut resume: Option<(i64, BTreeSet<i64>)> = None;
         loop {
-            match listen(&database_url, &state, &mut resume_from).await {
+            match listen(&database_url, &state, &mut resume).await {
                 Ok(()) => tracing::warn!("realtime event listener ended"),
                 Err(error) => tracing::error!(%error, "realtime event listener failed"),
             }
@@ -27,7 +29,8 @@ pub fn spawn_event_listener(database_url: String, state: AppState) {
 }
 
 const EVENT_BURST: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id = $1 or id > $2 order by id";
-const EVENTS_AFTER: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id > $1 order by id";
+const EVENTS_AFTER: &str = "select id, aggregate_type, aggregate_id, session_id, event_type, payload, metadata, created_at from events where id > $1 or id = any($2) order by id";
+const MAX_TRACKED_GAPS: usize = 1024;
 
 /// Retries transient query failures before surfacing them; the caller's error
 /// path restarts the listener and replays from the resume cursor.
@@ -127,24 +130,27 @@ async fn dispatch_row(state: &AppState, mut row: EventRow) -> Result<(), sqlx::E
     Ok(())
 }
 
-/// Dispatches every event committed after `last_seen`, returning the new high-water
-/// mark. Covers NOTIFYs lost while the listener connection was down. An event whose
-/// id was assigned before the gap but committed during it can still slip through
-/// (id order != commit order); that window is a single in-flight transaction.
-async fn catch_up(state: &AppState, last_seen: i64) -> Result<i64, sqlx::Error> {
+/// Dispatches every event committed after the cursor's high-water mark, plus
+/// any tracked gap id (assigned before the mark but uncommitted when a scan
+/// passed it) that has committed since. Covers NOTIFYs lost while the listener
+/// connection was down, including a lower id that committed during the gap —
+/// previously that id was skipped forever and clients stayed stale (#193).
+async fn catch_up(state: &AppState, cursor: &mut BurstCursor) -> Result<(), sqlx::Error> {
+    let last_seen = cursor.last_seen;
+    let gap_ids: Vec<i64> = cursor.gaps.iter().copied().collect();
     let rows = retry_query(
         || {
             sqlx::query_as::<_, EventRow>(EVENTS_AFTER)
                 .bind(last_seen)
+                .bind(gap_ids.clone())
                 .fetch_all(state.pool())
         },
         "events_catch_up",
     )
     .await?;
-    let mut max_seen = last_seen;
     let recovered = rows.len();
     for row in rows {
-        max_seen = max_seen.max(row.id);
+        cursor.note_dispatched(row.id, row.id);
         dispatch_row(state, row).await?;
     }
     if recovered > 0 {
@@ -154,24 +160,43 @@ async fn catch_up(state: &AppState, last_seen: i64) -> Result<i64, sqlx::Error> 
             "realtime listener dispatched events missed during reconnect"
         );
     }
-    Ok(max_seen)
+    Ok(())
 }
 
 /// bookkeeping for burst dispatch. one NOTIFY triggers a scan that can pull in
 /// rows whose own NOTIFYs are still in flight, so remember those ids and skip
 /// them when they arrive. every event insert notifies exactly once, so entries
 /// drain instead of accumulating.
+///
+/// ids a scan advanced past without seeing (assigned but uncommitted — id
+/// order != commit order) are tracked as gaps. while connected their own
+/// NOTIFY delivers them via the `id = $1` arm of the burst query; across a
+/// reconnect the NOTIFY is dead, so catch_up re-checks the gap set (#193). an
+/// aborted transaction leaves a permanent gap, so the set prunes from the low
+/// end instead of growing forever.
 struct BurstCursor {
     last_seen: i64,
     dispatched_ahead: HashSet<i64>,
+    gaps: BTreeSet<i64>,
 }
 
 impl BurstCursor {
     fn new(last_seen: i64) -> Self {
+        Self::resume(last_seen, BTreeSet::new())
+    }
+
+    fn resume(last_seen: i64, gaps: BTreeSet<i64>) -> Self {
         Self {
             last_seen,
             dispatched_ahead: HashSet::new(),
+            gaps,
         }
+    }
+
+    /// the state worth carrying across a listener restart: the high-water
+    /// mark and the unresolved gaps below it
+    fn snapshot(&self) -> (i64, BTreeSet<i64>) {
+        (self.last_seen, self.gaps.clone())
     }
 
     /// true if this notification's row still needs fetching, false if it
@@ -185,41 +210,48 @@ impl BurstCursor {
         if row_id != notified_id {
             self.dispatched_ahead.insert(row_id);
         }
-        self.last_seen = self.last_seen.max(row_id);
-    }
-
-    /// notifications for pending ids died with the old connection; catch_up
-    /// owns everything past the new mark
-    fn reset(&mut self, last_seen: i64) {
-        self.last_seen = last_seen;
-        self.dispatched_ahead.clear();
+        self.gaps.remove(&row_id);
+        if row_id > self.last_seen {
+            let floor = (self.last_seen + 1).max(row_id - MAX_TRACKED_GAPS as i64);
+            for missing in floor..row_id {
+                self.gaps.insert(missing);
+            }
+            self.last_seen = row_id;
+        }
+        while self.gaps.len() > MAX_TRACKED_GAPS {
+            self.gaps.pop_first();
+        }
     }
 }
 
 async fn listen(
     database_url: &str,
     state: &AppState,
-    resume_from: &mut Option<i64>,
+    resume: &mut Option<(i64, BTreeSet<i64>)>,
 ) -> Result<(), sqlx::Error> {
     let mut listener = PgListener::connect(database_url).await?;
     listener.listen("hexmap_events").await?;
-    let initial: i64 = match *resume_from {
-        // a previous listen() dispatched through this id; deliver everything
+    let mut cursor = match resume.clone() {
+        // a previous listen() dispatched through this state; deliver everything
         // that committed while the listener was down before taking NOTIFYs
-        Some(last_seen) => catch_up(state, last_seen).await?,
+        Some((last_seen, gaps)) => {
+            let mut cursor = BurstCursor::resume(last_seen, gaps);
+            catch_up(state, &mut cursor).await?;
+            cursor
+        }
         None => {
-            retry_query(
+            let max_id: i64 = retry_query(
                 || {
                     sqlx::query_scalar("select coalesce(max(id), 0) from events")
                         .fetch_one(state.pool())
                 },
                 "max_event_id",
             )
-            .await?
+            .await?;
+            BurstCursor::new(max_id)
         }
     };
-    *resume_from = Some(initial);
-    let mut cursor = BurstCursor::new(initial);
+    *resume = Some(cursor.snapshot());
     loop {
         // `try_recv` returns Ok(None) when the connection dropped and was silently
         // re-established — NOTIFYs sent during the gap are lost, so scan the events
@@ -254,16 +286,19 @@ async fn listen(
                     cursor.note_dispatched(row.id, id);
                     dispatch_row(state, row).await?;
                 }
-                // Under-advance on mid-burst failure is fine: a restart re-sends
-                // the tail of the burst and clients apply row upserts by id.
-                *resume_from = Some(cursor.last_seen);
+                // Under-advance on mid-burst failure is fine: the resume state
+                // only moves after a whole burst lands, so a restart re-sends
+                // the tail and clients apply row upserts by id.
+                *resume = Some(cursor.snapshot());
             }
             None => {
                 metrics::counter!("realtime_listener_reconnects_total").increment(1);
                 tracing::warn!("realtime listener reconnected; scanning for missed events");
-                let last_seen = catch_up(state, cursor.last_seen).await?;
-                cursor.reset(last_seen);
-                *resume_from = Some(last_seen);
+                catch_up(state, &mut cursor).await?;
+                // notifications for pending ids died with the old connection;
+                // catch_up just covered everything they were tracking
+                cursor.dispatched_ahead.clear();
+                *resume = Some(cursor.snapshot());
             }
         }
     }
@@ -301,15 +336,45 @@ mod tests {
     }
 
     #[test]
-    fn burst_cursor_reset_drops_pending_ids() {
+    fn skipped_ids_are_tracked_as_gaps_until_dispatched() {
+        let mut cursor = BurstCursor::new(10);
+        // the scan for 13's notify returns only 13: 11 and 12 are in-flight
+        cursor.note_dispatched(13, 13);
+        assert_eq!(cursor.snapshot().1, BTreeSet::from([11, 12]));
+
+        // 12 commits and gets dispatched (via notify or catch_up); 11 remains
+        cursor.note_dispatched(12, 12);
+        assert_eq!(cursor.snapshot().1, BTreeSet::from([11]));
+        assert_eq!(cursor.last_seen, 13);
+    }
+
+    #[test]
+    fn gaps_survive_a_snapshot_resume_across_reconnects() {
+        // connection 1 sees 12 while 11 is still in an open transaction
+        let mut cursor = BurstCursor::new(10);
+        cursor.note_dispatched(12, 12);
+        let (last_seen, gaps) = cursor.snapshot();
+
+        // connection 2 resumes: catch_up queries `id > 12 or id = any([11])`,
+        // so 11 committed during the outage is finally delivered
+        let mut resumed = BurstCursor::resume(last_seen, gaps);
+        assert!(resumed.gaps.contains(&11));
+        resumed.note_dispatched(11, 11);
+        assert!(resumed.gaps.is_empty());
+        assert_eq!(resumed.last_seen, 12);
+    }
+
+    #[test]
+    fn gap_tracking_is_bounded() {
         let mut cursor = BurstCursor::new(0);
-        assert!(cursor.needs_fetch(1));
-        cursor.note_dispatched(1, 1);
-        cursor.note_dispatched(2, 1);
-        // reconnect: id 2's notify is gone, catch_up owns everything past 5
-        cursor.reset(5);
-        assert_eq!(cursor.last_seen, 5);
-        assert!(cursor.needs_fetch(2));
-        assert!(cursor.needs_fetch(6));
+        // a pathological jump only tracks the newest MAX_TRACKED_GAPS ids
+        cursor.note_dispatched(5_000, 5_000);
+        assert_eq!(cursor.gaps.len(), MAX_TRACKED_GAPS);
+        assert_eq!(cursor.gaps.first(), Some(&(5_000 - MAX_TRACKED_GAPS as i64)));
+
+        // further overflow prunes from the low end
+        cursor.note_dispatched(6_500, 6_500);
+        assert_eq!(cursor.gaps.len(), MAX_TRACKED_GAPS);
+        assert_eq!(cursor.gaps.last(), Some(&6_499));
     }
 }
