@@ -21,6 +21,18 @@
       </div>
 
       <div
+        v-else-if="loadError"
+        data-testid="notes-load-error"
+        class="text-stone-400 text-sm text-center py-12"
+      >
+        <p class="mb-4">Couldn't load hex notes. Your notes are fine — the request failed.</p>
+        <button
+          class="px-4 py-2 bg-stone-800 border border-stone-700 rounded text-stone-300 hover:text-parchment-200 hover:border-stone-500 transition-colors"
+          @click="loadNotes"
+        >Retry</button>
+      </div>
+
+      <div
         v-else-if="!notesByMap.length"
         class="text-stone-600 text-sm text-center py-12 italic"
       >
@@ -72,9 +84,27 @@ const route = useRoute()
 const sessionId = route.params.sessionId
 
 const loading     = ref(true)
+const loadError   = ref(false)
 const sessionName = ref('')
 const rawCells    = ref([])
 const mapNames    = ref(new Map())
+
+async function loadNotes() {
+  loading.value = true
+  loadError.value = false
+  try {
+    const query = new URLSearchParams({ session_id: sessionId })
+    const cells = await apiClient.get(`/hex-cells?${query.toString()}`)
+    rawCells.value = cells.filter(cell => cell.notes)
+  } catch (error) {
+    console.error(
+      'campaign notes hex load error:',
+      error instanceof ApiError ? error.message : error,
+    )
+    loadError.value = true
+  }
+  loading.value = false
+}
 
 onMounted(async () => {
   const [{ data: session }, { data: maps }] = await Promise.all([
@@ -88,17 +118,7 @@ onMounted(async () => {
   if (session) sessionName.value = session.name
   mapNames.value = new Map((maps ?? []).map(map => [map.id, map.name]))
 
-  try {
-    const query = new URLSearchParams({ session_id: sessionId })
-    const cells = await apiClient.get(`/hex-cells?${query.toString()}`)
-    rawCells.value = cells.filter(cell => cell.notes)
-  } catch (error) {
-    console.error(
-      'campaign notes hex load error:',
-      error instanceof ApiError ? error.message : error,
-    )
-  }
-  loading.value = false
+  await loadNotes()
 })
 
 const notesByMap = computed(() => {

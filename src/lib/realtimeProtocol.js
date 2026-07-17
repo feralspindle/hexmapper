@@ -14,6 +14,8 @@ export const REALTIME_TABLES = {
   dungeon_token: 'dungeon_tokens',
   hex_cell: 'hex_cells',
   hex_note: 'hex_notes',
+  journal_entry: 'journal_entries',
+  light_source: 'light_sources',
   map: 'maps',
   oracle_roll: 'oracle_rolls',
   oracle_table: 'oracle_tables',

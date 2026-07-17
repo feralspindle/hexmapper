@@ -1,5 +1,7 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { accessTokenNeedsRefresh, connectionWasStable, pendingKeys, snapshotRefreshDelay } from './realtimeProtocol.js'
+import { accessTokenNeedsRefresh, connectionWasStable, pendingKeys, snapshotRefreshDelay, REALTIME_TABLES } from './realtimeProtocol.js'
 
 const NOW_MS = 1_750_000_000_000
 const NOW_S = NOW_MS / 1000
@@ -80,5 +82,49 @@ describe('pendingKeys', () => {
     const pending = pendingKeys()
     pending.end(['ghost'])
     expect(pending.has('ghost')).toBe(false)
+  })
+})
+
+// A table subscribed on the frontend with no aggregate_type mapping never
+// receives a single server event - the store just sits there silently stale
+// (that is exactly how journal and light updates got lost, #192). This walks
+// both codebases so the next unmapped table fails CI instead of shipping.
+describe('REALTIME_TABLES contract', () => {
+  const repoRoot = join(__dirname, '..', '..')
+
+  function walk(dir, extensions, files = []) {
+    for (const name of readdirSync(dir)) {
+      if (name === 'node_modules' || name === 'target' || name.startsWith('.')) continue
+      const path = join(dir, name)
+      if (statSync(path).isDirectory()) walk(path, extensions, files)
+      else if (extensions.some(ext => name.endsWith(ext))) files.push(path)
+    }
+    return files
+  }
+
+  it('covers every table the frontend subscribes to', () => {
+    const subscribed = new Set()
+    for (const file of walk(join(repoRoot, 'src'), ['.js', '.vue'])) {
+      if (file.endsWith('.test.js')) continue
+      const source = readFileSync(file, 'utf8')
+      for (const match of source.matchAll(/table:\s*'([a-z_]+)'/g)) subscribed.add(match[1])
+    }
+    expect(subscribed.size).toBeGreaterThan(0)
+    const mapped = new Set(Object.values(REALTIME_TABLES))
+    const unmapped = [...subscribed].filter(table => !mapped.has(table))
+    expect(unmapped).toEqual([])
+  })
+
+  it('maps only aggregate types the server actually emits', () => {
+    const emitted = new Set()
+    for (const file of walk(join(repoRoot, 'server', 'src'), ['.rs'])) {
+      const source = readFileSync(file, 'utf8')
+      for (const match of source.matchAll(/aggregate_type:\s*"([a-z_]+)"/g)) emitted.add(match[1])
+      for (const match of source.matchAll(/aggregate_type,[^)]*?'([a-z_]+)'/gs)) emitted.add(match[1])
+      for (const match of source.matchAll(/select\s+'([a-z_]+)',/g)) emitted.add(match[1])
+    }
+    expect(emitted.size).toBeGreaterThan(0)
+    const phantom = Object.keys(REALTIME_TABLES).filter(type => !emitted.has(type))
+    expect(phantom).toEqual([])
   })
 })

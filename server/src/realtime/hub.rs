@@ -10,6 +10,8 @@ use crate::auth::jwt;
 use crate::domains::hex::visibility as hex_visibility;
 
 const MAX_SESSIONS: usize = 8;
+const MAX_PRESENCE_CHANNELS: usize = 16;
+const MAX_CONNECTIONS_PER_USER: usize = 8;
 
 #[derive(Clone, Default)]
 pub struct RealtimeHub(Arc<Mutex<HubState>>);
@@ -35,6 +37,9 @@ struct TrackedPresence {
 }
 
 impl RealtimeHub {
+    /// Returns false when the account already holds its connection quota;
+    /// unbounded sockets per user would let one account multiply every
+    /// per-connection bound (presence, subscriptions, rate budget).
     pub(super) async fn register(
         &self,
         id: Uuid,
@@ -43,8 +48,17 @@ impl RealtimeHub {
         expires_at: usize,
         tx: mpsc::Sender<ServerMessage>,
         close: mpsc::Sender<&'static str>,
-    ) {
-        self.0.lock().await.clients.insert(
+    ) -> bool {
+        let mut hub = self.0.lock().await;
+        let held = hub
+            .clients
+            .values()
+            .filter(|client| client.user_id == user_id)
+            .count();
+        if held >= MAX_CONNECTIONS_PER_USER {
+            return false;
+        }
+        hub.clients.insert(
             id,
             Client {
                 user_id,
@@ -56,6 +70,7 @@ impl RealtimeHub {
                 presence: HashMap::new(),
             },
         );
+        true
     }
 
     pub(super) async fn remove(&self, id: Uuid) {
@@ -93,6 +108,10 @@ impl RealtimeHub {
         })
     }
 
+    // A reauth whose subject differs is an account switch, not a refresh.
+    // Silently ignoring it would leave the socket authorized as the previous
+    // user until that token expired, so kick the connection instead; the
+    // client reconnects and authenticates as the new account.
     pub(super) async fn refresh_identity(
         &self,
         id: Uuid,
@@ -104,6 +123,9 @@ impl RealtimeHub {
             if client.user_id == user_id {
                 client.display_name = display_name;
                 client.expires_at = expires_at;
+            } else {
+                metrics::counter!("realtime_identity_switch_kicks_total").increment(1);
+                let _ = client.close.try_send("identity_changed");
             }
         }
     }
@@ -253,20 +275,29 @@ impl RealtimeHub {
         }
     }
 
+    /// Returns false when the connection is at its presence-channel quota
+    /// (each retained channel holds a payload until disconnect, so an
+    /// unbounded map is an authenticated memory leak). Missing client or
+    /// session stays a silent no-op: those are teardown races, not abuse.
     pub(super) async fn track_presence(
         &self,
         id: Uuid,
         session_id: Uuid,
         channel: String,
         mut payload: Value,
-    ) {
+    ) -> bool {
         {
             let mut hub = self.0.lock().await;
             let Some(client) = hub.clients.get_mut(&id) else {
-                return;
+                return true;
             };
             if !client.sessions.contains_key(&session_id) {
-                return;
+                return true;
+            }
+            if client.presence.len() >= MAX_PRESENCE_CHANNELS
+                && !client.presence.contains_key(&channel)
+            {
+                return false;
             }
             if let Value::Object(object) = &mut payload {
                 object.insert("user_id".into(), json!(client.user_id));
@@ -282,6 +313,7 @@ impl RealtimeHub {
             );
         }
         self.broadcast_presence(&channel).await;
+        true
     }
 
     pub(super) async fn untrack_presence(&self, id: Uuid, session_id: Uuid, channel: &str) {
@@ -772,6 +804,110 @@ mod tests {
 
         assert_eq!(slow_close_rx.recv().await, Some("slow_consumer"));
         assert!(!hub.0.lock().await.clients.contains_key(&slow_id));
+    }
+
+    #[tokio::test]
+    async fn presence_channels_are_capped_per_connection() {
+        let hub = RealtimeHub::default();
+        let connection_id = Uuid::new_v4();
+        let session_id = Uuid::new_v4();
+        let (tx, _rx) = mpsc::channel(1024);
+        let (close, _close_rx) = mpsc::channel(1);
+
+        hub.register(connection_id, Uuid::new_v4(), "P".into(), usize::MAX, tx, close)
+            .await;
+        assert!(hub.subscribe(connection_id, session_id, false).await);
+
+        for i in 0..MAX_PRESENCE_CHANNELS {
+            assert!(
+                hub.track_presence(connection_id, session_id, format!("ch:{i}"), json!({}))
+                    .await
+            );
+        }
+        assert!(
+            !hub.track_presence(connection_id, session_id, "ch:overflow".into(), json!({}))
+                .await
+        );
+        // re-tracking an existing channel still works at the cap
+        assert!(
+            hub.track_presence(connection_id, session_id, "ch:0".into(), json!({"v": 2}))
+                .await
+        );
+
+        let state = hub.0.lock().await;
+        let client = state.clients.get(&connection_id).unwrap();
+        assert_eq!(client.presence.len(), MAX_PRESENCE_CHANNELS);
+        assert!(!client.presence.contains_key("ch:overflow"));
+    }
+
+    #[tokio::test]
+    async fn connections_per_user_are_capped() {
+        let hub = RealtimeHub::default();
+        let user_id = Uuid::new_v4();
+
+        for _ in 0..MAX_CONNECTIONS_PER_USER {
+            let (tx, _rx) = mpsc::channel(8);
+            let (close, _close_rx) = mpsc::channel(1);
+            assert!(
+                hub.register(Uuid::new_v4(), user_id, "P".into(), usize::MAX, tx, close)
+                    .await
+            );
+        }
+
+        let (tx, _rx) = mpsc::channel(8);
+        let (close, _close_rx) = mpsc::channel(1);
+        assert!(
+            !hub.register(Uuid::new_v4(), user_id, "P".into(), usize::MAX, tx, close)
+                .await
+        );
+
+        // a different account is unaffected
+        let (tx, _rx) = mpsc::channel(8);
+        let (close, _close_rx) = mpsc::channel(1);
+        assert!(
+            hub.register(Uuid::new_v4(), Uuid::new_v4(), "Q".into(), usize::MAX, tx, close)
+                .await
+        );
+    }
+
+    #[tokio::test]
+    async fn subject_changing_reauth_kicks_the_connection() {
+        let hub = RealtimeHub::default();
+        let connection_id = Uuid::new_v4();
+        let original_user = Uuid::new_v4();
+        let (tx, _rx) = mpsc::channel(8);
+        let (close, mut close_rx) = mpsc::channel(1);
+
+        hub.register(connection_id, original_user, "A".into(), 100, tx, close)
+            .await;
+        hub.refresh_identity(connection_id, Uuid::new_v4(), "B".into(), 200)
+            .await;
+
+        assert_eq!(close_rx.recv().await, Some("identity_changed"));
+        let state = hub.0.lock().await;
+        let client = state.clients.get(&connection_id).unwrap();
+        assert_eq!(client.user_id, original_user);
+        assert_eq!(client.expires_at, 100);
+    }
+
+    #[tokio::test]
+    async fn same_subject_reauth_refreshes_expiry_and_name() {
+        let hub = RealtimeHub::default();
+        let connection_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let (tx, _rx) = mpsc::channel(8);
+        let (close, mut close_rx) = mpsc::channel(1);
+
+        hub.register(connection_id, user_id, "A".into(), 100, tx, close)
+            .await;
+        hub.refresh_identity(connection_id, user_id, "A2".into(), 200)
+            .await;
+
+        assert!(close_rx.try_recv().is_err());
+        let state = hub.0.lock().await;
+        let client = state.clients.get(&connection_id).unwrap();
+        assert_eq!(client.display_name, "A2");
+        assert_eq!(client.expires_at, 200);
     }
 
     #[tokio::test]

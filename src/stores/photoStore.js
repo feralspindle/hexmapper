@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { signReferencePhotoUrl, signReferencePhotoUrls } from '@/lib/referencePhotoUrl.js'
 import { useAuthStore } from '@/stores/authStore.js'
 
 const BUCKET = 'reference-photos'
@@ -42,8 +43,9 @@ export const usePhotoStore = defineStore('photo', () => {
           table: 'photo_broadcasts',
           filter: `session_id=eq.${sessionId}`,
         },
-        ({ new: row }) => {
-          const resolved = _resolveBroadcast(row)
+        async ({ new: row }) => {
+          const url = await signReferencePhotoUrl(_broadcastPath(row.photo_url))
+          const resolved = { ...row, photo_url: url }
           currentBroadcast.value = resolved
           _addToBroadcastHistory(resolved)
         },
@@ -57,13 +59,15 @@ export const usePhotoStore = defineStore('photo', () => {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
     if (error) { console.error('photoStore._loadBroadcastHistory:', error.message); return }
-    if (!session.isCurrent(generation)) return
     const seen = new Set()
-    broadcastHistory.value = (data ?? []).filter(row => {
+    const rows = (data ?? []).filter(row => {
       if (seen.has(row.photo_url)) return false
       seen.add(row.photo_url)
       return true
-    }).map(_resolveBroadcast)
+    })
+    const urlFor = await signReferencePhotoUrls(rows.map(row => _broadcastPath(row.photo_url)))
+    if (!session.isCurrent(generation)) return
+    broadcastHistory.value = rows.map(row => _resolveBroadcast(row, urlFor))
   }
 
   function _addToBroadcastHistory(row) {
@@ -80,25 +84,24 @@ export const usePhotoStore = defineStore('photo', () => {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
     if (error) { console.error('photoStore._loadPhotos:', error.message); return }
+    const rows = data ?? []
+    const urlFor = await signReferencePhotoUrls(rows.map(row => row.storage_path))
     if (!session.isCurrent(generation)) return
-    photos.value = (data ?? []).map(_withUrl)
+    photos.value = rows.map(row => ({ ...row, url: urlFor(row.storage_path) }))
   }
 
-  function _publicUrl(path) {
-    return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  // photo_broadcasts.photo_url historically stored an absolute public URL; the
+  // bucket is private now, so recover the storage path from legacy values and
+  // sign it like everything else. New broadcasts persist the relative path.
+  function _broadcastPath(stored = '') {
+    if (!stored.startsWith('http')) return stored
+    const marker = '/reference-photos/'
+    const index = stored.indexOf(marker)
+    return index === -1 ? null : decodeURIComponent(stored.slice(index + marker.length))
   }
 
-  function _withUrl(row) {
-    return { ...row, url: _publicUrl(row.storage_path) }
-  }
-
-  // photo_broadcasts.photo_url historically stored an absolute URL, which bakes the
-  // Supabase project ref into the DB and breaks when the data moves projects. New
-  // broadcasts persist the relative storage_path; resolve it to a public URL here.
-  // Legacy absolute values pass through unchanged.
-  function _resolveBroadcast(row) {
-    const stored = row.photo_url ?? ''
-    return { ...row, photo_url: stored.startsWith('http') ? stored : _publicUrl(stored) }
+  function _resolveBroadcast(row, urlFor) {
+    return { ...row, photo_url: urlFor(_broadcastPath(row.photo_url)) }
   }
 
   async function uploadPhoto(file, name) {
@@ -128,7 +131,7 @@ export const usePhotoStore = defineStore('photo', () => {
         storage_path: storagePath,
       })
 
-      const newPhoto = _withUrl(data)
+      const newPhoto = { ...data, url: await signReferencePhotoUrl(data.storage_path) }
       photos.value = [newPhoto, ...photos.value]
       return newPhoto
     } finally {

@@ -25,6 +25,7 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
   const showHexMarkers = ref(_cached?.showHexMarkers ?? true)
   const showDungeonItems = ref(_cached?.showDungeonItems ?? true)
 
+  const authStore = useAuthStore()
   let _loaded = false
   let _pendingSave = false
 
@@ -34,22 +35,41 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
              showHexMarkers: showHexMarkers.value, showDungeonItems: showDungeonItems.value }
   }
 
+  function _reset() {
+    mapStyle.value = 'classic'
+    density.value = 'regular'
+    palette.value = 'candle'
+    iconStyle.value = 'filled'
+    panelLayout.value = 'right'
+    showCursors.value = true
+    showHexMarkers.value = true
+    showDungeonItems.value = true
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* */ }
+  }
+
+  // a pending save or in-flight load from account A must never land on
+  // account B - cancel timers, drop loaded state, and reset the values (and
+  // the shared localStorage paint cache) whenever the account changes
+  watch(() => authStore.user?.id, (id, previous) => {
+    if (id === previous) return
+    clearTimeout(_saveTimer)
+    _pendingSave = false
+    _loaded = false
+    if (previous) _reset()
+    if (id) load()
+  })
+
   async function load() {
-    const authStore = useAuthStore()
-    if (!authStore.user?.id) {
-      const stop = watch(() => authStore.user?.id, (id) => {
-        if (!id) return
-        stop()
-        load()
-      })
-      return
-    }
+    const userId = authStore.user?.id
+    if (!userId) return
 
     const { data, error } = await supabase
       .from('user_preferences')
       .select('*')
-      .eq('user_id', authStore.user.id)
+      .eq('user_id', userId)
       .maybeSingle()
+
+    if (authStore.user?.id !== userId) return
 
     if (error) {
       console.error('userPrefsStore.load:', error.message)
@@ -74,12 +94,12 @@ export const useUserPrefsStore = defineStore('userPrefs', () => {
   let _saveTimer = null
   function _scheduleSave() {
     clearTimeout(_saveTimer)
-    _saveTimer = setTimeout(_save, 600)
+    const userId = authStore.user?.id
+    _saveTimer = setTimeout(() => _save(userId), 600)
   }
 
-  async function _save() {
-    const authStore = useAuthStore()
-    if (!authStore.user?.id) return
+  async function _save(userId) {
+    if (!userId || authStore.user?.id !== userId) return
     if (!_loaded) { _pendingSave = true; return }
     try {
       await apiClient.put('/user-preferences', {

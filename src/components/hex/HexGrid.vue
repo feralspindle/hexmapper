@@ -314,17 +314,67 @@ const gridRows = computed(() => {
     return props.mapGridRows ?? DEFAULT_GRID_ROWS;
 });
 
+// the viewport mapped into grid space (the coordinate system hexToPixel
+// yields): undo pan/zoom, the grid offset, and (image mode) the grid
+// rotation, then take the bounding box with an overscan margin so cells
+// mount just before their edge scrolls in. without this every cell of the
+// logical grid rendered - 3,600 HexCell components on the default map,
+// 22,500 at the max grid size - and pan/zoom patched all of them per frame.
+const OVERSCAN_HEXES = 2;
+
+const gridViewport = computed(() => {
+    let points = [
+        { sx: 0, sy: 0 },
+        { sx: svgWidth.value, sy: 0 },
+        { sx: 0, sy: svgHeight.value },
+        { sx: svgWidth.value, sy: svgHeight.value },
+    ].map(({ sx, sy }) => ({
+        x: (sx - pan.value.x) / zoom.value - localGridOffsetX.value,
+        y: (sy - pan.value.y) / zoom.value - localGridOffsetY.value,
+    }));
+    if (props.imageMode && props.mapGridRotation) {
+        const { cx, cy } = _pivot.value;
+        const angle = (-props.mapGridRotation * Math.PI) / 180;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        points = points.map(({ x, y }) => ({
+            x: cx + (x - cx) * cos - (y - cy) * sin,
+            y: cy + (x - cx) * sin + (y - cy) * cos,
+        }));
+    }
+    const h = hexHProp.value ?? hexHeight(hexSize.value);
+    const marginX = (OVERSCAN_HEXES + 1) * hexSize.value * 1.5;
+    const marginY = (OVERSCAN_HEXES + 1) * h;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    return {
+        minX: Math.min(...xs) - marginX,
+        maxX: Math.max(...xs) + marginX,
+        minY: Math.min(...ys) - marginY,
+        maxY: Math.max(...ys) + marginY,
+    };
+});
+
 const visibleCoords = computed(() => {
     const cols = gridCols.value;
     const rows = gridRows.value;
+    const size = hexSize.value;
+    const hexH = hexHProp.value;
+    const view = gridViewport.value;
     const coords = [];
+    const pushVisible = (q, r) => {
+        const { x, y } = hexToPixel(q, r, size, hexH);
+        if (x >= view.minX && x <= view.maxX && y >= view.minY && y <= view.maxY) {
+            coords.push({ q, r });
+        }
+    };
     if (props.imageMode && imageCoverCols.value > 0) {
         const leftBuf = Math.floor((cols - imageCoverCols.value) / 2);
         const topBuf = Math.floor((rows - imageCoverRows.value) / 2);
         for (let q = -leftBuf; q < cols - leftBuf; q++) {
             const qOffset = Math.floor(q / 2);
             for (let r = -topBuf - qOffset; r < rows - topBuf - qOffset; r++) {
-                coords.push({ q, r });
+                pushVisible(q, r);
             }
         }
         return coords;
@@ -336,7 +386,7 @@ const visibleCoords = computed(() => {
     for (let q = qStart; q < cols + qStart; q++) {
         const qOffset = Math.floor(q / 2);
         for (let r = -rBuffer - qOffset; r < rows - rBuffer - qOffset; r++) {
-            coords.push({ q, r });
+            pushVisible(q, r);
         }
     }
     return coords;

@@ -261,6 +261,26 @@ describe('RustRealtime connection lifecycle', () => {
     expect(socket.sent).toContainEqual({ type: 'reauthenticate', token: 'token-2' })
   })
 
+  test('sign-out closes the socket instead of leaving the old identity live', async () => {
+    const { realtime, channel, socket } = await connectedRealtime()
+    for (const cb of authState.authCallbacks) cb('SIGNED_IN', { access_token: 'token-1', user: { id: 'user-a' } })
+    for (const cb of authState.authCallbacks) cb('SIGNED_OUT', null)
+
+    expect(socket.readyState).toBe(3)
+    realtime.removeChannel(channel)
+  })
+
+  test('an account switch closes the socket rather than reauthenticating across users', async () => {
+    const { realtime, channel, socket } = await connectedRealtime()
+    for (const cb of authState.authCallbacks) cb('SIGNED_IN', { access_token: 'token-a', user: { id: 'user-a' } })
+    const sentBefore = socket.sent.length
+    for (const cb of authState.authCallbacks) cb('SIGNED_IN', { access_token: 'token-b', user: { id: 'user-b' } })
+
+    expect(socket.readyState).toBe(3)
+    expect(socket.sent.slice(sentBefore)).toEqual([])
+    realtime.removeChannel(channel)
+  })
+
   test('heartbeat server time drives token refresh, so a slow local clock cannot delay it', async () => {
     const { socket } = await connectedRealtime()
     const { supabase } = await import('@/lib/supabase')

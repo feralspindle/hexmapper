@@ -74,7 +74,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { useRoute } from 'vue-router'
@@ -122,13 +122,34 @@ async function handleUpload(file) {
   }
 }
 
+// updateDungeon writes to whatever dungeon the store holds when it runs, so
+// a timer surviving a dungeon switch would land the patch on the wrong one -
+// remember the target, fire only while it still matches, and flush a pending
+// patch on unmount instead of dropping the last nudge
+let _pendingPatch = null
+
+function _flushPendingPatch() {
+  const pending = _pendingPatch
+  _pendingPatch = null
+  if (pending && dungeonStore.dungeon?.id === pending.dungeonId) {
+    dungeonStore.updateDungeon(pending.patch)
+  }
+}
+
+function _schedulePatch(patch) {
+  const dungeonId = dungeonStore.dungeon?.id
+  const carried = _pendingPatch?.dungeonId === dungeonId ? _pendingPatch.patch : {}
+  _pendingPatch = { dungeonId, patch: { ...carried, ...patch } }
+  return setTimeout(_flushPendingPatch, 250)
+}
+
 function saveRotation(value, immediate) {
   dungeonStore.applyDungeonLocalPatch({ mapImageRotation: value })
   if (immediate) {
     dungeonStore.updateDungeon({ mapImageRotation: value })
   } else {
     clearTimeout(_rotTimer)
-    _rotTimer = setTimeout(() => dungeonStore.updateDungeon({ mapImageRotation: value }), 250)
+    _rotTimer = _schedulePatch({ mapImageRotation: value })
   }
 }
 
@@ -138,8 +159,14 @@ function saveScaleDebounced() {
   const scale = pct / 100
   dungeonStore.applyDungeonLocalPatch({ mapImageScale: scale })
   clearTimeout(_scaleTimer)
-  _scaleTimer = setTimeout(() => dungeonStore.updateDungeon({ mapImageScale: scale }), 250)
+  _scaleTimer = _schedulePatch({ mapImageScale: scale })
 }
+
+onUnmounted(() => {
+  clearTimeout(_rotTimer)
+  clearTimeout(_scaleTimer)
+  _flushPendingPatch()
+})
 
 async function toggleLock() {
   const locked = !isLocked.value
