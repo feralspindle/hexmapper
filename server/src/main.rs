@@ -67,6 +67,7 @@ async fn main() {
         .merge(domains::calendar::router())
         .merge(domains::vault::router())
         .merge(domains::character::router())
+        .merge(domains::statblock::router())
         .merge(domains::map::router())
         .merge(domains::hex::router())
         .merge(domains::session::router())

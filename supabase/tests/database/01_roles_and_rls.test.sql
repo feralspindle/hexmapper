@@ -136,6 +136,9 @@ values ('10000000-0000-0000-0000-000000000001', 'Session one', 'Notes');
 insert into public.light_sources (session_id, created_by, name)
 values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Torch');
 
+insert into public.stat_blocks (session_id, created_by, kind, data)
+values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'monster', '{"name":"Goblin"}');
+
 insert into public.journal_entries (session_id, author_user_id, author_name, body)
 values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'We set out at dawn.');
 

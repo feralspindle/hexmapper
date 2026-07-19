@@ -5,13 +5,15 @@ import { useDiceStore } from '@/stores/diceStore.js'
 import { useDiceStatsStore } from '@/stores/diceStatsStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useOracleStore } from '@/stores/oracleStore.js'
+import { useStatBlockStore } from '@/stores/statBlockStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { usePhotoStore } from '@/stores/photoStore.js'
 
 // the session-wide service wiring both map surfaces (hex view, dungeon view)
 // do identically: prefs + join, the dice/chat/oracle/characters/presence/photos
-// init block, the play-mode -> oracle sync, and cleanup of the shared stores.
+// init block, the play-mode store sync (oracle, stat blocks), and cleanup of
+// the shared stores.
 // surface-specific stores (hexStore, dungeonStore, activityStore) and
 // presence-vs-full session cleanup stay in the views.
 // alwaysOracle keeps the oracle store hydrated in every play mode (the dungeon
@@ -23,19 +25,25 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
   const diceStatsStore = useDiceStatsStore()
   const chatStore = useChatStore()
   const oracleStore = useOracleStore()
+  const statBlockStore = useStatBlockStore()
   const characterStore = useCharacterStore()
   const prefs = useUserPrefsStore()
   const photoStore = usePhotoStore()
 
-  function syncOracleStore() {
+  function syncPlayModeStores() {
     if (alwaysOracle || sessionStore.playMode === 'gm_less') {
       oracleStore.init(sessionId)
     } else {
       oracleStore.cleanup()
     }
+    if (sessionStore.playMode === 'gm_less') {
+      statBlockStore.init(sessionId)
+    } else {
+      statBlockStore.cleanup()
+    }
   }
 
-  watch(() => sessionStore.playMode, syncOracleStore)
+  watch(() => sessionStore.playMode, syncPlayModeStores)
 
   async function joinSession() {
     await prefs.load()
@@ -48,7 +56,7 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
     diceStore.init(sessionId)
     diceStatsStore.init(sessionId)
     chatStore.init(sessionId)
-    syncOracleStore()
+    syncPlayModeStores()
     characterStore.loadAll(sessionId)
     sessionStore.initPresence(sessionId)
     photoStore.init(sessionId)
@@ -58,6 +66,7 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
     characterStore.cleanup()
     chatStore.cleanup()
     oracleStore.cleanup()
+    statBlockStore.cleanup()
     mapStore.cleanup()
   }
 
