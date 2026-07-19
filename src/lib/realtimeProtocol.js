@@ -1,6 +1,7 @@
 export const REALTIME_TABLES = {
   character: 'characters',
   chat_message: 'chat_messages',
+  compendium_entry: 'compendium_entries',
   dice_roll: 'dice_rolls',
   dice_roll_annotation: 'dice_roll_annotations',
   dungeon: 'dungeons',
@@ -33,6 +34,7 @@ export const REALTIME_TABLES = {
   reference_photo: 'reference_photos',
   session: 'sessions',
   session_member: 'session_members',
+  stat_block: 'stat_blocks',
 }
 
 export function realtimeOperation(event) {

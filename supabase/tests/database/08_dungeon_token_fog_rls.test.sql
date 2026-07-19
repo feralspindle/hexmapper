@@ -47,6 +47,25 @@ insert into public.dungeon_tokens (id, session_id, dungeon_id, character_id, x, 
   -- fog-less dungeon: no fog rows exist and none are needed
   ('98000000-0000-0000-0000-000000000003', '18000000-0000-0000-0000-000000000001', '48000000-0000-0000-0000-000000000002', '88000000-0000-0000-0000-000000000003', 9, 9);
 
+-- monster tokens follow the same fog rule as character tokens
+insert into public.stat_blocks (id, session_id, created_by, kind, data) values
+  ('a8000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000081', 'monster', '{"name":"Goblin"}'),
+  ('a8000000-0000-0000-0000-000000000002', '18000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000081', 'monster', '{"name":"Ogre"}');
+
+insert into public.dungeon_tokens (id, session_id, dungeon_id, stat_block_id, x, y) values
+  -- monster on revealed ground: players see it
+  ('98000000-0000-0000-0000-000000000004', '18000000-0000-0000-0000-000000000001', '48000000-0000-0000-0000-000000000001', 'a8000000-0000-0000-0000-000000000001', 0, 0),
+  -- monster ambush staged in fog
+  ('98000000-0000-0000-0000-000000000005', '18000000-0000-0000-0000-000000000001', '48000000-0000-0000-0000-000000000001', 'a8000000-0000-0000-0000-000000000002', 6, 6);
+
+select throws_ok(
+  $sql$insert into public.dungeon_tokens (session_id, dungeon_id, x, y)
+       values ('18000000-0000-0000-0000-000000000001', '48000000-0000-0000-0000-000000000001', 1, 1)$sql$,
+  '23514',
+  NULL,
+  'a token must link a character or a stat block'
+);
+
 -- the player
 set local role authenticated;
 select set_config(
@@ -57,7 +76,7 @@ select set_config(
 
 select is(
   (select count(*) from dungeon_tokens where dungeon_id = '48000000-0000-0000-0000-000000000001'),
-  1::bigint,
+  2::bigint,
   'player sees only tokens on revealed ground in a fogged dungeon'
 );
 
@@ -66,6 +85,19 @@ select is(
     where id = '98000000-0000-0000-0000-000000000002' or x = 5 or y = 5),
   0::bigint,
   'the fog-staged token is unreachable by id or position for the player'
+);
+
+select is(
+  (select count(*) from dungeon_tokens
+    where id = '98000000-0000-0000-0000-000000000005' or x = 6 or y = 6),
+  0::bigint,
+  'the fog-staged monster token is unreachable by id or position for the player'
+);
+
+select is(
+  (select count(*) from dungeon_tokens where stat_block_id is not null),
+  1::bigint,
+  'player sees only the monster token on revealed ground'
 );
 
 select is(
@@ -83,7 +115,7 @@ select set_config(
 
 select is(
   (select count(*) from dungeon_tokens where dungeon_id = '48000000-0000-0000-0000-000000000001'),
-  2::bigint,
+  4::bigint,
   'gm reads staged tokens through fog'
 );
 
@@ -101,7 +133,7 @@ select set_config(
 
 select is(
   (select count(*) from dungeon_tokens where dungeon_id = '48000000-0000-0000-0000-000000000001'),
-  2::bigint,
+  4::bigint,
   'reveal-all makes staged tokens readable again'
 );
 

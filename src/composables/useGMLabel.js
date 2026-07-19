@@ -7,7 +7,7 @@ export function useGMLabel() {
 
   function gmName(userId, displayName, characterId = null) {
     if (!displayName) return displayName
-    if (userId && userId === sessionStore.sessionOwnerId) {
+    if (sessionStore.hasGM && userId && userId === sessionStore.sessionOwnerId) {
       if (characterId) {
         const char = characterStore.characters.find(c => c.id === characterId)
         if (char?.data?.name) return `${char.data.name} (GM NPC)`

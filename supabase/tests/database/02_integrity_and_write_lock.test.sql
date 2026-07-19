@@ -200,6 +200,17 @@ select throws_ok(
   'token rejects a character from another session'
 );
 
+insert into public.stat_blocks (id, session_id, created_by, kind)
+values ('c1000000-0000-0000-0000-000000000001', '11000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000011', 'monster');
+
+select throws_ok(
+  $sql$insert into public.dungeon_tokens (session_id, dungeon_id, stat_block_id, x, y)
+       values ('11000000-0000-0000-0000-000000000001', '41000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000001', 0, 0)$sql$,
+  '23503',
+  NULL,
+  'token rejects a stat block from another session'
+);
+
 select throws_ok(
   $sql$insert into public.dungeon_icons (session_id, dungeon_id, type, x, y)
        values ('11000000-0000-0000-0000-000000000001', '41000000-0000-0000-0000-000000000002', 'monster', 0, 0)$sql$,

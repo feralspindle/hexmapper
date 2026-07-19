@@ -619,6 +619,34 @@ describe('dungeonStore', () => {
       expect(store.tokens.size).toBe(1)
     })
 
+    test('placeStatBlockToken posts the stat block link', async () => {
+      kit.api['post /dungeon-tokens'] = body => token('monster-token', { character_id: null, ...body })
+      const store = await loadedStore()
+
+      await store.placeStatBlockToken('sb-1', 4, 5)
+
+      expect(store.tokens.get('monster-token')).toMatchObject({ stat_block_id: 'sb-1' })
+      expect(kit.apiClient.post).toHaveBeenCalledWith(
+        '/dungeon-tokens',
+        expect.objectContaining({ dungeon_id: 'd1', stat_block_id: 'sb-1', x: 4, y: 5 }),
+        'place_token',
+      )
+    })
+
+    test('placing a stat block that already has a token moves it instead', async () => {
+      kit.responses.dungeon_tokens = {
+        data: [token('t1', { character_id: null, stat_block_id: 'sb-1' })],
+        error: null,
+      }
+      const store = await loadedStore()
+
+      await store.placeStatBlockToken('sb-1', 8, 9)
+
+      expect(kit.apiClient.post).not.toHaveBeenCalledWith('/dungeon-tokens', expect.anything(), 'place_token')
+      expect(store.tokens.get('t1')).toMatchObject({ x: 8, y: 9 })
+      expect(store.tokens.size).toBe(1)
+    })
+
     test('a failed move rolls the token back', async () => {
       kit.responses.dungeon_tokens = { data: [token('t1')], error: null }
       kit.api['patch /dungeon-tokens/t1'] = () => { throw new kit.ApiError('cell is hidden by fog', 400) }

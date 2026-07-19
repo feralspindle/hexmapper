@@ -131,40 +131,76 @@ pub async fn install_pack(
     // block a double install: pack table names colliding with existing session
     // tables is the honest signal (installed copies are user-editable, so
     // there's nothing sturdier to key on)
-    let names: Vec<String> = pack.tables.iter().map(|t| t.name.clone()).collect();
-    let colliding: Vec<String> = sqlx::query_scalar(
-        "select name from oracle_tables where session_id = $1 and name = any($2)",
-    )
-    .bind(req.session_id)
-    .bind(&names)
-    .fetch_all(state.pool())
-    .await?;
+    let colliding = colliding_tables(&state, req.session_id, &pack.tables).await?;
     if !colliding.is_empty() {
+        let names: Vec<String> = colliding.into_iter().map(|(_, name)| name).collect();
         return Err(AppError::BadRequest(format!(
             "pack tables already exist in this session: {}",
-            colliding.join(", ")
+            names.join(", ")
         )));
     }
 
+    let installed_rows =
+        install_table_bundle(&state, req.session_id, &pack.tables, &[], &auth.metadata()).await?;
+
+    Ok(Json(InstallPackResponse {
+        installed_tables: pack.tables.len(),
+        installed_rows,
+    }))
+}
+
+/// Existing session tables whose names collide with the bundle's, as (id, name).
+pub(crate) async fn colliding_tables(
+    state: &AppState,
+    session_id: Uuid,
+    tables: &[PackTable],
+) -> Result<Vec<(Uuid, String)>, AppError> {
+    let names: Vec<String> = tables.iter().map(|t| t.name.clone()).collect();
+    sqlx::query_as("select id, name from oracle_tables where session_id = $1 and name = any($2)")
+        .bind(session_id)
+        .bind(&names)
+        .fetch_all(state.pool())
+        .await
+        .map_err(Into::into)
+}
+
+/// Shared by pack install and the external import endpoint: emits the created
+/// events for a whole bundle in one transaction, optionally deleting existing
+/// tables first (replace-on-import). Returns the row count installed.
+pub(crate) async fn install_table_bundle(
+    state: &AppState,
+    session_id: Uuid,
+    tables: &[PackTable],
+    delete_first: &[Uuid],
+    metadata: &serde_json::Value,
+) -> Result<usize, AppError> {
     // key -> id up front so rows can chain to tables created later in the loop
-    let ids: HashMap<&str, Uuid> = pack
-        .tables
+    let ids: HashMap<&str, Uuid> = tables
         .iter()
         .map(|table| (table.key.as_str(), Uuid::new_v4()))
         .collect();
 
-    let mut installed_rows = 0usize;
-    let metadata = auth.metadata();
-
     retry_tx!(state.pool(), |tx| {
+        for table_id in delete_first {
+            let event = NewEvent {
+                aggregate_type: "oracle_table",
+                aggregate_id: *table_id,
+                session_id: Some(session_id),
+                event_type: "oracle_table.deleted",
+                payload: json!({}),
+                metadata: metadata.clone(),
+            };
+            projection::append_table_deleted(&mut tx, &event).await?;
+        }
+
         // two passes: rows can chain forward to tables later in the pack, and
         // the subtable fk is not deferrable, so every table must exist before
         // the first row insert
-        for table in &pack.tables {
+        for table in tables {
             let event = NewEvent {
                 aggregate_type: "oracle_table",
                 aggregate_id: ids[table.key.as_str()],
-                session_id: Some(req.session_id),
+                session_id: Some(session_id),
                 event_type: "oracle_table.created",
                 payload: json!({
                     "name": table.name,
@@ -177,13 +213,13 @@ pub async fn install_pack(
             projection::append_table_created(&mut tx, &event).await?;
         }
 
-        for table in &pack.tables {
+        for table in tables {
             for (position, row) in table.rows.iter().enumerate() {
                 let subtable_id = row.chain.as_deref().map(|key| ids[key]);
                 let event = NewEvent {
                     aggregate_type: "oracle_table_row",
                     aggregate_id: Uuid::new_v4(),
-                    session_id: Some(req.session_id),
+                    session_id: Some(session_id),
                     event_type: "oracle_table_row.created",
                     payload: json!({
                         "table_id": ids[table.key.as_str()],
@@ -203,21 +239,20 @@ pub async fn install_pack(
         Ok(())
     })?;
 
-    for table in &pack.tables {
-        installed_rows += table.rows.len();
-    }
-
-    Ok(Json(InstallPackResponse {
-        installed_tables: pack.tables.len(),
-        installed_rows,
-    }))
+    Ok(tables.iter().map(|t| t.rows.len()).sum())
 }
 
 /// integrity check shared by the unit tests: chain keys resolve, keys are
 /// unique, modes are sane, range tables have complete rows
 pub fn validate_pack(pack: &Pack) -> Result<(), String> {
+    validate_tables(&pack.tables)
+}
+
+/// bundle-level checks shared with the import endpoint, which accepts the same
+/// table shape from outside
+pub(crate) fn validate_tables(tables: &[PackTable]) -> Result<(), String> {
     let mut keys = HashSet::new();
-    for table in &pack.tables {
+    for table in tables {
         if !keys.insert(table.key.as_str()) {
             return Err(format!("duplicate table key {}", table.key));
         }
@@ -228,8 +263,8 @@ pub fn validate_pack(pack: &Pack) -> Result<(), String> {
             return Err(format!("table {} has no rows", table.key));
         }
     }
-    let keys: HashSet<&str> = pack.tables.iter().map(|t| t.key.as_str()).collect();
-    for table in &pack.tables {
+    let keys: HashSet<&str> = tables.iter().map(|t| t.key.as_str()).collect();
+    for table in tables {
         for row in &table.rows {
             if row.weight <= 0 {
                 return Err(format!("table {} row has non-positive weight", table.key));

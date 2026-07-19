@@ -22,6 +22,11 @@ export async function openOracle(page) {
   await page.getByTestId('oracle-roll-yes-no').waitFor()
 }
 
+export async function openStatBlocks(page) {
+  await page.getByRole('button', { name: 'Codex' }).click()
+  await page.getByTestId('statblock-add-name').waitFor()
+}
+
 export async function loginByEmail(page, account) {
   await page.goto('/')
   await page.getByTestId('auth-tab-email').click()

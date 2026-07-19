@@ -856,6 +856,13 @@ export const useD = defineStore('dungeon', () => {
     return null
   }
 
+  function tokenForStatBlock(statBlockId) {
+    for (const token of tokens.value.values()) {
+      if (token.stat_block_id === statBlockId) return token
+    }
+    return null
+  }
+
   // fog verdict only - the GM exemption is the caller's call (sessionStore.isGM)
   function isCellPlaceable(cellX, cellY) {
     if (!fogMode.value || fogRevealAll.value) return true
@@ -864,6 +871,10 @@ export const useD = defineStore('dungeon', () => {
 
   function requestTokenDrop(characterId) {
     tokenDropRequest.value = { characterId, requestId: crypto.randomUUID() }
+  }
+
+  function requestStatBlockTokenDrop(statBlockId) {
+    tokenDropRequest.value = { statBlockId, requestId: crypto.randomUUID() }
   }
 
   async function placeToken(characterId, x, y) {
@@ -894,6 +905,38 @@ export const useD = defineStore('dungeon', () => {
     } catch (error) {
       tokens.value.delete(tempId)
       console.error('placeToken error:', error instanceof ApiError ? error.message : error)
+    }
+  }
+
+  async function placeStatBlockToken(statBlockId, x, y) {
+    if (!dungeon.value?.id) return
+    const existing = tokenForStatBlock(statBlockId)
+    if (existing) return moveToken(existing.id, { x, y })
+
+    const tempId = crypto.randomUUID()
+    const optimistic = {
+      id: tempId,
+      dungeon_id: dungeon.value.id,
+      session_id: dungeon.value.session_id,
+      character_id: null,
+      stat_block_id: statBlockId,
+      x, y,
+      source_client: CLIENT_ID,
+    }
+    tokens.value.set(tempId, optimistic)
+    try {
+      const data = await apiClient.post('/dungeon-tokens', {
+        dungeon_id: dungeon.value.id,
+        stat_block_id: statBlockId,
+        x, y,
+        source_client: CLIENT_ID,
+      }, 'place_token')
+      tokens.value.delete(tempId)
+      if (!tokens.value.has(data.id)) tokens.value.set(data.id, data)
+      useActivityStore().record('placed token', '')
+    } catch (error) {
+      tokens.value.delete(tempId)
+      console.error('placeStatBlockToken error:', error instanceof ApiError ? error.message : error)
     }
   }
 
@@ -1113,9 +1156,12 @@ export const useD = defineStore('dungeon', () => {
     isCellRevealed,
     isCellPlaceable,
     tokenForCharacter,
+    tokenForStatBlock,
     tokenDropRequest,
     requestTokenDrop,
+    requestStatBlockTokenDrop,
     placeToken,
+    placeStatBlockToken,
     moveToken,
     removeToken,
     iconsAtCell,
