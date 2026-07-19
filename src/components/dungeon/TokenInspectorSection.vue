@@ -1,5 +1,53 @@
 <template>
-  <div v-if="character" style="display:flex;flex-direction:column;gap:12px" data-testid="token-inspector">
+  <div v-if="statBlock" style="display:flex;flex-direction:column;gap:12px" data-testid="token-inspector-statblock">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="ds-token-portrait" :style="{ borderColor: statBlockColor }">
+        <span>{{ (statBlock.data?.name || '?').slice(0, 1).toUpperCase() }}</span>
+      </div>
+      <div style="min-width:0">
+        <div style="font-family:var(--font-display);font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          {{ statBlock.data?.name || 'Unnamed' }}
+        </div>
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-mute);letter-spacing:.04em">
+          {{ statBlock.kind }} · AC {{ statBlock.data?.ac ?? '?' }} · LV {{ statBlock.data?.level ?? '?' }}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label class="ds-field-label">Hit Points</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="ds-btn tiny" data-testid="token-hp-minus" @click="statBlockStore.adjustHp(statBlock.id, -1)">−</button>
+        <div style="flex:1">
+          <div class="ds-token-hpbar">
+            <div class="ds-token-hpbar-fill" :style="{ width: `${statBlockHpPct * 100}%`, background: statBlockHpColor }" />
+          </div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-2);text-align:center;margin-top:3px" data-testid="token-hp-readout">
+            {{ statBlock.data?.currentHp ?? 0 }} / {{ statBlock.data?.maxHp ?? 0 }}
+          </div>
+        </div>
+        <button class="ds-btn tiny" data-testid="token-hp-plus" @click="statBlockStore.adjustHp(statBlock.id, 1)">+</button>
+      </div>
+    </div>
+
+    <div v-if="statBlock.data?.attacks" class="ds-dims-readout">
+      <span style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">ATK</span>
+      <span style="font-family:var(--font-body);font-size:12px">{{ statBlock.data.attacks }}</span>
+    </div>
+    <div v-if="statBlock.data?.move" class="ds-dims-readout">
+      <span style="font-family:var(--font-zine);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute)">MV</span>
+      <span style="font-family:var(--font-body);font-size:12px">{{ statBlock.data.move }}</span>
+    </div>
+
+    <button
+      class="ds-btn tiny"
+      style="align-self:flex-start"
+      data-testid="token-remove"
+      @click="dungeonStore.removeToken(token.id)"
+    >Remove from map</button>
+  </div>
+
+  <div v-else-if="character" style="display:flex;flex-direction:column;gap:12px" data-testid="token-inspector">
 
     <div style="display:flex;align-items:center;gap:10px">
       <div class="ds-token-portrait" :style="{ borderColor: ringColor }">
@@ -99,6 +147,10 @@
     >Remove from map</button>
   </div>
 
+  <div v-else-if="token.stat_block_id" style="font-family:var(--font-body);font-style:italic;font-size:13px;color:var(--ink-mute)">
+    This token's stat block was deleted.
+  </div>
+
   <div v-else style="font-family:var(--font-body);font-style:italic;font-size:13px;color:var(--ink-mute)">
     This token's character is no longer in the party.
   </div>
@@ -108,6 +160,7 @@
 import { ref, computed } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
+import { useStatBlockStore, STAT_BLOCK_TOKEN_COLORS } from '@/stores/statBlockStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
@@ -120,6 +173,7 @@ const props = defineProps({
 
 const dungeonStore = useD()
 const characterStore = useCharacterStore()
+const statBlockStore = useStatBlockStore()
 const sessionStore = useSessionStore()
 const authStore = useAuthStore()
 
@@ -128,6 +182,22 @@ const uploadError = ref('')
 
 const character = computed(() =>
   characterStore.characters.find(c => c.id === props.token.character_id) ?? null
+)
+const statBlock = computed(() =>
+  props.token.stat_block_id
+    ? statBlockStore.blocks.find(b => b.id === props.token.stat_block_id) ?? null
+    : null
+)
+const statBlockColor = computed(() =>
+  STAT_BLOCK_TOKEN_COLORS[statBlock.value?.kind] ?? STAT_BLOCK_TOKEN_COLORS.monster
+)
+const statBlockHpPct = computed(() => {
+  const max = Number(statBlock.value?.data?.maxHp) || 0
+  const current = Number(statBlock.value?.data?.currentHp) || 0
+  return max > 0 ? Math.max(0, Math.min(1, current / max)) : 0
+})
+const statBlockHpColor = computed(() =>
+  statBlockHpPct.value > 0.5 ? '#6ebe5a' : statBlockHpPct.value > 0.25 ? '#e0a83c' : '#c83c32'
 )
 const canEdit = computed(() =>
   sessionStore.isGM || character.value?.user_id === authStore.user?.id

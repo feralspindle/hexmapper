@@ -5,6 +5,8 @@ import { apiClient, ApiError } from '@/lib/apiClient.js'
 
 export const STAT_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
 
+export const STAT_BLOCK_TOKEN_COLORS = { monster: '#c83c32', npc: '#5a8ca8' }
+
 export function blankStatBlock(name = '') {
   return {
     name,

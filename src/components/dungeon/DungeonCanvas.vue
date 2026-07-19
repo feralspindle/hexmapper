@@ -579,7 +579,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
-import { useStatBlockStore } from '@/stores/statBlockStore.js'
+import { useStatBlockStore, STAT_BLOCK_TOKEN_COLORS } from '@/stores/statBlockStore.js'
 import { useItemDrag } from '@/composables/useItemDrag.js'
 import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
@@ -1086,8 +1086,6 @@ const charactersById = computed(() =>
 const statBlocksById = computed(() =>
   new Map(statBlockStore.blocks.map(b => [b.id, b]))
 )
-
-const STAT_BLOCK_TOKEN_COLORS = { monster: '#c83c32', npc: '#5a8ca8' }
 
 // viewport-independent so panning and dragging don't rebuild it - screen
 // position is derived per frame in tokenTransform instead
