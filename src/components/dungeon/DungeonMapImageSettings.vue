@@ -31,9 +31,39 @@
       </div>
 
       <div class="dms-subsection">
-        <div class="dms-label">Image scale</div>
-        <ScaleControl v-model="scaleDraft" :min="1" :max="1000" @save="saveScaleDebounced" />
-        <p class="dms-hint">Scale the image to match the grid squares.</p>
+        <div class="dms-label-row">
+          <div class="dms-label">Image scale</div>
+          <div class="dms-unit-toggle">
+            <button
+              :class="['dms-unit-btn', scaleUnit === 'percent' ? 'active' : '']"
+              data-testid="dungeon-scale-unit-percent"
+              @click="setScaleUnit('percent')"
+            >%</button>
+            <button
+              :class="['dms-unit-btn', scaleUnit === 'pixels' ? 'active' : '']"
+              data-testid="dungeon-scale-unit-pixels"
+              @click="setScaleUnit('pixels')"
+            >px</button>
+          </div>
+        </div>
+        <ScaleControl
+          v-if="scaleUnit === 'percent'"
+          v-model="scaleDraft"
+          :min="1" :max="1000"
+          @save="saveScaleDebounced"
+        />
+        <ScaleControl
+          v-else
+          v-model="squarePxDraft"
+          :min="SQUARE_PX_MIN" :max="SQUARE_PX_MAX"
+          suffix="px" :fallback="CELL_SIZE"
+          @save="saveSquarePxDebounced"
+        />
+        <p class="dms-hint">
+          {{ scaleUnit === 'percent'
+            ? 'Scale the image to match the grid squares.'
+            : "Size of one grid square in the image's own pixels." }}
+        </p>
       </div>
 
       <div class="dms-subsection">
@@ -74,8 +104,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
+import { CELL_SIZE } from '@/composables/useDungeonDraw.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { useRoute } from 'vue-router'
 import SettingsPanel from '@/components/common/mapSettings/SettingsPanel.vue'
@@ -100,11 +131,28 @@ const uploadError = ref('')
 
 const isLocked = computed(() => dungeonStore.dungeon?.map_offset_locked ?? false)
 
-const rotDraft   = ref(dungeonStore.dungeon?.map_image_rotation ?? 0)
-const scaleDraft = ref(Math.round((dungeonStore.dungeon?.map_image_scale ?? 1) * 100))
+const SCALE_UNIT_KEY = 'dungeon_scale_unit'
+const SQUARE_PX_MIN = 2
+const SQUARE_PX_MAX = 2000
+
+const scaleUnit = ref(localStorage.getItem(SCALE_UNIT_KEY) === 'pixels' ? 'pixels' : 'percent')
+
+function setScaleUnit(unit) {
+  scaleUnit.value = unit
+  try { localStorage.setItem(SCALE_UNIT_KEY, unit) } catch {}
+}
+
+const _toSquarePx = (scale) => Math.round(CELL_SIZE / (scale || 1))
+
+const rotDraft      = ref(dungeonStore.dungeon?.map_image_rotation ?? 0)
+const scaleDraft    = ref(Math.round((dungeonStore.dungeon?.map_image_scale ?? 1) * 100))
+const squarePxDraft = ref(_toSquarePx(dungeonStore.dungeon?.map_image_scale ?? 1))
 
 watch(() => dungeonStore.dungeon?.map_image_rotation, v => { rotDraft.value = v ?? 0 })
-watch(() => dungeonStore.dungeon?.map_image_scale,    v => { scaleDraft.value = Math.round((v ?? 1) * 100) })
+watch(() => dungeonStore.dungeon?.map_image_scale, v => {
+  scaleDraft.value = Math.round((v ?? 1) * 100)
+  squarePxDraft.value = _toSquarePx(v ?? 1)
+})
 
 let _rotTimer = null
 let _scaleTimer = null
@@ -122,24 +170,60 @@ async function handleUpload(file) {
   }
 }
 
+// updateDungeon writes to whatever dungeon the store holds when it runs, so
+// a timer surviving a dungeon switch would land the patch on the wrong one -
+// remember the target, fire only while it still matches, and flush a pending
+// patch on unmount instead of dropping the last nudge
+let _pendingPatch = null
+
+function _flushPendingPatch() {
+  const pending = _pendingPatch
+  _pendingPatch = null
+  if (pending && dungeonStore.dungeon?.id === pending.dungeonId) {
+    dungeonStore.updateDungeon(pending.patch)
+  }
+}
+
+function _schedulePatch(patch) {
+  const dungeonId = dungeonStore.dungeon?.id
+  const carried = _pendingPatch?.dungeonId === dungeonId ? _pendingPatch.patch : {}
+  _pendingPatch = { dungeonId, patch: { ...carried, ...patch } }
+  return setTimeout(_flushPendingPatch, 250)
+}
+
 function saveRotation(value, immediate) {
   dungeonStore.applyDungeonLocalPatch({ mapImageRotation: value })
   if (immediate) {
     dungeonStore.updateDungeon({ mapImageRotation: value })
   } else {
     clearTimeout(_rotTimer)
-    _rotTimer = setTimeout(() => dungeonStore.updateDungeon({ mapImageRotation: value }), 250)
+    _rotTimer = _schedulePatch({ mapImageRotation: value })
   }
 }
 
 function saveScaleDebounced() {
   const pct = Math.max(1, Math.min(1000, scaleDraft.value || 100))
   scaleDraft.value = pct
-  const scale = pct / 100
+  _commitScale(pct / 100)
+}
+
+function saveSquarePxDebounced() {
+  const px = Math.max(SQUARE_PX_MIN, Math.min(SQUARE_PX_MAX, squarePxDraft.value || CELL_SIZE))
+  squarePxDraft.value = px
+  _commitScale(CELL_SIZE / px)
+}
+
+function _commitScale(scale) {
   dungeonStore.applyDungeonLocalPatch({ mapImageScale: scale })
   clearTimeout(_scaleTimer)
-  _scaleTimer = setTimeout(() => dungeonStore.updateDungeon({ mapImageScale: scale }), 250)
+  _scaleTimer = _schedulePatch({ mapImageScale: scale })
 }
+
+onUnmounted(() => {
+  clearTimeout(_rotTimer)
+  clearTimeout(_scaleTimer)
+  _flushPendingPatch()
+})
 
 async function toggleLock() {
   const locked = !isLocked.value
@@ -185,6 +269,37 @@ async function hideAll() {
   text-transform: uppercase;
   margin-bottom: 6px;
 }
+
+.dms-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dms-label-row .dms-label { margin-bottom: 0; }
+
+.dms-unit-toggle {
+  display: flex;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.dms-unit-btn {
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .03em;
+  color: var(--ink-mute);
+  background: var(--paper-2);
+  border: none;
+  border-right: 1px solid var(--rule-strong);
+  transition: background .15s, color .15s;
+}
+.dms-unit-btn:last-child { border-right: none; }
+.dms-unit-btn:hover { background: var(--paper-3); color: var(--ink-2); }
+.dms-unit-btn.active { background: var(--ink); color: var(--paper); }
 
 .dms-hint {
   font-family: var(--font-mono);

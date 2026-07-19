@@ -56,6 +56,36 @@ describe('sessionStore', () => {
     expect(store.error).toBeNull()
   })
 
+  test('a join that resolves after navigation cannot clobber the newer session', async () => {
+    let resolveSlow
+    kit.api['post /sessions/slow/join'] = () => new Promise(resolve => { resolveSlow = resolve })
+    kit.api['post /sessions/sess-1/join'] = sessionRow()
+    const store = useSessionStore()
+
+    const slowJoin = store.joinSession('slow')
+    await store.joinSession('sess-1')
+    resolveSlow(sessionRow({ id: 'slow', name: 'Stale Keep' }))
+    await slowJoin
+
+    expect(store.sessionId).toBe('sess-1')
+    expect(store.sessionName).toBe('The Sunken Keep')
+    expect(kit.channels.filter(c => !c.removed).map(c => c.name)).toEqual(['session:sess-1:config'])
+  })
+
+  test('a join that resolves after cleanup cannot reopen the old channel', async () => {
+    let resolveSlow
+    kit.api['post /sessions/slow/join'] = () => new Promise(resolve => { resolveSlow = resolve })
+    const store = useSessionStore()
+
+    const slowJoin = store.joinSession('slow')
+    store.cleanup()
+    resolveSlow(sessionRow({ id: 'slow' }))
+    await slowJoin
+
+    expect(store.sessionId).toBeNull()
+    expect(kit.channels.filter(c => !c.removed)).toEqual([])
+  })
+
   test('a failed join surfaces a friendly error', async () => {
     kit.api['post /sessions/nope/join'] = new kit.ApiError('404', 404)
     const store = useSessionStore()

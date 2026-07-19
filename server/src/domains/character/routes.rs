@@ -10,5 +10,13 @@ pub fn router() -> Router<AppState> {
         .route("/characters/clear-initiative", post(handlers::clear_initiative))
         .route("/characters/{id}", patch(handlers::update_character_data))
         .route("/characters/{id}", delete(handlers::delete_character))
+        .route(
+            "/characters/{id}/adjust-currency",
+            post(handlers::adjust_character_currency),
+        )
+        .route(
+            "/characters/{id}/grant-gear",
+            post(handlers::grant_character_gear),
+        )
         .route("/character-sheet-log", post(handlers::record_sheet_log))
 }

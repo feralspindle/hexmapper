@@ -34,6 +34,10 @@ export const useSessionStore = defineStore('session', () => {
     return !!authStore.user?.id && authStore.user.id === sessionOwnerId.value
   })
 
+  // gm_less sessions have no GM at all - the owner is just another player,
+  // so anything that treats the owner's characters as NPCs must check this
+  const hasGM = computed(() => playMode.value === 'gm')
+
   const userSessions   = ref([])
   const joinedSessions = ref([])
   const sessionsLoading = ref(false)
@@ -164,15 +168,20 @@ export const useSessionStore = defineStore('session', () => {
     return true
   }
 
+  // begin() up front so a join that resolves after navigation (cleanup or a
+  // newer join has moved the generation on) cannot apply a stale session row
+  // or reopen the old channel over the new route's state
   async function joinSession(id) {
     loading.value = true
     error.value = null
+    const generation = configChannel.begin(id)
     try {
       const data = await apiClient.post(`/sessions/${id}/join`, undefined, 'join_session')
+      if (!configChannel.isCurrent(generation)) return
       _applySessionRow(data)
       _subscribeToSession(id)
     } catch {
-      error.value = 'Session not found. Check the ID and try again.'
+      if (configChannel.isCurrent(generation)) error.value = 'Session not found. Check the ID and try again.'
     } finally {
       loading.value = false
     }
@@ -409,6 +418,7 @@ export const useSessionStore = defineStore('session', () => {
     resetCrawlRound,
     setCrawlCheckEvery,
     isGM,
+    hasGM,
     loading,
     error,
     userSessions,

@@ -177,14 +177,16 @@ pub async fn character_owner_session(pool: &PgPool, id: Uuid) -> Result<Option<(
 }
 
 /// Returns (character_owner_user_id, session_id, dungeon_id) for a dungeon_token, or
-/// None if it does not exist. Enforces the `character owner or session GM` move/delete
-/// policy; the dungeon id rides along for the fog placement check.
-pub async fn dungeon_token_owner_session(pool: &PgPool, token_id: Uuid) -> Result<Option<(Uuid, Uuid, Uuid)>, AppError> {
-    let row: Option<(Uuid, Uuid, Uuid)> = sqlx::query_as(
+/// None if it does not exist. The owner is None for stat-block tokens, which have
+/// no owning character - any session member moves/deletes those. Character tokens
+/// keep the `character owner or session GM` move/delete policy; the dungeon id
+/// rides along for the fog placement check.
+pub async fn dungeon_token_owner_session(pool: &PgPool, token_id: Uuid) -> Result<Option<(Option<Uuid>, Uuid, Uuid)>, AppError> {
+    let row: Option<(Option<Uuid>, Uuid, Uuid)> = sqlx::query_as(
         r#"
         select c.user_id, t.session_id, t.dungeon_id
         from dungeon_tokens t
-        join characters c on c.id = t.character_id
+        left join characters c on c.id = t.character_id
         where t.id = $1
         "#,
     )

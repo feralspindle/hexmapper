@@ -48,8 +48,9 @@ describe('vaultStore', () => {
       memberSelections: [{ user_id: 'me', display_name: 'Hero' }],
       adjustMoney: vi.fn(),
       addGearItem: vi.fn(),
-      addGearItemToChar: vi.fn(),
+      grantGearItemToChar: vi.fn(),
       updateFieldForChar: vi.fn(),
+      adjustCurrencyForChar: vi.fn(),
       deleteGearItem: vi.fn(),
     }
   })
@@ -212,11 +213,10 @@ describe('vaultStore', () => {
 
     await store.splitLoot(store.loot[0], chars)
 
-    expect(kit.character.updateFieldForChar).toHaveBeenCalledTimes(3)
-    const amounts = kit.character.updateFieldForChar.mock.calls.map(([id, field, value]) => {
-      const char = chars.find(c => c.id === id)
+    expect(kit.character.adjustCurrencyForChar).toHaveBeenCalledTimes(3)
+    const amounts = kit.character.adjustCurrencyForChar.mock.calls.map(([, field, amount]) => {
       expect(field).toBe('gold')
-      return value - (char.data.gold ?? 0)
+      return amount
     })
     expect(amounts.reduce((a, b) => a + b, 0)).toBe(10)
     expect(Math.min(...amounts)).toBe(3)
@@ -244,7 +244,8 @@ describe('vaultStore', () => {
       { char: { id: 'c2' }, qty: 1 },
     ])
 
-    expect(kit.character.addGearItemToChar).toHaveBeenCalledTimes(2)
+    expect(kit.character.grantGearItemToChar).toHaveBeenCalledTimes(2)
+    expect(kit.character.grantGearItemToChar).toHaveBeenCalledWith('c1', expect.objectContaining({ quantity: 2 }))
     expect(kit.apiClient.patch).toHaveBeenCalledWith('/vault-loot/loot-1', expect.objectContaining({ quantity: 2 }))
     expect(store.loot[0]).toMatchObject({ id: 'loot-1', quantity: 2 })
   })

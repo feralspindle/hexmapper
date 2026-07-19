@@ -4,9 +4,12 @@
 # pgtap installed as a normal extension. Used by test-all.sh when the supabase
 # stack isn't running; CI still runs the suite from scratch via supabase.
 #
-# Setup problems (no network for the one-time downloads) warn and exit 0 so the
-# pre-push hook isn't blocked by a machine that can't build the env; actual
-# test failures always fail.
+# Only a network-unavailable one-time download (verify-env exit 3) warns and
+# exits 0, so the pre-push hook isn't blocked by an offline machine. Every
+# other setup problem — unsupported platform, binaries that don't run, a
+# broken install — fails loudly; skipping those made the aggregate test run
+# report success without pgTAP ever running (#195). Actual test failures
+# always fail.
 
 set -uo pipefail
 ROOT=$(git rev-parse --show-toplevel)
@@ -15,9 +18,14 @@ DB=hexmap_pgtap
 PG_PORT=${HEXMAP_VERIFY_PG_PORT:-55432}
 export PGHOST=127.0.0.1 PGPORT=$PG_PORT PGUSER=postgres
 
-if ! "$ENV" ensure-pg || ! "$ENV" install-pgtap; then
-  echo "    could not set up the local pgTAP env — skipping (CI still runs the suite)"
+setup_rc=0
+{ "$ENV" ensure-pg && "$ENV" install-pgtap; } || setup_rc=$?
+if [ "$setup_rc" -eq 3 ]; then
+  echo "    pgTAP env needs a one-time download and the network is unavailable — skipping (CI still runs the suite)"
   exit 0
+elif [ "$setup_rc" -ne 0 ]; then
+  echo "pgTAP: local env setup failed (not a network problem) — that is a real failure"
+  exit 1
 fi
 
 if ! "$ENV" fresh-db "$DB"; then

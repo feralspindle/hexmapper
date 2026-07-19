@@ -1,6 +1,7 @@
 export const REALTIME_TABLES = {
   character: 'characters',
   chat_message: 'chat_messages',
+  compendium_entry: 'compendium_entries',
   dice_roll: 'dice_rolls',
   dice_roll_annotation: 'dice_roll_annotations',
   dungeon: 'dungeons',
@@ -14,6 +15,8 @@ export const REALTIME_TABLES = {
   dungeon_token: 'dungeon_tokens',
   hex_cell: 'hex_cells',
   hex_note: 'hex_notes',
+  journal_entry: 'journal_entries',
+  light_source: 'light_sources',
   map: 'maps',
   oracle_roll: 'oracle_rolls',
   oracle_table: 'oracle_tables',
@@ -31,6 +34,7 @@ export const REALTIME_TABLES = {
   reference_photo: 'reference_photos',
   session: 'sessions',
   session_member: 'session_members',
+  stat_block: 'stat_blocks',
 }
 
 export function realtimeOperation(event) {

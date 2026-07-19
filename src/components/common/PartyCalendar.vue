@@ -168,7 +168,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useCalendarStore } from '@/stores/calendarStore.js'
 import { useSessionStore }  from '@/stores/sessionStore.js'
 
@@ -295,15 +295,31 @@ async function setWeather(val) {
   })
 }
 
+// upsertDay stamps the store's current session when it runs, so a pending
+// note must flush before this view (and with it the session) goes away
+// rather than land in whatever session comes next
 let _noteTimer = null
+let _pendingNote = null
 function debounceNotes(val) {
   clearTimeout(_noteTimer)
   if (selectedDay.value === null) return
   const y = viewYear.value, m = viewMonth.value, d = selectedDay.value
   const entry = calendarStore.days.find(x => x.year === y && x.month === m && x.day === d)
   if (entry) { entry.notes = val }
-  _noteTimer = setTimeout(() => calendarStore.upsertDay(y, m, d, { notes: val }), 600)
+  _pendingNote = { y, m, d, val }
+  _noteTimer = setTimeout(_flushPendingNote, 600)
 }
+
+function _flushPendingNote() {
+  const pending = _pendingNote
+  _pendingNote = null
+  if (pending) calendarStore.upsertDay(pending.y, pending.m, pending.d, { notes: pending.val })
+}
+
+onUnmounted(() => {
+  clearTimeout(_noteTimer)
+  _flushPendingNote()
+})
 
 
 const draft = ref(null)

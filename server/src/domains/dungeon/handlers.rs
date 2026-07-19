@@ -237,6 +237,12 @@ pub async fn delete_corridor(
 
 // --- tokens ------------------------------------------------------------------
 
+fn body_uuid_opt(body: &Value, key: &str) -> Option<Uuid> {
+    body.get(key)
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+}
+
 fn body_cell(body: &Value, key: &str) -> Result<f64, AppError> {
     body.get(key)
         .and_then(Value::as_f64)
@@ -283,17 +289,41 @@ pub async fn create_token(
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, AppError> {
     let dungeon_id = body_uuid(&body, "dungeon_id")?;
-    let character_id = body_uuid(&body, "character_id")?;
+    let character_id = body_uuid_opt(&body, "character_id");
+    let stat_block_id = body_uuid_opt(&body, "stat_block_id");
     let session_id = member_for_dungeon(&state, auth.user_id, dungeon_id).await?;
-    let (owner_id, character_session) = authz::character_owner_session(state.pool(), character_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    // the composite fk enforces this too, but reject cleanly instead of 500ing
-    if character_session != Some(session_id) {
-        return Err(AppError::Forbidden);
-    }
-    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
-        return Err(AppError::Forbidden);
+    match (character_id, stat_block_id) {
+        (Some(character_id), None) => {
+            let (owner_id, character_session) =
+                authz::character_owner_session(state.pool(), character_id)
+                    .await?
+                    .ok_or(AppError::NotFound)?;
+            // the composite fk enforces this too, but reject cleanly instead of 500ing
+            if character_session != Some(session_id) {
+                return Err(AppError::Forbidden);
+            }
+            if owner_id != auth.user_id
+                && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await?
+            {
+                return Err(AppError::Forbidden);
+            }
+        }
+        (None, Some(stat_block_id)) => {
+            // stat blocks are shared session furniture - any member places them
+            let block_session: Option<Uuid> =
+                sqlx::query_scalar("select session_id from stat_blocks where id = $1")
+                    .bind(stat_block_id)
+                    .fetch_optional(state.pool())
+                    .await?;
+            if block_session.ok_or(AppError::NotFound)? != session_id {
+                return Err(AppError::Forbidden);
+            }
+        }
+        _ => {
+            return Err(AppError::BadRequest(
+                "exactly one of character_id or stat_block_id required".into(),
+            ));
+        }
     }
     let x = body_cell(&body, "x")?;
     let y = body_cell(&body, "y")?;
@@ -314,9 +344,7 @@ pub async fn update_token(
     let (owner_id, session_id, dungeon_id) = authz::dungeon_token_owner_session(state.pool(), id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
-        return Err(AppError::Forbidden);
-    }
+    require_token_write(&state, &auth, owner_id, session_id).await?;
     if patch.get("x").is_some() || patch.get("y").is_some() {
         let x = body_cell(&patch, "x")?;
         let y = body_cell(&patch, "y")?;
@@ -337,14 +365,34 @@ pub async fn delete_token(
     let (owner_id, session_id, _) = authz::dungeon_token_owner_session(state.pool(), id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if owner_id != auth.user_id && !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
-        return Err(AppError::Forbidden);
-    }
+    require_token_write(&state, &auth, owner_id, session_id).await?;
     let metadata = auth.metadata();
     retry_tx!(state.pool(), |tx| {
         token_projection::delete(&mut tx, id, &metadata).await
     })?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// character tokens: owner or GM. stat-block tokens carry no owner - any
+// session member moves/deletes them, same policy as the stat blocks themselves
+async fn require_token_write(
+    state: &AppState,
+    auth: &AuthUser,
+    owner_id: Option<Uuid>,
+    session_id: Uuid,
+) -> Result<(), AppError> {
+    let allowed = match owner_id {
+        Some(owner) => {
+            owner == auth.user_id
+                || authz::is_session_gm(state.pool(), auth.user_id, session_id).await?
+        }
+        None => authz::is_session_member(state.pool(), auth.user_id, session_id).await?,
+    };
+    if allowed {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
 }
 
 // --- icons -------------------------------------------------------------------

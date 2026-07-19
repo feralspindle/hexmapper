@@ -96,6 +96,91 @@ pub async fn update_data(
     Ok(row)
 }
 
+/// Adjusts one numeric currency field in `data` in place (floor 0), recording
+/// the usual `data_updated` snapshot so replay stays consistent. The narrow
+/// member-allowed alternative to the owner/GM-only full-blob `update_data`.
+pub async fn adjust_currency(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    currency: &str,
+    delta: i64,
+    metadata: &Value,
+) -> Result<Value, AppError> {
+    let row: Value = sqlx::query_scalar(
+        r#"
+        with upd as (
+            update characters
+            set data = jsonb_set(
+                data,
+                array[$2],
+                to_jsonb(greatest(0::numeric, coalesce((data->>$2)::numeric, 0) + $3))
+            )
+            where id = $1
+            returning *
+        ),
+        evt as (
+            insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
+            select 'character', upd.id, upd.session_id,
+                coalesce((select max(sequence) from events e where e.aggregate_type = 'character' and e.aggregate_id = upd.id), 0) + 1,
+                'character.data_updated', to_jsonb(upd), $4
+            from upd
+        )
+        select to_jsonb(upd) from upd
+        "#,
+    )
+    .bind(id)
+    .bind(currency)
+    .bind(delta)
+    .bind(metadata)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(row)
+}
+
+/// Appends one gear item to `data->gear` in place (the instanceId is
+/// generated here), recording the usual `data_updated` snapshot. Like
+/// `adjust_currency`, the narrow member-allowed alternative to the owner/GM
+/// full-blob `update_data` — vault assignments hand items to characters the
+/// caller does not own.
+pub async fn grant_gear(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    item: &Value,
+    metadata: &Value,
+) -> Result<Value, AppError> {
+    let row: Value = sqlx::query_scalar(
+        r#"
+        with upd as (
+            update characters
+            set data = jsonb_set(
+                data,
+                '{gear}',
+                coalesce(data->'gear', '[]'::jsonb)
+                    || jsonb_build_array($2::jsonb || jsonb_build_object('instanceId', gen_random_uuid()))
+            )
+            where id = $1
+            returning *
+        ),
+        evt as (
+            insert into events (aggregate_type, aggregate_id, session_id, sequence, event_type, payload, metadata)
+            select 'character', upd.id, upd.session_id,
+                coalesce((select max(sequence) from events e where e.aggregate_type = 'character' and e.aggregate_id = upd.id), 0) + 1,
+                'character.data_updated', to_jsonb(upd), $3
+            from upd
+        )
+        select to_jsonb(upd) from upd
+        "#,
+    )
+    .bind(id)
+    .bind(item)
+    .bind(metadata)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(row)
+}
+
 pub async fn delete(
     tx: &mut Transaction<'_, Postgres>,
     id: Uuid,

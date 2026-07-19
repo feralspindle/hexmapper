@@ -43,7 +43,7 @@ select ok(pg_temp.bucket_has_policy('dungeon-images', 'DELETE'),
   'dungeon-images has a DELETE policy');
 
 select ok(pg_temp.bucket_has_policy('reference-photos', 'SELECT'),
-  'reference-photos has a SELECT policy (public gallery reads)');
+  'reference-photos has a SELECT policy (member-only reads)');
 select ok(pg_temp.bucket_has_policy('reference-photos', 'INSERT'),
   'reference-photos has an INSERT policy');
 select ok(pg_temp.bucket_has_policy('reference-photos', 'DELETE'),

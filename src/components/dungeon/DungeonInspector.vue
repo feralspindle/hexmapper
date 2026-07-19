@@ -118,9 +118,10 @@
                 <span class="ds-content-kind">{{ item.type }}</span>
                 <input
                   class="ds-input ds-content-name-input"
-                  :value="item.label ?? ''"
+                  :value="fieldValue('item', item.id, 'label', item.label)"
                   placeholder="Name…"
-                  @input="updateItem(item.id, { label: $event.target.value })"
+                  @input="editItemField(item.id, 'label', $event.target.value)"
+                  @blur="endItemField(item.id, 'label')"
                 />
                 <button
                   class="ds-x-btn"
@@ -129,11 +130,12 @@
               </div>
               <textarea
                 class="ds-input"
-                :value="item.notes ?? ''"
+                :value="fieldValue('item', item.id, 'notes', item.notes)"
                 placeholder="Notes about this…"
                 rows="2"
                 style="resize:vertical;min-height:36px"
-                @input="updateItem(item.id, { notes: $event.target.value })"
+                @input="editItemField(item.id, 'notes', $event.target.value)"
+                @blur="endItemField(item.id, 'notes')"
               />
             </div>
           </div>
@@ -176,9 +178,10 @@
                 <span class="ds-content-kind">{{ icon.type }}</span>
                 <input
                   class="ds-input ds-content-name-input"
-                  :value="icon.label ?? ''"
+                  :value="fieldValue('icon', icon.id, 'label', icon.label)"
                   placeholder="Name…"
-                  @input="updateIconDebounced(icon.id, { label: $event.target.value })"
+                  @input="editIconField(icon.id, 'label', $event.target.value)"
+                  @blur="endIconField(icon.id, 'label')"
                 />
                 <button
                   class="ds-x-btn"
@@ -187,11 +190,12 @@
               </div>
               <textarea
                 class="ds-input"
-                :value="icon.notes ?? ''"
+                :value="fieldValue('icon', icon.id, 'notes', icon.notes)"
                 placeholder="Notes about this…"
                 rows="2"
                 style="resize:vertical;min-height:36px"
-                @input="updateIconDebounced(icon.id, { notes: $event.target.value })"
+                @input="editIconField(icon.id, 'notes', $event.target.value)"
+                @blur="endIconField(icon.id, 'notes')"
               />
             </div>
           </div>
@@ -265,7 +269,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useNotesStore } from '@/stores/notesStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
@@ -327,21 +331,24 @@ watch(() => dungeonStore.selectedElement, (el) => {
   notesStore.initForDungeonElement(el.id, el.type, sessionStore.sessionId)
 }, { immediate: true })
 
+// capture the target and value at schedule time - resolving the selection
+// when the timer fires wrote the label into whatever got selected next
 let saveTimer = null
 function debouncedSave() {
   clearTimeout(saveTimer)
+  const el = dungeonStore.selectedElement
+  if (!el) return
+  const target = { id: el.id, type: el.type }
+  const newLabel = roomLabel.value
   saveTimer = setTimeout(() => {
-    const el = dungeonStore.selectedElement
-    if (!el) return
-    if (el.type === 'room') {
-      const newLabel = roomLabel.value
-      const oldLabel = dungeonStore.rooms.get(el.id)?.label ?? ''
-      dungeonStore.updateRoom(el.id, { label: newLabel })
+    if (target.type === 'room') {
+      const oldLabel = dungeonStore.rooms.get(target.id)?.label ?? ''
+      dungeonStore.updateRoom(target.id, { label: newLabel })
       if (newLabel.trim() && newLabel !== oldLabel) {
         activityStore.record('renamed', `${oldLabel || 'Unnamed Room'} → ${newLabel}`)
       }
     } else {
-      dungeonStore.updateCorridor(el.id, { label: roomLabel.value })
+      dungeonStore.updateCorridor(target.id, { label: newLabel })
     }
   }, 500)
 }
@@ -350,27 +357,78 @@ function noteColor(userId) {
   return playerColorFor(userId)
 }
 
+// the realtime echo of our own save lands after the http patch resolves and
+// resets :value-bound inputs to the snapshot it carried, eating whatever was
+// typed since. while a field is being edited its draft pins the rendered
+// value; blur flushes the pending patch and hands display back to the store
+const _fieldDrafts = reactive({})
+const _fieldKey = (kind, id, field) => `${kind}:${id}:${field}`
+
+function fieldValue(kind, id, field, storeValue) {
+  return _fieldDrafts[_fieldKey(kind, id, field)] ?? storeValue ?? ''
+}
+
 const _itemTimers = new Map()
-function updateItem(itemId, patch) {
+const _pendingItemPatches = new Map()
+
+function editItemField(itemId, field, value) {
+  const roomId = selectedRoom.value?.id
+  if (!roomId) return
+  _fieldDrafts[_fieldKey('item', itemId, field)] = value
+  const pending = _pendingItemPatches.get(itemId)
+  _pendingItemPatches.set(itemId, { roomId, patch: { ...pending?.patch, [field]: value } })
   clearTimeout(_itemTimers.get(itemId))
-  _itemTimers.set(itemId, setTimeout(() => {
-    _itemTimers.delete(itemId)
-    if (selectedRoom.value) dungeonStore.updateRoomItem(selectedRoom.value.id, itemId, patch)
-  }, 400))
+  _itemTimers.set(itemId, setTimeout(() => _flushItemPatch(itemId), 400))
+}
+
+function _flushItemPatch(itemId) {
+  clearTimeout(_itemTimers.get(itemId))
+  _itemTimers.delete(itemId)
+  const pending = _pendingItemPatches.get(itemId)
+  _pendingItemPatches.delete(itemId)
+  if (pending) dungeonStore.updateRoomItem(pending.roomId, itemId, pending.patch)
+}
+
+function endItemField(itemId, field) {
+  _flushItemPatch(itemId)
+  delete _fieldDrafts[_fieldKey('item', itemId, field)]
 }
 
 const _iconTimers = new Map()
-function updateIconDebounced(iconId, patch) {
+const _pendingIconPatches = new Map()
+
+function editIconField(iconId, field, value) {
+  _fieldDrafts[_fieldKey('icon', iconId, field)] = value
+  const pending = _pendingIconPatches.get(iconId)
+  _pendingIconPatches.set(iconId, { ...pending, [field]: value })
   clearTimeout(_iconTimers.get(iconId))
-  _iconTimers.set(iconId, setTimeout(() => {
-    _iconTimers.delete(iconId)
-    dungeonStore.updateIcon(iconId, patch)
-  }, 400))
+  _iconTimers.set(iconId, setTimeout(() => _flushIconPatch(iconId), 400))
 }
 
-onUnmounted(() => {
-  _itemTimers.forEach(clearTimeout); _itemTimers.clear()
-  _iconTimers.forEach(clearTimeout); _iconTimers.clear()
-})
+function _flushIconPatch(iconId) {
+  clearTimeout(_iconTimers.get(iconId))
+  _iconTimers.delete(iconId)
+  const patch = _pendingIconPatches.get(iconId)
+  _pendingIconPatches.delete(iconId)
+  if (patch) dungeonStore.updateIcon(iconId, patch)
+}
+
+function endIconField(iconId, field) {
+  _flushIconPatch(iconId)
+  delete _fieldDrafts[_fieldKey('icon', iconId, field)]
+}
+
+// switching selection can tear inputs out of the dom without a blur event -
+// flush what's pending and drop the drafts so a re-shown field doesn't stay
+// pinned to stale text
+function _flushAllFieldEdits() {
+  for (const id of [..._pendingItemPatches.keys()]) _flushItemPatch(id)
+  for (const id of [..._pendingIconPatches.keys()]) _flushIconPatch(id)
+  for (const k of Object.keys(_fieldDrafts)) delete _fieldDrafts[k]
+}
+
+watch(() => dungeonStore.selectedElement, _flushAllFieldEdits)
+
+onUnmounted(_flushAllFieldEdits)
 
 </script>

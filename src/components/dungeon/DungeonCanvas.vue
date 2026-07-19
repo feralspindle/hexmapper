@@ -574,11 +574,12 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
-import { useDungeonDraw, CELL_SIZE, pixelToGrid, pixelToCell, corridorSegments } from '@/composables/useDungeonDraw.js'
+import { useDungeonDraw, CELL_SIZE, pixelToGrid, pixelToCell, corridorSegments, tokenStackLayout } from '@/composables/useDungeonDraw.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
+import { useStatBlockStore, STAT_BLOCK_TOKEN_COLORS } from '@/stores/statBlockStore.js'
 import { useItemDrag } from '@/composables/useItemDrag.js'
 import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
@@ -639,6 +640,7 @@ const emit = defineEmits(['image-offset-change'])
 const dungeonStore = useD()
 const authStore = useAuthStore()
 const characterStore = useCharacterStore()
+const statBlockStore = useStatBlockStore()
 const { confirm } = useConfirmDialog()
 
 const remoteCursors = ref(new Map())
@@ -1066,7 +1068,9 @@ watch(() => dungeonStore.tokenDropRequest, (req) => {
       }
     }
   }
-  if (target) dungeonStore.placeToken(req.characterId, target.x, target.y)
+  if (!target) return
+  if (req.statBlockId) dungeonStore.placeStatBlockToken(req.statBlockId, target.x, target.y)
+  else dungeonStore.placeToken(req.characterId, target.x, target.y)
 })
 
 function hpColorFor(pct) {
@@ -1077,6 +1081,10 @@ function hpColorFor(pct) {
 
 const charactersById = computed(() =>
   new Map(characterStore.characters.map(c => [c.id, c]))
+)
+
+const statBlocksById = computed(() =>
+  new Map(statBlockStore.blocks.map(b => [b.id, b]))
 )
 
 // viewport-independent so panning and dragging don't rebuild it - screen
@@ -1090,6 +1098,32 @@ const tokenModels = computed(() => {
     // staging an ambush
     if (!isGM && dungeonStore.fogMode && !dungeonStore.fogRevealAll &&
         !dungeonStore.isCellRevealed(token.x, token.y)) continue
+    if (token.stat_block_id) {
+      const block = statBlocksById.value.get(token.stat_block_id)
+      const data = block?.data ?? {}
+      const maxHp = data.maxHp ?? 0
+      const hp = data.currentHp ?? maxHp
+      const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0
+      models.push({
+        id: token.id,
+        characterId: null,
+        statBlockId: token.stat_block_id,
+        x: token.x,
+        y: token.y,
+        name: data.name || (block?.kind === 'npc' ? 'NPC' : 'Monster'),
+        color: STAT_BLOCK_TOKEN_COLORS[block?.kind] ?? STAT_BLOCK_TOKEN_COLORS.monster,
+        hp,
+        maxHp,
+        hpPct,
+        hpColor: hpColorFor(hpPct),
+        ac: data.ac ?? null,
+        initiative: null,
+        conditions: [],
+        imageUrl: null,
+        canDrag: true,
+      })
+      continue
+    }
     const char = charactersById.value.get(token.character_id)
     const data = char?.data ?? {}
     const maxHp = data.maxHitPoints ?? 0
@@ -1098,6 +1132,7 @@ const tokenModels = computed(() => {
     models.push({
       id: token.id,
       characterId: token.character_id,
+      statBlockId: null,
       x: token.x,
       y: token.y,
       name: data.name || 'Unknown',
@@ -1204,12 +1239,21 @@ function onIconDragUp() {
   dungeonStore.updateIcon(d.id, { x: cellX, y: cellY })
 }
 
+const tokenStackLayouts = computed(() => tokenStackLayout(tokenModels.value))
+
+// a dragged token leaves its stack and rides the pointer at full size
+function tokenLayout(t) {
+  const d = draggingToken.value
+  if (d?.id === t.id) return { gx: d.gx, gy: d.gy, scale: 1 }
+  const stacked = tokenStackLayouts.value.get(t.id) ?? { dx: 0, dy: 0, scale: 1 }
+  return { gx: t.x + 0.5 + stacked.dx, gy: t.y + 0.5 + stacked.dy, scale: stacked.scale }
+}
+
 function tokenTransform(t) {
   const cs = cellPx.value
-  const d = draggingToken.value
-  const gx = d?.id === t.id ? d.gx : t.x + 0.5
-  const gy = d?.id === t.id ? d.gy : t.y + 0.5
-  return `translate(${gx * cs - viewport.value.offsetX}, ${gy * cs - viewport.value.offsetY})`
+  const { gx, gy, scale } = tokenLayout(t)
+  const translate = `translate(${gx * cs - viewport.value.offsetX}, ${gy * cs - viewport.value.offsetY})`
+  return scale === 1 ? translate : `${translate} scale(${scale})`
 }
 
 function tokenAriaLabel(t) {
@@ -1235,14 +1279,16 @@ const tokenTooltipStyle = computed(() => {
   const t = tokenTooltip.value
   if (!t) return {}
   const cs = cellPx.value
-  const cx = (t.x + 0.5) * cs - viewport.value.offsetX
-  const cy = (t.y + 0.5) * cs - viewport.value.offsetY
+  const { gx, gy, scale } = tokenLayout(t)
+  const cx = gx * cs - viewport.value.offsetX
+  const cy = gy * cs - viewport.value.offsetY
+  const r = tokenR.value * scale
   // flip below the token when there isn't room above (condition chips can
   // stack the tooltip a few lines tall)
-  const below = cy - tokenR.value < 150
+  const below = cy - r < 150
   return {
     left: `${cx}px`,
-    top: below ? `${cy + tokenR.value + 14}px` : `${cy - tokenR.value - 14}px`,
+    top: below ? `${cy + r + 14}px` : `${cy - r - 14}px`,
     transform: below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
   }
 })
@@ -1320,6 +1366,7 @@ function onTokenPointerCancel(e) {
 function canDeleteToken(id) {
   const token = dungeonStore.tokens.get(id)
   if (!token) return false
+  if (token.stat_block_id) return true
   if (sessionStore.isGM) return true
   const char = charactersById.value.get(token.character_id)
   return char?.user_id === authStore.user?.id

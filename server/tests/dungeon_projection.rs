@@ -22,6 +22,7 @@ drop table if exists dungeon_fog_cells cascade;
 drop table if exists dungeon_tokens cascade;
 drop table if exists dungeon_icons cascade;
 drop table if exists characters cascade;
+drop table if exists stat_blocks cascade;
 drop table if exists shadow_rooms cascade;
 drop table if exists shadow_corridors cascade;
 drop table if exists shadow_fog cascade;
@@ -78,18 +79,28 @@ create table characters (
     id uuid primary key default gen_random_uuid()
 );
 
+create table stat_blocks (
+    id uuid primary key default gen_random_uuid()
+);
+
 create table dungeon_tokens (
     id            uuid primary key default gen_random_uuid(),
     dungeon_id    uuid not null,
     session_id    uuid not null,
-    character_id  uuid not null references characters(id) on delete cascade,
+    character_id  uuid references characters(id) on delete cascade,
+    stat_block_id uuid references stat_blocks(id) on delete cascade,
     x             int not null,
     y             int not null,
     source_client text,
     created_at    timestamptz not null default now(),
     updated_at    timestamptz not null default now(),
+    check (num_nonnulls(character_id, stat_block_id) = 1),
     unique (dungeon_id, character_id)
 );
+
+create unique index dungeon_tokens_dungeon_statblock_key
+    on dungeon_tokens (dungeon_id, stat_block_id)
+    where stat_block_id is not null;
 
 create table dungeon_icons (
     id            uuid primary key default gen_random_uuid(),
@@ -433,6 +444,66 @@ async fn dungeon_projections_round_trip_and_replay_from_events() {
     token_projection::delete(&mut tx, doomed_token_id, &meta()).await.unwrap();
     tx.commit().await.unwrap();
 
+    // --- stat-block tokens: same upsert + cascade semantics ------------------
+    let stat_block_id = Uuid::new_v4();
+    let dead_stat_block_id = Uuid::new_v4();
+    sqlx::query("insert into stat_blocks (id) values ($1), ($2)")
+        .bind(stat_block_id)
+        .bind(dead_stat_block_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut tx = pool.begin().await.unwrap();
+    let monster = token_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "stat_block_id": stat_block_id, "x": 5.4, "y": 6.6 }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let monster_token_id: Uuid = monster["id"].as_str().unwrap().parse().unwrap();
+    assert_eq!(monster["x"], 5);
+    assert_eq!(monster["y"], 7);
+    assert!(monster["character_id"].is_null());
+
+    let mut tx = pool.begin().await.unwrap();
+    let monster_moved = token_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "stat_block_id": stat_block_id, "x": 8, "y": 8 }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(monster_moved["id"].as_str().unwrap(), monster_token_id.to_string());
+    assert_eq!(count(&pool, "select count(*) from dungeon_tokens").await, 2);
+
+    // A token whose stat block gets deleted cascades away without a deleted
+    // event; replay must not resurrect it.
+    let mut tx = pool.begin().await.unwrap();
+    token_projection::create(
+        &mut tx,
+        dungeon_id,
+        session_id,
+        &json!({ "stat_block_id": dead_stat_block_id, "x": 0, "y": 1 }),
+        &meta(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    sqlx::query("delete from stat_blocks where id = $1")
+        .bind(dead_stat_block_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count(&pool, "select count(*) from dungeon_tokens").await, 2);
+
     // --- icons: create rounds coords, updates patch, deletes stay deleted ---
     let mut tx = pool.begin().await.unwrap();
     let icon = icon_projection::create(
@@ -502,9 +573,12 @@ async fn dungeon_projections_round_trip_and_replay_from_events() {
         .await
         .unwrap();
 
-    let shadow_tokens: Vec<(Uuid, i32, i32)> =
+    let mut shadow_tokens: Vec<(Uuid, i32, i32)> =
         sqlx::query_as("select id, x, y from shadow_tokens").fetch_all(&pool).await.unwrap();
-    assert_eq!(shadow_tokens, vec![(token_id, 1, 1)]);
+    shadow_tokens.sort();
+    let mut expected_tokens = vec![(token_id, 1, 1), (monster_token_id, 8, 8)];
+    expected_tokens.sort();
+    assert_eq!(shadow_tokens, expected_tokens);
 
     let shadow_icons: Vec<(Uuid, String, i32, i32)> =
         sqlx::query_as("select id, type, x, y from shadow_icons").fetch_all(&pool).await.unwrap();

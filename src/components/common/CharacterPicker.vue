@@ -25,7 +25,7 @@
           <div v-if="characterStore.loading" class="cp-empty">Loading…</div>
 
           <template v-else>
-            <div v-if="sessionStore.isGM && characterStore.myCharacters.length" class="cp-section-head">
+            <div v-if="runsNpcs && characterStore.myCharacters.length" class="cp-section-head">
               NPCs
             </div>
             <button
@@ -55,10 +55,10 @@
               </button>
             </template>
 
-            <div v-if="!sessionStore.isGM && !characterStore.myCharacters.length" class="cp-empty">
+            <div v-if="!runsNpcs && !characterStore.myCharacters.length" class="cp-empty">
               No characters yet
             </div>
-            <div v-if="sessionStore.isGM && !characterStore.characters.length" class="cp-empty">
+            <div v-if="runsNpcs && !characterStore.characters.length" class="cp-empty">
               No characters or NPCs yet
             </div>
           </template>
@@ -67,7 +67,7 @@
 
           <button class="cp-row cp-row--muted" data-testid="char-picker-new" @click="newCharOpen = true; open = false">
             <i class="fa-solid fa-user-plus" />
-            {{ sessionStore.isGM ? 'New NPC' : 'New trashbag' }}
+            {{ runsNpcs ? 'New NPC' : 'New trashbag' }}
           </button>
           <button class="cp-row cp-row--muted" @click="openExisting">
             <i class="fa-solid fa-box-archive" />
@@ -147,6 +147,10 @@ const characterStore = useCharacterStore()
 const sessionStore = useSessionStore()
 const authStore = useAuthStore()
 const { confirm } = useConfirmDialog()
+
+// the owner only runs NPCs when the session actually has a GM role;
+// in gm_less (solo/co-op) their characters are ordinary trashbags
+const runsNpcs = computed(() => sessionStore.isGM && sessionStore.hasGM)
 
 const open = ref(false)
 const importMode = ref(false)
