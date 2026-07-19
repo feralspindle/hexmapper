@@ -25,6 +25,47 @@ export function gridToPixel(gx, gy, viewport) {
   return { px, py }
 }
 
+// tokens sharing a cell fan out on a ring and shrink so nobody is hidden
+// under the top token. offsets are in cell units. stacks sort by id, not
+// arrival order, so every client fans the same stack out the same way
+const STACK_RING_RADIUS = 0.22
+
+function stackScale(count) {
+  if (count <= 1) return 1
+  if (count === 2) return 0.6
+  if (count <= 4) return 0.5
+  return 0.42
+}
+
+export function tokenStackLayout(tokens) {
+  const byCell = new Map()
+  for (const t of tokens) {
+    const key = `${t.x}:${t.y}`
+    const stack = byCell.get(key)
+    if (stack) stack.push(t.id)
+    else byCell.set(key, [t.id])
+  }
+  const layout = new Map()
+  for (const stack of byCell.values()) {
+    stack.sort()
+    const count = stack.length
+    const scale = stackScale(count)
+    stack.forEach((id, i) => {
+      if (count === 1) {
+        layout.set(id, { dx: 0, dy: 0, scale: 1 })
+        return
+      }
+      const angle = (2 * Math.PI * i) / count - Math.PI / 2
+      layout.set(id, {
+        dx: Math.cos(angle) * STACK_RING_RADIUS,
+        dy: Math.sin(angle) * STACK_RING_RADIUS,
+        scale,
+      })
+    })
+  }
+  return layout
+}
+
 function pointInPolygon(px, py, points) {
   let inside = false
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
