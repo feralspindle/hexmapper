@@ -1,7 +1,7 @@
 <template>
   <div class="ms-size-row">
     <input v-model.number="draft" type="number" :min="min" :max="max" step="1" class="ms-size-input" @change="save" />
-    <span class="ms-size-px">%</span>
+    <span class="ms-size-px">{{ suffix }}</span>
   </div>
   <input v-model.number="draft" type="range" :min="min" :max="max" step="1" class="ms-slider" @input="save" />
 </template>
@@ -13,6 +13,8 @@ const props = defineProps({
   modelValue: { type: Number, default: 100 },
   min: { type: Number, default: 1 },
   max: { type: Number, default: 1000 },
+  suffix: { type: String, default: '%' },
+  fallback: { type: Number, default: 100 },
 })
 const emit = defineEmits(['update:modelValue', 'save'])
 
@@ -22,9 +24,9 @@ const draft = computed({
 })
 
 function save() {
-  const pct = Math.max(props.min, Math.min(props.max, props.modelValue || 100))
-  emit('update:modelValue', pct)
-  emit('save', pct)
+  const value = Math.max(props.min, Math.min(props.max, props.modelValue || props.fallback))
+  emit('update:modelValue', value)
+  emit('save', value)
 }
 </script>
 
