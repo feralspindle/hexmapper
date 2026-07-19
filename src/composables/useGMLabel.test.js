@@ -13,7 +13,7 @@ import { useGMLabel } from './useGMLabel.js'
 
 describe('useGMLabel', () => {
   beforeEach(() => {
-    stores.session = { sessionOwnerId: 'gm-user' }
+    stores.session = { sessionOwnerId: 'gm-user', hasGM: true }
     stores.character = { characters: [{ id: 'npc-1', data: { name: 'Barkeep' } }] }
   })
 
@@ -36,6 +36,13 @@ describe('useGMLabel', () => {
     const { gmName } = useGMLabel()
     expect(gmName('player-1', 'Robin')).toBe('Robin')
     expect(gmName('player-1', 'Robin', 'npc-1')).toBe('Robin')
+  })
+
+  test('leaves the owner untagged in gm_less sessions', () => {
+    stores.session.hasGM = false
+    const { gmName } = useGMLabel()
+    expect(gmName('gm-user', 'Hannah')).toBe('Hannah')
+    expect(gmName('gm-user', 'Hannah', 'npc-1')).toBe('Hannah')
   })
 
   test('passes through empty display names', () => {

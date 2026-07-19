@@ -34,6 +34,10 @@ export const useSessionStore = defineStore('session', () => {
     return !!authStore.user?.id && authStore.user.id === sessionOwnerId.value
   })
 
+  // gm_less sessions have no GM at all - the owner is just another player,
+  // so anything that treats the owner's characters as NPCs must check this
+  const hasGM = computed(() => playMode.value === 'gm')
+
   const userSessions   = ref([])
   const joinedSessions = ref([])
   const sessionsLoading = ref(false)
@@ -414,6 +418,7 @@ export const useSessionStore = defineStore('session', () => {
     resetCrawlRound,
     setCrawlCheckEvery,
     isGM,
+    hasGM,
     loading,
     error,
     userSessions,

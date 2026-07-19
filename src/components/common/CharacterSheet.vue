@@ -2224,7 +2224,11 @@ const char = computed(() => characterStore.character);
 const isGM = computed(() => sessionStore.isGM);
 const isGmCharacter = computed(() => {
     const authId = characterStore.activeCharacter?.user_id;
-    return isGM.value && authId === authStore.user?.id;
+    return (
+        isGM.value &&
+        sessionStore.hasGM &&
+        authId === authStore.user?.id
+    );
 });
 
 const dungeonStore = useD();
