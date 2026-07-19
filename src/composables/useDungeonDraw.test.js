@@ -6,6 +6,7 @@ import {
   pixelToCell,
   gridToPixel,
   corridorSegments,
+  tokenStackLayout,
   useDungeonDraw,
 } from './useDungeonDraw.js'
 
@@ -36,6 +37,58 @@ describe('grid math', () => {
       { x1: 2, y1: 0, x2: 2, y2: 3 },
     ])
     expect(corridorSegments({ x1: 1, y1: 1, x2: 5, y2: 1 })).toEqual([{ x1: 1, y1: 1, x2: 5, y2: 1 }])
+  })
+})
+
+describe('tokenStackLayout', () => {
+  test('a lone token stays centered at full size', () => {
+    const layout = tokenStackLayout([{ id: 'a', x: 3, y: 4 }])
+    expect(layout.get('a')).toEqual({ dx: 0, dy: 0, scale: 1 })
+  })
+
+  test('two tokens on a cell get distinct offsets and shrink', () => {
+    const layout = tokenStackLayout([
+      { id: 'a', x: 3, y: 4 },
+      { id: 'b', x: 3, y: 4 },
+    ])
+    const a = layout.get('a')
+    const b = layout.get('b')
+    expect(a.scale).toBe(0.6)
+    expect(b.scale).toBe(0.6)
+    expect(Math.hypot(a.dx - b.dx, a.dy - b.dy)).toBeGreaterThan(0.3)
+  })
+
+  test('layout is deterministic regardless of arrival order', () => {
+    const forward = tokenStackLayout([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 0, y: 0 },
+    ])
+    const reversed = tokenStackLayout([
+      { id: 'b', x: 0, y: 0 },
+      { id: 'a', x: 0, y: 0 },
+    ])
+    expect(forward.get('a')).toEqual(reversed.get('a'))
+    expect(forward.get('b')).toEqual(reversed.get('b'))
+  })
+
+  test('tokens on different cells are unaffected by each other', () => {
+    const layout = tokenStackLayout([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 1, y: 0 },
+    ])
+    expect(layout.get('a')).toEqual({ dx: 0, dy: 0, scale: 1 })
+    expect(layout.get('b')).toEqual({ dx: 0, dy: 0, scale: 1 })
+  })
+
+  test('a five-token pile keeps every position distinct', () => {
+    const tokens = ['a', 'b', 'c', 'd', 'e'].map(id => ({ id, x: 2, y: 2 }))
+    const layout = tokenStackLayout(tokens)
+    const positions = tokens.map(t => {
+      const { dx, dy, scale } = layout.get(t.id)
+      expect(scale).toBe(0.42)
+      return `${dx.toFixed(4)}:${dy.toFixed(4)}`
+    })
+    expect(new Set(positions).size).toBe(5)
   })
 })
 

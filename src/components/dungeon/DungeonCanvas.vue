@@ -574,7 +574,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useD } from '@/stores/dungeonStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
-import { useDungeonDraw, CELL_SIZE, pixelToGrid, pixelToCell, corridorSegments } from '@/composables/useDungeonDraw.js'
+import { useDungeonDraw, CELL_SIZE, pixelToGrid, pixelToCell, corridorSegments, tokenStackLayout } from '@/composables/useDungeonDraw.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
@@ -1204,12 +1204,21 @@ function onIconDragUp() {
   dungeonStore.updateIcon(d.id, { x: cellX, y: cellY })
 }
 
+const tokenStackLayouts = computed(() => tokenStackLayout(tokenModels.value))
+
+// a dragged token leaves its stack and rides the pointer at full size
+function tokenLayout(t) {
+  const d = draggingToken.value
+  if (d?.id === t.id) return { gx: d.gx, gy: d.gy, scale: 1 }
+  const stacked = tokenStackLayouts.value.get(t.id) ?? { dx: 0, dy: 0, scale: 1 }
+  return { gx: t.x + 0.5 + stacked.dx, gy: t.y + 0.5 + stacked.dy, scale: stacked.scale }
+}
+
 function tokenTransform(t) {
   const cs = cellPx.value
-  const d = draggingToken.value
-  const gx = d?.id === t.id ? d.gx : t.x + 0.5
-  const gy = d?.id === t.id ? d.gy : t.y + 0.5
-  return `translate(${gx * cs - viewport.value.offsetX}, ${gy * cs - viewport.value.offsetY})`
+  const { gx, gy, scale } = tokenLayout(t)
+  const translate = `translate(${gx * cs - viewport.value.offsetX}, ${gy * cs - viewport.value.offsetY})`
+  return scale === 1 ? translate : `${translate} scale(${scale})`
 }
 
 function tokenAriaLabel(t) {
@@ -1235,14 +1244,16 @@ const tokenTooltipStyle = computed(() => {
   const t = tokenTooltip.value
   if (!t) return {}
   const cs = cellPx.value
-  const cx = (t.x + 0.5) * cs - viewport.value.offsetX
-  const cy = (t.y + 0.5) * cs - viewport.value.offsetY
+  const { gx, gy, scale } = tokenLayout(t)
+  const cx = gx * cs - viewport.value.offsetX
+  const cy = gy * cs - viewport.value.offsetY
+  const r = tokenR.value * scale
   // flip below the token when there isn't room above (condition chips can
   // stack the tooltip a few lines tall)
-  const below = cy - tokenR.value < 150
+  const below = cy - r < 150
   return {
     left: `${cx}px`,
-    top: below ? `${cy + tokenR.value + 14}px` : `${cy - tokenR.value - 14}px`,
+    top: below ? `${cy + r + 14}px` : `${cy - r - 14}px`,
     transform: below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
   }
 })
