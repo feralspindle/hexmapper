@@ -23,7 +23,7 @@ export async function openOracle(page) {
 }
 
 export async function openStatBlocks(page) {
-  await page.getByRole('button', { name: 'NPCs' }).click()
+  await page.getByRole('button', { name: 'Codex' }).click()
   await page.getByTestId('statblock-add-name').waitFor()
 }
 

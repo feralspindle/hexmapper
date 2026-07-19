@@ -1,6 +1,7 @@
 export const REALTIME_TABLES = {
   character: 'characters',
   chat_message: 'chat_messages',
+  compendium_entry: 'compendium_entries',
   dice_roll: 'dice_rolls',
   dice_roll_annotation: 'dice_roll_annotations',
   dungeon: 'dungeons',

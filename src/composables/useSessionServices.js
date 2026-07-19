@@ -6,6 +6,7 @@ import { useDiceStatsStore } from '@/stores/diceStatsStore.js'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useOracleStore } from '@/stores/oracleStore.js'
 import { useStatBlockStore } from '@/stores/statBlockStore.js'
+import { useCompendiumStore } from '@/stores/compendiumStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { usePhotoStore } from '@/stores/photoStore.js'
@@ -26,6 +27,7 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
   const chatStore = useChatStore()
   const oracleStore = useOracleStore()
   const statBlockStore = useStatBlockStore()
+  const compendiumStore = useCompendiumStore()
   const characterStore = useCharacterStore()
   const prefs = useUserPrefsStore()
   const photoStore = usePhotoStore()
@@ -38,8 +40,10 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
     }
     if (sessionStore.playMode === 'gm_less') {
       statBlockStore.init(sessionId)
+      compendiumStore.init(sessionId)
     } else {
       statBlockStore.cleanup()
+      compendiumStore.cleanup()
     }
   }
 
@@ -67,6 +71,7 @@ export function useSessionServices(sessionId, { alwaysOracle = false } = {}) {
     chatStore.cleanup()
     oracleStore.cleanup()
     statBlockStore.cleanup()
+    compendiumStore.cleanup()
     mapStore.cleanup()
   }
 
