@@ -113,6 +113,16 @@
                 <i class="fa-solid fa-bolt" />
                 <span>Initiative</span>
               </button>
+              <button
+                v-if="inDungeon"
+                type="button"
+                class="ds-btn tiny"
+                data-testid="statblock-drop-token"
+                @click="dungeonStore.requestStatBlockTokenDrop(block.id)"
+              >
+                <i class="fa-solid fa-chess-pawn" />
+                <span>{{ dungeonStore.tokenForStatBlock(block.id) ? 'Recall token' : 'Drop token' }}</span>
+              </button>
               <button type="button" class="hm-card-icon-btn" title="Duplicate" data-testid="statblock-duplicate" @click="store.duplicateBlock(block.id)">
                 <i class="fa-solid fa-copy" />
               </button>
@@ -131,11 +141,15 @@
 import { computed, ref } from 'vue'
 import { useStatBlockStore, STAT_KEYS, blankStatBlock } from '@/stores/statBlockStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
+import { useD } from '@/stores/dungeonStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 
 const store = useStatBlockStore()
 const sessionStore = useSessionStore()
+const dungeonStore = useD()
 const { confirm } = useConfirmDialog()
+
+const inDungeon = computed(() => !!dungeonStore.dungeon)
 
 const newKind = ref('monster')
 const newName = ref('')

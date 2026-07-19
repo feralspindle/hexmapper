@@ -579,6 +579,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
+import { useStatBlockStore } from '@/stores/statBlockStore.js'
 import { useItemDrag } from '@/composables/useItemDrag.js'
 import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
@@ -639,6 +640,7 @@ const emit = defineEmits(['image-offset-change'])
 const dungeonStore = useD()
 const authStore = useAuthStore()
 const characterStore = useCharacterStore()
+const statBlockStore = useStatBlockStore()
 const { confirm } = useConfirmDialog()
 
 const remoteCursors = ref(new Map())
@@ -1066,7 +1068,9 @@ watch(() => dungeonStore.tokenDropRequest, (req) => {
       }
     }
   }
-  if (target) dungeonStore.placeToken(req.characterId, target.x, target.y)
+  if (!target) return
+  if (req.statBlockId) dungeonStore.placeStatBlockToken(req.statBlockId, target.x, target.y)
+  else dungeonStore.placeToken(req.characterId, target.x, target.y)
 })
 
 function hpColorFor(pct) {
@@ -1079,6 +1083,12 @@ const charactersById = computed(() =>
   new Map(characterStore.characters.map(c => [c.id, c]))
 )
 
+const statBlocksById = computed(() =>
+  new Map(statBlockStore.blocks.map(b => [b.id, b]))
+)
+
+const STAT_BLOCK_TOKEN_COLORS = { monster: '#c83c32', npc: '#5a8ca8' }
+
 // viewport-independent so panning and dragging don't rebuild it - screen
 // position is derived per frame in tokenTransform instead
 const tokenModels = computed(() => {
@@ -1090,6 +1100,32 @@ const tokenModels = computed(() => {
     // staging an ambush
     if (!isGM && dungeonStore.fogMode && !dungeonStore.fogRevealAll &&
         !dungeonStore.isCellRevealed(token.x, token.y)) continue
+    if (token.stat_block_id) {
+      const block = statBlocksById.value.get(token.stat_block_id)
+      const data = block?.data ?? {}
+      const maxHp = data.maxHp ?? 0
+      const hp = data.currentHp ?? maxHp
+      const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0
+      models.push({
+        id: token.id,
+        characterId: null,
+        statBlockId: token.stat_block_id,
+        x: token.x,
+        y: token.y,
+        name: data.name || (block?.kind === 'npc' ? 'NPC' : 'Monster'),
+        color: STAT_BLOCK_TOKEN_COLORS[block?.kind] ?? STAT_BLOCK_TOKEN_COLORS.monster,
+        hp,
+        maxHp,
+        hpPct,
+        hpColor: hpColorFor(hpPct),
+        ac: data.ac ?? null,
+        initiative: null,
+        conditions: [],
+        imageUrl: null,
+        canDrag: true,
+      })
+      continue
+    }
     const char = charactersById.value.get(token.character_id)
     const data = char?.data ?? {}
     const maxHp = data.maxHitPoints ?? 0
@@ -1098,6 +1134,7 @@ const tokenModels = computed(() => {
     models.push({
       id: token.id,
       characterId: token.character_id,
+      statBlockId: null,
       x: token.x,
       y: token.y,
       name: data.name || 'Unknown',
@@ -1331,6 +1368,7 @@ function onTokenPointerCancel(e) {
 function canDeleteToken(id) {
   const token = dungeonStore.tokens.get(id)
   if (!token) return false
+  if (token.stat_block_id) return true
   if (sessionStore.isGM) return true
   const char = charactersById.value.get(token.character_id)
   return char?.user_id === authStore.user?.id
