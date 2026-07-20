@@ -78,6 +78,7 @@
         <span class="ds-tool-key">G</span>
         <span class="ds-tip">Generate room<kbd>G</kbd></span>
       </button>
+      <ToolbarToggleButton kind="toolkit" testid="dungeon-toolkit-toggle" />
     </div>
 
     <div class="ds-tool-group">
