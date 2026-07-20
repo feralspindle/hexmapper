@@ -81,7 +81,6 @@ create table party_calendar_days (
 
 create table oracle_tables (
     id          uuid primary key,
-    session_id  uuid not null,
     created_by  uuid not null,
     name        text not null,
     description text not null default '',
@@ -174,10 +173,9 @@ async fn fixture(pool: &PgPool) -> (AppState, Uuid, Uuid) {
     // a one-row weather table so the roll is deterministic
     let table_id = Uuid::new_v4();
     sqlx::query(
-        "insert into oracle_tables (id, session_id, created_by, name, tag) values ($1, $2, $3, 'Weather', 'weather')",
+        "insert into oracle_tables (id, created_by, name, tag) values ($1, $2, 'Weather', 'weather')",
     )
     .bind(table_id)
-    .bind(session_id)
     .bind(owner)
     .execute(pool)
     .await

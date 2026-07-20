@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
 import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
+import { useAuthStore } from '@/stores/authStore.js'
 
 const HISTORY_LIMIT = 80
 
@@ -67,12 +68,15 @@ export const useOracleStore = defineStore('oracle', () => {
     }
   }
 
-  async function loadTables(sessionId = session.key, generation = session.generation) {
-    if (!sessionId) return
+  // tables are the signed-in user's library, not session data; the session
+  // only scopes the panel lifecycle and the roll history
+  async function loadTables(_sessionId = session.key, generation = session.generation) {
+    const userId = useAuthStore().user?.id
+    if (!userId) return
     const { data, error: loadError } = await supabase
       .from('oracle_tables')
       .select('*')
-      .eq('session_id', sessionId)
+      .eq('created_by', userId)
       .order('updated_at', { ascending: false })
 
     if (loadError) throw loadError
@@ -112,12 +116,13 @@ export const useOracleStore = defineStore('oracle', () => {
   }
 
   function subscribe(sessionId) {
+    const userId = useAuthStore().user?.id
     session.open(`oracle:tables:${sessionId}`, { sessionId, refresh }, ch => ch
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'oracle_tables',
-        filter: `session_id=eq.${sessionId}`,
+        filter: `created_by=eq.${userId}`,
       }, async (event) => {
         if (event.eventType === 'INSERT') {
           upsertById(tables, event.new)
@@ -161,10 +166,8 @@ export const useOracleStore = defineStore('oracle', () => {
   }
 
   async function createTable({ name, description = '', mode = 'weighted' }) {
-    if (!session.key) return
     return run(async () => {
       const data = await apiClient.post('/oracle-tables', {
-        session_id: session.key,
         name,
         description,
         mode,

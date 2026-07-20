@@ -1,7 +1,7 @@
 //! integration tests for chained oracle tables (#47): a roll walks subtable
 //! references and records the chain as one grouped result, an a->b->a cycle
-//! truncates instead of hanging, and cross-session chains are rejected at
-//! write time.
+//! truncates instead of hanging, and chains into another user's tables are
+//! rejected at write time.
 //!
 //! gated on `DATABASE_URL` like the other integration tests, skipped when no
 //! db is configured, run against an ephemeral postgres in ci. it (re)creates
@@ -55,7 +55,6 @@ create table session_members (
 
 create table oracle_tables (
     id          uuid primary key,
-    session_id  uuid not null,
     created_by  uuid not null,
     name        text not null,
     description text not null default '',
@@ -133,11 +132,10 @@ fn auth(user_id: Uuid) -> AuthUser {
     }
 }
 
-async fn seed_table(pool: &PgPool, session_id: Uuid, owner: Uuid, name: &str) -> Uuid {
+async fn seed_table(pool: &PgPool, owner: Uuid, name: &str) -> Uuid {
     let id = Uuid::new_v4();
-    sqlx::query("insert into oracle_tables (id, session_id, created_by, name) values ($1, $2, $3, $4)")
+    sqlx::query("insert into oracle_tables (id, created_by, name) values ($1, $2, $3)")
         .bind(id)
-        .bind(session_id)
         .bind(owner)
         .bind(name)
         .execute(pool)
@@ -183,9 +181,9 @@ async fn chained_roll_records_the_whole_chain() {
         .unwrap();
 
     // encounter -> monster -> reaction, one row each so the walk is deterministic
-    let reaction = seed_table(&pool, session_id, owner, "Reaction").await;
-    let monster = seed_table(&pool, session_id, owner, "Monster").await;
-    let encounter = seed_table(&pool, session_id, owner, "Encounter").await;
+    let reaction = seed_table(&pool, owner, "Reaction").await;
+    let monster = seed_table(&pool, owner, "Monster").await;
+    let encounter = seed_table(&pool, owner, "Encounter").await;
     seed_row(&pool, reaction, "hostile", None).await;
     seed_row(&pool, monster, "{2d6} goblins", Some(reaction)).await;
     seed_row(&pool, encounter, "monsters ahead", Some(monster)).await;
@@ -247,8 +245,8 @@ async fn cyclic_chain_truncates_instead_of_hanging() {
         .await
         .unwrap();
 
-    let a = seed_table(&pool, session_id, owner, "A").await;
-    let b = seed_table(&pool, session_id, owner, "B").await;
+    let a = seed_table(&pool, owner, "A").await;
+    let b = seed_table(&pool, owner, "B").await;
     seed_row(&pool, a, "to b", Some(b)).await;
     seed_row(&pool, b, "back to a", Some(a)).await;
 
@@ -272,7 +270,7 @@ async fn cyclic_chain_truncates_instead_of_hanging() {
 }
 
 #[tokio::test]
-async fn cross_session_chain_is_rejected_at_write() {
+async fn cross_owner_chain_is_rejected_at_write() {
     let _db = DB_LOCK.lock().await;
     let Some(pool) = setup().await else {
         eprintln!("skipping oracle_chain test: DATABASE_URL not set");
@@ -282,8 +280,6 @@ async fn cross_session_chain_is_rejected_at_write() {
 
     let owner = Uuid::new_v4();
     let other_owner = Uuid::new_v4();
-    let session_id = Uuid::new_v4();
-    let other_session = Uuid::new_v4();
     for (id, email) in [(owner, "mine@test"), (other_owner, "theirs@test")] {
         sqlx::query("insert into auth.users (id, email) values ($1, $2)")
             .bind(id)
@@ -292,17 +288,9 @@ async fn cross_session_chain_is_rejected_at_write() {
             .await
             .unwrap();
     }
-    for (sid, oid) in [(session_id, owner), (other_session, other_owner)] {
-        sqlx::query("insert into sessions (id, owner_id) values ($1, $2)")
-            .bind(sid)
-            .bind(oid)
-            .execute(&pool)
-            .await
-            .unwrap();
-    }
 
-    let mine = seed_table(&pool, session_id, owner, "Mine").await;
-    let theirs = seed_table(&pool, other_session, other_owner, "Theirs").await;
+    let mine = seed_table(&pool, owner, "Mine").await;
+    let theirs = seed_table(&pool, other_owner, "Theirs").await;
 
     let result = create_row(
         State(state),
@@ -320,5 +308,5 @@ async fn cross_session_chain_is_rejected_at_write() {
     )
     .await;
 
-    assert!(result.is_err(), "chaining into another session must fail");
+    assert!(result.is_err(), "chaining into another user's table must fail");
 }

@@ -1,6 +1,6 @@
 //! On-entry hex content generation for exploration mode (solo/GM-less play).
-//! Contents roll on the session's oracle tables when one carries the matching
-//! tag (`hex.terrain`, `hex.poi[.<terrain>]`, `hex.encounter[.<terrain>]`),
+//! Contents roll on the session owner's oracle tables when one carries the
+//! matching tag (`hex.terrain`, `hex.poi[.<terrain>]`, `hex.encounter[.<terrain>]`),
 //! with built-in fallbacks so exploration works before any content pack is
 //! loaded. Roll resolution is shared with the oracle panel via `oracle::roll`;
 //! the one divergence is degenerate tables (range gaps, zero weights), which
@@ -174,10 +174,12 @@ fn fallback_terrain() -> String {
     "plains".to_string()
 }
 
-/// Resolves the most recently updated session table carrying `tag` in one
-/// query: the LEFT JOIN distinguishes a missing table (zero rows) from an
-/// existing table with no usable rows. Degenerate outcomes (range gap, no
-/// positive weight) log and become Nothing rather than errors.
+/// Resolves the most recently updated table carrying `tag` from the session
+/// owner's library (tables are user-owned; the owner's library powers the
+/// session's automation) in one query: the LEFT JOIN distinguishes a missing
+/// table (zero rows) from an existing table with no usable rows. Degenerate
+/// outcomes (range gap, no positive weight) log and become Nothing rather
+/// than errors.
 async fn roll_tagged_table(
     pool: &PgPool,
     session_id: Uuid,
@@ -191,7 +193,8 @@ async fn roll_tagged_table(
             left join oracle_table_rows r on r.table_id = ot.id
             where ot.id = (
                 select id from oracle_tables
-                where session_id = $1 and tag = $2
+                where created_by = (select owner_id from sessions where id = $1)
+                  and tag = $2
                 order by updated_at desc
                 limit 1
             )

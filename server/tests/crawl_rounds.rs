@@ -79,7 +79,6 @@ create table light_sources (
 
 create table oracle_tables (
     id          uuid primary key,
-    session_id  uuid not null,
     created_by  uuid not null,
     name        text not null,
     description text not null default '',
@@ -281,10 +280,9 @@ async fn encounter_check_eventually_fires_and_rolls_the_tagged_table() {
 
     let table_id = Uuid::new_v4();
     sqlx::query(
-        "insert into oracle_tables (id, session_id, created_by, name, tag) values ($1, $2, $3, 'Wandering', 'crawl.encounter')",
+        "insert into oracle_tables (id, created_by, name, tag) values ($1, $2, 'Wandering', 'crawl.encounter')",
     )
     .bind(table_id)
-    .bind(session_id)
     .bind(owner)
     .execute(&pool)
     .await

@@ -73,7 +73,7 @@
             @click="installPack(pack.id)"
           >
             <i class="fa-solid fa-download" />
-            <span>{{ installingPack === pack.id ? 'Adding…' : 'Add to session' }}</span>
+            <span>{{ installingPack === pack.id ? 'Adding…' : 'Add to my tables' }}</span>
           </button>
         </div>
       </section>

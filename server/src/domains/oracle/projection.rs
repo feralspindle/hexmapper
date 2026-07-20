@@ -13,9 +13,8 @@ pub async fn append_table_created(
     let sql = format!(
         r#"
         {APPEND_EVENT_CTE}
-        insert into oracle_tables (id, session_id, created_by, name, description, mode, tag, created_at, updated_at)
+        insert into oracle_tables (id, created_by, name, description, mode, tag, created_at, updated_at)
         select aggregate_id,
-               session_id,
                (metadata->>'user_id')::uuid,
                payload->>'name',
                coalesce(payload->>'description', ''),
@@ -24,7 +23,7 @@ pub async fn append_table_created(
                created_at,
                created_at
         from evt
-        returning id, session_id, created_by, name, description, mode, tag, created_at, updated_at
+        returning id, created_by, name, description, mode, tag, created_at, updated_at
         "#
     );
 
@@ -55,7 +54,7 @@ pub async fn append_table_updated(
             updated_at = evt.created_at
         from evt
         where ot.id = evt.aggregate_id
-        returning ot.id, ot.session_id, ot.created_by, ot.name, ot.description, ot.mode, ot.tag, ot.created_at, ot.updated_at
+        returning ot.id, ot.created_by, ot.name, ot.description, ot.mode, ot.tag, ot.created_at, ot.updated_at
         "#
     );
 

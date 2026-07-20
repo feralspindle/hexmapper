@@ -1,8 +1,9 @@
 //! External import endpoints: a local tool (rules assistant, book extractor)
 //! pushes json bundles into a solo session using a per-session import key.
 //! Key management runs under normal browser auth; the /import/* endpoints run
-//! under `ImportAuth`, which resolves the key to its session, so bundles never
-//! carry a session_id.
+//! under `ImportAuth`, which resolves the key to its session and creator, so
+//! bundles never carry a session_id. Oracle tables land in the key creator's
+//! personal library; everything else lands in the session.
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -209,7 +210,7 @@ pub async fn import_oracle_tables(
         .collect();
     validate_tables(&tables).map_err(AppError::BadRequest)?;
 
-    let colliding = colliding_tables(&state, auth.session_id, &tables).await?;
+    let colliding = colliding_tables(&state, auth.user_id, &tables).await?;
     let replaced = colliding.len();
     let delete_first: Vec<Uuid> = if req.replace {
         colliding.iter().map(|(id, _)| *id).collect()
@@ -223,14 +224,8 @@ pub async fn import_oracle_tables(
         Vec::new()
     };
 
-    let installed_rows = install_table_bundle(
-        &state,
-        auth.session_id,
-        &tables,
-        &delete_first,
-        &auth.metadata(),
-    )
-    .await?;
+    let installed_rows =
+        install_table_bundle(&state, &tables, &delete_first, &auth.metadata()).await?;
 
     Ok(Json(json!({
         "installed_tables": tables.len(),

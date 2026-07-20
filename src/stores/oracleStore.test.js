@@ -18,8 +18,9 @@ vi.mock('@/lib/apiClient.js', async () => {
 })
 
 import { useOracleStore } from './oracleStore.js'
+import { useAuthStore } from './authStore.js'
 
-const table = (id, overrides = {}) => ({ id, session_id: 's1', name: `Table ${id}`, updated_at: '2026-07-01T00:00:00Z', ...overrides })
+const table = (id, overrides = {}) => ({ id, created_by: 'u1', name: `Table ${id}`, updated_at: '2026-07-01T00:00:00Z', ...overrides })
 const row = (id, tableId, overrides = {}) => ({ id, table_id: tableId, text: `Row ${id}`, position: 0, created_at: '2026-07-01T00:00:00Z', ...overrides })
 const oracleRoll = (id, overrides = {}) => ({ id, session_id: 's1', kind: 'yes_no', created_at: '2026-07-01T00:00:00Z', ...overrides })
 
@@ -27,6 +28,7 @@ describe('oracleStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     resetKit(kit)
+    useAuthStore().user = { id: 'u1' }
   })
 
   test('init loads tables, their rows, and roll history', async () => {

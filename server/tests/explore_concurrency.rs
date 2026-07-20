@@ -77,7 +77,6 @@ create table hex_cells (
 
 create table oracle_tables (
     id          uuid primary key,
-    session_id  uuid not null,
     created_by  uuid not null,
     name        text not null,
     description text not null default '',
@@ -169,10 +168,9 @@ async fn concurrent_explores_generate_the_hex_exactly_once() {
     // a terrain table with distinct results so two generations would disagree
     let table_id = Uuid::new_v4();
     sqlx::query(
-        "insert into oracle_tables (id, session_id, created_by, name, tag) values ($1, $2, $3, 'Terrain', 'hex.terrain')",
+        "insert into oracle_tables (id, created_by, name, tag) values ($1, $2, 'Terrain', 'hex.terrain')",
     )
     .bind(table_id)
-    .bind(session_id)
     .bind(owner)
     .execute(&pool)
     .await

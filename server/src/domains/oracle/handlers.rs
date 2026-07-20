@@ -36,7 +36,6 @@ pub struct SessionQuery {
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct OracleTableRow {
     pub id: Uuid,
-    pub session_id: Uuid,
     pub created_by: Uuid,
     pub name: String,
     pub description: String,
@@ -77,7 +76,9 @@ pub struct OracleRollRow {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTableRequest {
-    pub session_id: Uuid,
+    // tables are user-owned; tolerated so a cached frontend can keep posting it
+    #[allow(dead_code)]
+    pub session_id: Option<Uuid>,
     pub name: String,
     #[serde(default)]
     pub description: String,
@@ -139,7 +140,7 @@ pub struct RollOracleRequest {
 
 #[derive(Debug, sqlx::FromRow)]
 struct TableScope {
-    session_id: Uuid,
+    created_by: Uuid,
     name: String,
     mode: String,
 }
@@ -155,18 +156,16 @@ fn default_weight() -> i32 {
 pub async fn list_tables(
     State(state): State<AppState>,
     auth: AuthUser,
-    Query(query): Query<SessionQuery>,
 ) -> Result<Json<Vec<OracleTableRow>>, AppError> {
-    require_member(&state, auth.user_id, query.session_id).await?;
     let rows = sqlx::query_as(
         r#"
-        select id, session_id, created_by, name, description, mode, tag, created_at, updated_at
+        select id, created_by, name, description, mode, tag, created_at, updated_at
         from oracle_tables
-        where session_id = $1
+        where created_by = $1
         order by updated_at desc, created_at desc
         "#,
     )
-    .bind(query.session_id)
+    .bind(auth.user_id)
     .fetch_all(state.pool())
     .await?;
 
@@ -200,7 +199,6 @@ pub async fn create_table(
     auth: AuthUser,
     Json(req): Json<CreateTableRequest>,
 ) -> Result<Json<OracleTableRow>, AppError> {
-    require_member(&state, auth.user_id, req.session_id).await?;
     let name = clean_text(&req.name, "table name", 1, MAX_NAME_LEN)?;
     let description = clean_text(&req.description, "description", 0, MAX_DESC_LEN)?;
     validate_mode(&req.mode)?;
@@ -209,7 +207,7 @@ pub async fn create_table(
     let event = NewEvent {
         aggregate_type: "oracle_table",
         aggregate_id: Uuid::new_v4(),
-        session_id: Some(req.session_id),
+        session_id: None,
         event_type: "oracle_table.created",
         payload: json!({ "name": name, "description": description, "mode": req.mode, "tag": tag }),
         metadata: auth.metadata(),
@@ -229,7 +227,7 @@ pub async fn update_table(
     Json(req): Json<UpdateTableRequest>,
 ) -> Result<Json<OracleTableRow>, AppError> {
     let scope = table_scope(&state, id).await?.ok_or(AppError::NotFound)?;
-    require_member(&state, auth.user_id, scope.session_id).await?;
+    require_owner(&scope, auth.user_id)?;
 
     let mut payload = serde_json::Map::new();
     if let Some(name) = req.name {
@@ -258,7 +256,7 @@ pub async fn update_table(
     let event = NewEvent {
         aggregate_type: "oracle_table",
         aggregate_id: id,
-        session_id: Some(scope.session_id),
+        session_id: None,
         event_type: "oracle_table.updated",
         payload: Value::Object(payload),
         metadata: auth.metadata(),
@@ -277,12 +275,12 @@ pub async fn delete_table(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let scope = table_scope(&state, id).await?.ok_or(AppError::NotFound)?;
-    require_member(&state, auth.user_id, scope.session_id).await?;
+    require_owner(&scope, auth.user_id)?;
 
     let event = NewEvent {
         aggregate_type: "oracle_table",
         aggregate_id: id,
-        session_id: Some(scope.session_id),
+        session_id: None,
         event_type: "oracle_table.deleted",
         payload: json!({}),
         metadata: auth.metadata(),
@@ -304,18 +302,18 @@ pub async fn create_row(
     let scope = table_scope(&state, table_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    require_member(&state, auth.user_id, scope.session_id).await?;
+    require_owner(&scope, auth.user_id)?;
     validate_row_shape(req.weight, req.range_min, req.range_max)?;
     let result = clean_text(&req.result, "result", 1, MAX_RESULT_LEN)?;
     let notes = clean_text(&req.notes, "notes", 0, MAX_NOTES_LEN)?;
     if let Some(subtable_id) = req.subtable_id {
-        validate_subtable(&state, scope.session_id, table_id, subtable_id).await?;
+        validate_subtable(&state, scope.created_by, table_id, subtable_id).await?;
     }
 
     let event = NewEvent {
         aggregate_type: "oracle_table_row",
         aggregate_id: Uuid::new_v4(),
-        session_id: Some(scope.session_id),
+        session_id: None,
         event_type: "oracle_table_row.created",
         payload: json!({
             "table_id": table_id,
@@ -343,8 +341,10 @@ pub async fn update_row(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateRowRequest>,
 ) -> Result<Json<OracleTableRowRow>, AppError> {
-    let (session_id, current) = row_scope(&state, id).await?.ok_or(AppError::NotFound)?;
-    require_member(&state, auth.user_id, session_id).await?;
+    let (owner_id, current) = row_scope(&state, id).await?.ok_or(AppError::NotFound)?;
+    if owner_id != auth.user_id {
+        return Err(AppError::Forbidden);
+    }
 
     let weight = req.weight.unwrap_or(current.weight);
     let range_min = req.range_min.or(current.range_min);
@@ -378,7 +378,7 @@ pub async fn update_row(
     }
     if let Some(subtable_id) = req.subtable_id {
         if let Some(subtable_id) = subtable_id {
-            validate_subtable(&state, session_id, current.table_id, subtable_id).await?;
+            validate_subtable(&state, owner_id, current.table_id, subtable_id).await?;
         }
         payload.insert("subtable_id".to_string(), json!(subtable_id));
     }
@@ -389,7 +389,7 @@ pub async fn update_row(
     let event = NewEvent {
         aggregate_type: "oracle_table_row",
         aggregate_id: id,
-        session_id: Some(session_id),
+        session_id: None,
         event_type: "oracle_table_row.updated",
         payload: Value::Object(payload),
         metadata: auth.metadata(),
@@ -407,13 +407,15 @@ pub async fn delete_row(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let (session_id, _) = row_scope(&state, id).await?.ok_or(AppError::NotFound)?;
-    require_member(&state, auth.user_id, session_id).await?;
+    let (owner_id, _) = row_scope(&state, id).await?.ok_or(AppError::NotFound)?;
+    if owner_id != auth.user_id {
+        return Err(AppError::Forbidden);
+    }
 
     let event = NewEvent {
         aggregate_type: "oracle_table_row",
         aggregate_id: id,
-        session_id: Some(session_id),
+        session_id: None,
         event_type: "oracle_table_row.deleted",
         payload: json!({}),
         metadata: auth.metadata(),
@@ -451,9 +453,7 @@ pub async fn roll_oracle(
             let scope = table_scope(&state, table_id)
                 .await?
                 .ok_or(AppError::NotFound)?;
-            if scope.session_id != req.session_id {
-                return Err(AppError::Forbidden);
-            }
+            require_owner(&scope, auth.user_id)?;
             let result = table_result(&state, table_id, &scope).await?;
             (Some(table_id), Some(scope.name), result)
         }
@@ -490,8 +490,16 @@ async fn require_member(state: &AppState, user_id: Uuid, session_id: Uuid) -> Re
     }
 }
 
+fn require_owner(scope: &TableScope, user_id: Uuid) -> Result<(), AppError> {
+    if scope.created_by == user_id {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
 async fn table_scope(state: &AppState, table_id: Uuid) -> Result<Option<TableScope>, AppError> {
-    sqlx::query_as("select session_id, name, mode from oracle_tables where id = $1")
+    sqlx::query_as("select created_by, name, mode from oracle_tables where id = $1")
         .bind(table_id)
         .fetch_optional(state.pool())
         .await
@@ -504,7 +512,7 @@ async fn row_scope(
 ) -> Result<Option<(Uuid, OracleTableRowRow)>, AppError> {
     let row: Option<(Uuid, Uuid, Uuid, i32, Option<i32>, Option<i32>, String, String, i32, Option<Uuid>, DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
         r#"
-        select ot.session_id, r.id, r.table_id, r.weight, r.range_min, r.range_max, r.result, r.notes, r.position, r.subtable_id, r.created_at, r.updated_at
+        select ot.created_by, r.id, r.table_id, r.weight, r.range_min, r.range_max, r.result, r.notes, r.position, r.subtable_id, r.created_at, r.updated_at
         from oracle_table_rows r
         join oracle_tables ot on ot.id = r.table_id
         where r.id = $1
@@ -516,7 +524,7 @@ async fn row_scope(
 
     Ok(row.map(
         |(
-            session_id,
+            owner_id,
             id,
             table_id,
             weight,
@@ -530,7 +538,7 @@ async fn row_scope(
             updated_at,
         )| {
             (
-                session_id,
+                owner_id,
                 OracleTableRowRow {
                     id,
                     table_id,
@@ -683,7 +691,7 @@ fn pick(options: &'static [&'static str]) -> &'static str {
 
 async fn validate_subtable(
     state: &AppState,
-    session_id: Uuid,
+    owner_id: Uuid,
     table_id: Uuid,
     subtable_id: Uuid,
 ) -> Result<(), AppError> {
@@ -695,7 +703,7 @@ async fn validate_subtable(
     let scope = table_scope(state, subtable_id)
         .await?
         .ok_or_else(|| AppError::BadRequest("chained table does not exist".to_string()))?;
-    if scope.session_id != session_id {
+    if scope.created_by != owner_id {
         return Err(AppError::Forbidden);
     }
     Ok(())
@@ -743,7 +751,7 @@ async fn table_result(
             if steps.len() >= MAX_CHAIN_DEPTH || visited.contains(&sub) {
                 truncated = true;
             } else if let Some(sub_scope) = table_scope(state, sub).await? {
-                if sub_scope.session_id == scope.session_id {
+                if sub_scope.created_by == scope.created_by {
                     current = Some((sub, sub_scope.name, sub_scope.mode));
                 }
             }

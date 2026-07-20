@@ -415,15 +415,15 @@ async fn advance_calendar_day(
     Ok(json!({ "year": year, "month": month, "day": day, "weather": weather }))
 }
 
-/// rolls the most recent session table with the given tag, returning the row
-/// text or null when no table exists
+/// rolls the session owner's most recent table with the given tag, returning
+/// the row text or null when no table exists
 async fn roll_tagged(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     session_id: Uuid,
     tag: &str,
 ) -> Result<Value, AppError> {
     let table: Option<(Uuid, String)> = sqlx::query_as(
-        "select id, mode from oracle_tables where session_id = $1 and tag = $2 order by updated_at desc limit 1",
+        "select id, mode from oracle_tables where created_by = (select owner_id from sessions where id = $1) and tag = $2 order by updated_at desc limit 1",
     )
     .bind(session_id)
     .bind(tag)
@@ -874,9 +874,9 @@ pub async fn crawl_round(
     }
 }
 
-/// rolls the most recently updated session table tagged `crawl.encounter` and
-/// records it in the oracle roll history. no tagged table -> a bare marker
-/// object so the chat line still lands.
+/// rolls the session owner's most recently updated table tagged
+/// `crawl.encounter` and records it in the oracle roll history. no tagged
+/// table -> a bare marker object so the chat line still lands.
 async fn crawl_encounter(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     session_id: Uuid,
@@ -885,7 +885,8 @@ async fn crawl_encounter(
     let table: Option<(Uuid, String, String)> = sqlx::query_as(
         r#"
         select id, name, mode from oracle_tables
-        where session_id = $1 and tag = 'crawl.encounter'
+        where created_by = (select owner_id from sessions where id = $1)
+          and tag = 'crawl.encounter'
         order by updated_at desc
         limit 1
         "#,
