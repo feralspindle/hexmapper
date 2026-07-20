@@ -332,3 +332,37 @@ async fn difficult_terrain_eventually_gets_the_party_lost() {
     let result = op(&state, owner, session_id, move_req("plains")).await;
     assert_eq!(result["lost"], json!(false));
 }
+
+#[tokio::test]
+async fn three_moves_at_pace_three_complete_the_day() {
+    let _db = DB_LOCK.lock().await;
+    let Some(pool) = setup().await else {
+        eprintln!("skipping travel test: DATABASE_URL not set");
+        return;
+    };
+    let (state, owner, session_id) = fixture(&pool).await;
+
+    op(
+        &state,
+        owner,
+        session_id,
+        TravelRequest {
+            op: "config".into(),
+            terrain: None,
+            patch: Some(json!({ "enabled": true, "rates": { "plains": 3.0 } })),
+        },
+    )
+    .await;
+
+    // 1/3 + 1/3 + 1/3 must be a whole day despite float summing error; this
+    // used to strand the party at 99% and roll the day one move late
+    let first = op(&state, owner, session_id, move_req("plains")).await;
+    assert_eq!(first["days_advanced"], 0);
+    let second = op(&state, owner, session_id, move_req("plains")).await;
+    assert_eq!(second["days_advanced"], 0);
+    let third = op(&state, owner, session_id, move_req("plains")).await;
+    assert_eq!(third["days_advanced"], 1);
+    assert_eq!(third["weather"]["weather"], "driving rain");
+    let fraction = third["travel_state"]["fraction"].as_f64().unwrap();
+    assert!(fraction.abs() < 1e-6, "fraction resets to zero, got {fraction}");
+}

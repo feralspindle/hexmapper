@@ -311,14 +311,17 @@ pub async fn travel(
 
                 let mut days_advanced = 0i64;
                 let mut weather: Value = Value::Null;
-                while fraction >= 1.0 {
+                // the stored fraction accumulates 1/rate steps, so summing
+                // error must count as a full day: at pace 3 three moves total
+                // 0.99 (or 0.9999... unrounded) and the day would never roll
+                while fraction >= 1.0 - 1e-9 {
                     fraction -= 1.0;
                     days_advanced += 1;
                     weather = advance_calendar_day(&mut tx, id, &metadata).await?;
                 }
 
                 let obj = travel.as_object_mut().expect("travel state is an object");
-                obj.insert("fraction".to_string(), json!((fraction * 100.0).round() / 100.0));
+                obj.insert("fraction".to_string(), json!(fraction.max(0.0)));
                 let row = projection::set_travel_state(&mut tx, id, &travel, &metadata)
                     .await?
                     .ok_or(AppError::NotFound)?;
