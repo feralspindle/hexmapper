@@ -1025,7 +1025,7 @@ const draggingToken = ref(null)
 const hoveredTokenId = ref(null)
 const lastPointerType = ref('mouse')
 
-const tokenR = computed(() => cellPx.value * 0.45)
+const tokenR = computed(() => cellPx.value * 0.3)
 const tokenCondR = computed(() => Math.max(3, tokenR.value * 0.28))
 const tokenHpH = computed(() => Math.max(4, tokenR.value * 0.3))
 

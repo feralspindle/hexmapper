@@ -24,20 +24,32 @@
       <button class="ds-panel-close-mobile" aria-label="Close panel" @click="drawerOpen = false">&times;</button>
     </div>
 
-    <div v-show="activeTab === 0" class="ds-tab-pane">
+    <div v-show="activeTab === 0" class="ds-tab-pane" :style="splitVars">
       <DungeonDiceSection ref="diceSectionRef" />
+      <div
+        class="ds-pane-divider"
+        data-testid="pane-divider-dice"
+        @pointerdown="startSplitDrag('diceHistory', 1, $event)"
+        @dblclick="resetSplit('diceHistory')"
+      />
       <DungeonSessionSection />
     </div>
 
-    <div v-show="activeTab === 1" class="ds-tab-pane">
+    <div v-show="activeTab === 1" class="ds-tab-pane" :style="splitVars">
       <component :is="inspector" ref="inspectorRef" class="flex-grow" />
+      <div
+        class="ds-pane-divider"
+        data-testid="pane-divider-photos"
+        @pointerdown="startSplitDrag('photos', -1, $event)"
+        @dblclick="resetSplit('photos')"
+      />
       <DungeonPhotosSection />
     </div>
   </aside>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import DungeonDiceSection    from '@/components/common/DungeonDiceSection.vue'
 import DungeonPhotosSection  from '@/components/common/DungeonPhotosSection.vue'
 import DungeonSessionSection from '@/components/common/DungeonSessionSection.vue'
@@ -69,4 +81,47 @@ watch(() => diceStore.pendingRoll, (roll) => {
   drawerOpen.value = true
   diceSectionRef.value?.openSection?.()
 })
+
+const SPLITS_KEY = 'dm.panelSplits'
+
+function readSplits() {
+  try { return JSON.parse(localStorage.getItem(SPLITS_KEY) ?? 'null') ?? {} } catch { return {} }
+}
+
+const splits = reactive({ diceHistory: null, photos: null, ...readSplits() })
+
+function saveSplits() {
+  try { localStorage.setItem(SPLITS_KEY, JSON.stringify(splits)) } catch { /* */ }
+}
+
+const splitVars = computed(() => ({
+  '--dice-history-h': splits.diceHistory ? `${splits.diceHistory}px` : null,
+  '--photos-h': splits.photos ? `${splits.photos}px` : null,
+}))
+
+function startSplitDrag(key, sign, event) {
+  const divider = event.currentTarget
+  const pane = divider.parentElement
+  const target = pane.querySelector('[data-split-target]')
+  const startH = splits[key] ?? target?.getBoundingClientRect().height ?? 220
+  const startY = event.clientY
+  const maxH = Math.max(80, pane.clientHeight - 160)
+
+  divider.setPointerCapture(event.pointerId)
+  const onMove = (ev) => {
+    splits[key] = Math.round(Math.min(maxH, Math.max(80, startH + sign * (ev.clientY - startY))))
+  }
+  const onUp = () => {
+    divider.removeEventListener('pointermove', onMove)
+    divider.removeEventListener('pointerup', onUp)
+    saveSplits()
+  }
+  divider.addEventListener('pointermove', onMove)
+  divider.addEventListener('pointerup', onUp)
+}
+
+function resetSplit(key) {
+  splits[key] = null
+  saveSplits()
+}
 </script>
