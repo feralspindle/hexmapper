@@ -240,6 +240,16 @@ describe('OraclePanel', () => {
     expect(wrapper.get('[data-testid="oracle-library-item"]').text()).toContain('Table 3')
   })
 
+  test('the tags help section documents every wired tag', () => {
+    const wrapper = mount(OraclePanel)
+
+    const help = wrapper.get('[data-testid="oracle-tags-help"]')
+    for (const tag of ['weather', 'hex.terrain', 'hex.poi', 'hex.encounter', 'crawl.encounter', 'dungeon.stocking']) {
+      expect(help.text()).toContain(tag)
+    }
+    expect(help.text()).toContain('added to this session')
+  })
+
   test('content packs list and install', async () => {
     mocks.oracleStore.listPacks.mockResolvedValue([
       { id: 'shadowdark-starter', name: 'Shadowdark Starter', description: 'tables', tables: 21, rows: 200 },

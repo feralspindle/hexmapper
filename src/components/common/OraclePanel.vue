@@ -148,8 +148,8 @@
               class="ds-input oracle-table-tag"
               data-testid="oracle-table-tag"
               maxlength="60"
-              placeholder="Tag (e.g. hex.terrain, hex.encounter.forest)"
-              title="Tagged tables drive exploration-mode hex generation: hex.terrain, hex.poi, hex.encounter, or hex.poi.<terrain> / hex.encounter.<terrain>. hex.terrain results must be terrain ids (plains, forest, mountain, water, desert, swamp, city, dungeon, snow, volcanic)"
+              placeholder="Tag (e.g. weather, hex.terrain, crawl.encounter)"
+              title="Tags let the game roll this table automatically - see Table Tags below for what each one drives"
               @change="oracleStore.updateTable(table.id, { tag: $event.target.value })"
             />
 
@@ -270,6 +270,52 @@
             </button>
           </div>
         </div>
+      </section>
+
+      <section class="oracle-section">
+        <div class="oracle-section-title">
+          <span class="ds-field-label">Table Tags</span>
+        </div>
+        <details class="oracle-tags-help" data-testid="oracle-tags-help">
+          <summary>how tags wire tables into the game</summary>
+          <p>
+            A tag marks a table for the game to roll on its own. When something
+            needs a result, the game uses the most recently edited session
+            table with the matching tag - so the table has to be added to this
+            session, and editing a table makes it the active one for its tag.
+          </p>
+          <dl>
+            <div>
+              <dt>weather</dt>
+              <dd>rolled when a travel day completes; the result lands on the calendar and in chat</dd>
+            </div>
+            <div>
+              <dt>hex.terrain</dt>
+              <dd>picks terrain for newly explored hexes. results must be terrain ids: plains, forest, mountain, water, desert, swamp, city, dungeon, snow, volcanic</dd>
+            </div>
+            <div>
+              <dt>hex.poi <span class="oracle-tag-alt">/ hex.poi.forest</span></dt>
+              <dd>points of interest on explored hexes. add a terrain suffix to specialize; the bare tag is the fallback</dd>
+            </div>
+            <div>
+              <dt>hex.encounter <span class="oracle-tag-alt">/ hex.encounter.swamp</span></dt>
+              <dd>encounters on explored hexes, same suffix rule</dd>
+            </div>
+            <div>
+              <dt>crawl.encounter</dt>
+              <dd>wandering encounter check during dungeon crawl rounds</dd>
+            </div>
+            <div>
+              <dt>dungeon.stocking</dt>
+              <dd>room contents when generating dungeon rooms</dd>
+            </div>
+          </dl>
+          <p>
+            Any other tag is just a label for your own organizing - nothing
+            rolls it automatically. The starter pack ships tables for every
+            tag above.
+          </p>
+        </details>
       </section>
 
       <section ref="historyRef" class="oracle-section oracle-history">
@@ -651,6 +697,45 @@ function labelize(key) {
 
 .oracle-library-added {
   color: var(--accent-2);
+}
+
+.oracle-tags-help summary {
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.oracle-tags-help p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.oracle-tags-help dl {
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.oracle-tags-help dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.oracle-tag-alt {
+  color: var(--ink-mute);
+}
+
+.oracle-tags-help dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink-mute);
 }
 
 .oracle-rows {
