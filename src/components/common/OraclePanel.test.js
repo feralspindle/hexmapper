@@ -244,7 +244,7 @@ describe('OraclePanel', () => {
     const wrapper = mount(OraclePanel)
 
     const help = wrapper.get('[data-testid="oracle-tags-help"]')
-    for (const tag of ['weather', 'hex.terrain', 'hex.poi', 'hex.encounter', 'crawl.encounter', 'dungeon.stocking']) {
+    for (const tag of ['weather', 'hex.terrain', 'hex.poi', 'hex.encounter', 'crawl.encounter', 'dungeon.stocking', 'prompt.action', 'prompt.theme', 'prompt.subject', 'prompt.location', 'prompt.complication']) {
       expect(help.text()).toContain(tag)
     }
     expect(help.text()).toContain('added to this session')
