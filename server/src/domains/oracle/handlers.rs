@@ -561,7 +561,7 @@ pub async fn roll_oracle(
             let odds = req.odds.unwrap_or_else(|| "even".to_string());
             (None, None, yes_no_result(&odds)?)
         }
-        "event_prompt" => (None, None, event_prompt_result()),
+        "event_prompt" => (None, None, event_prompt_result(&state, req.session_id).await?),
         "table" => {
             let table_id = req
                 .table_id
@@ -800,14 +800,64 @@ fn yes_no_result_for_roll(odds: &str, threshold: i32, roll: i32) -> Value {
     })
 }
 
-fn event_prompt_result() -> Value {
-    json!({
-        "action": pick(&["Reveal", "Threaten", "Divide", "Delay", "Escalate", "Transform", "Bargain", "Pursue", "Conceal", "Return"]),
-        "theme": pick(&["Debt", "Hunger", "Memory", "Oath", "Ruin", "Shelter", "Pride", "Mercy", "Power", "Loss"]),
-        "subject": pick(&["a rival", "an ally", "the environment", "a hidden faction", "a resource", "a relic", "a rumor", "the weather", "a monster", "a settlement"]),
-        "location": pick(&["nearby", "behind the party", "at a threshold", "underground", "across water", "in plain sight", "in a safe place", "on the road", "inside a ruin", "at camp"]),
-        "complication": pick(&["time runs short", "someone wants payment", "evidence is misleading", "help has a cost", "noise draws attention", "the route changes", "trust is tested", "supplies are strained", "a promise resurfaces", "the danger is closer than expected"]),
-    })
+const PROMPT_SLOTS: &[(&str, &[&str])] = &[
+    ("action", &["Reveal", "Threaten", "Divide", "Delay", "Escalate", "Transform", "Bargain", "Pursue", "Conceal", "Return"]),
+    ("theme", &["Debt", "Hunger", "Memory", "Oath", "Ruin", "Shelter", "Pride", "Mercy", "Power", "Loss"]),
+    ("subject", &["a rival", "an ally", "the environment", "a hidden faction", "a resource", "a relic", "a rumor", "the weather", "a monster", "a settlement"]),
+    ("location", &["nearby", "behind the party", "at a threshold", "underground", "across water", "in plain sight", "in a safe place", "on the road", "inside a ruin", "at camp"]),
+    ("complication", &["time runs short", "someone wants payment", "evidence is misleading", "help has a cost", "noise draws attention", "the route changes", "trust is tested", "supplies are strained", "a promise resurfaces", "the danger is closer than expected"]),
+];
+
+/// each slot checks for a session table tagged prompt.<slot> and rolls it,
+/// falling back to the built-in list when there's no table or the table
+/// can't produce a row. slots resolve independently, so a game can override
+/// just one column. chained subtables are not walked here - a prompt cell
+/// is one line, not a result tree.
+async fn event_prompt_result(state: &AppState, session_id: Uuid) -> Result<Value, AppError> {
+    let mut prompt = serde_json::Map::new();
+    for (slot, builtin) in PROMPT_SLOTS {
+        let tag = format!("prompt.{slot}");
+        let custom = match tagged_session_table(state, session_id, &tag).await? {
+            Some(table) => roll_single_table(state, table.id, &table.name, &table.mode)
+                .await?
+                .and_then(|step| step.get("result").and_then(Value::as_str).map(String::from)),
+            None => None,
+        };
+        let text = custom.unwrap_or_else(|| pick(builtin).to_string());
+        prompt.insert((*slot).to_string(), json!(text));
+    }
+    Ok(Value::Object(prompt))
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct TaggedTable {
+    id: Uuid,
+    name: String,
+    mode: String,
+}
+
+/// the active table for a tag: most recently edited among the tables added
+/// to this session, matching what the panel help promises
+async fn tagged_session_table(
+    state: &AppState,
+    session_id: Uuid,
+    tag: &str,
+) -> Result<Option<TaggedTable>, AppError> {
+    sqlx::query_as(
+        r#"
+        select ot.id, ot.name, ot.mode
+        from oracle_tables ot
+        join session_oracle_tables sot on sot.table_id = ot.id
+        where sot.session_id = $1 and ot.tag = $2
+        order by ot.updated_at desc, ot.created_at desc
+        limit 1
+        "#,
+    )
+    .bind(session_id)
+    .bind(tag)
+    .fetch_optional(state.pool())
+    .await
+    .map_err(Into::into)
 }
 
 fn random_twist() -> &'static str {
