@@ -8,7 +8,7 @@
       </div>
     </header>
 
-    <div class="oracle-scroll ds-section-body">
+    <div ref="scrollRef" class="oracle-scroll ds-section-body">
       <section class="oracle-section">
         <div class="oracle-section-title">
           <span class="ds-field-label">Yes / No</span>
@@ -48,7 +48,7 @@
           class="ds-btn"
           data-testid="oracle-roll-event"
           :disabled="oracleStore.rolling"
-          @click="oracleStore.rollEventPrompt({ question: question.trim() || null })"
+          @click="rollEventPrompt"
         >
           <i class="fa-solid fa-wand-sparkles" />
           <span>Generate Prompt</span>
@@ -105,7 +105,7 @@
               @change="oracleStore.updateTable(table.id, { name: $event.target.value })"
             />
             <div class="oracle-table-actions">
-              <button type="button" class="hm-card-icon-btn" title="Roll table" data-testid="oracle-roll-table" @click="oracleStore.rollTable(table.id, question.trim() || null)">
+              <button type="button" class="hm-card-icon-btn" title="Roll table" data-testid="oracle-roll-table" @click="rollTable(table)">
                 <i class="fa-solid fa-dice" />
               </button>
               <button type="button" class="hm-card-icon-btn" title="Add row" data-testid="oracle-row-new" @click="addRow(table)">
@@ -138,6 +138,7 @@
             <div
               v-for="row in oracleStore.rowsByTable[table.id] ?? []"
               :key="row.id"
+              :data-row-id="row.id"
               class="oracle-row"
               data-testid="oracle-row"
             >
@@ -159,7 +160,7 @@
               />
               <select
                 :value="row.subtable_id ?? ''"
-                class="ds-input oracle-row-chain"
+                class="ds-input"
                 data-testid="oracle-row-chain"
                 title="Roll through another table when this row comes up"
                 @change="oracleStore.updateRow(row.id, { subtable_id: $event.target.value || null })"
@@ -181,7 +182,7 @@
         </article>
       </section>
 
-      <section class="oracle-section oracle-history">
+      <section ref="historyRef" class="oracle-section oracle-history">
         <div class="oracle-section-title">
           <span class="ds-field-label">History</span>
         </div>
@@ -236,7 +237,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { YES_NO_ODDS, useOracleStore } from '@/stores/oracleStore.js'
 import { useJournalStore } from '@/stores/journalStore.js'
 
@@ -265,11 +266,32 @@ async function installPack(packId) {
   installingPack.value = null
 }
 
-function rollYesNo() {
-  oracleStore.rollYesNo({
+const scrollRef = ref(null)
+const historyRef = ref(null)
+
+// the panel is short and history sits below the tables, so a roll that only
+// appends down there reads as a dead button without this
+async function revealHistory() {
+  await nextTick()
+  historyRef.value?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+}
+
+async function rollYesNo() {
+  const rolled = await oracleStore.rollYesNo({
     question: question.value.trim() || null,
     odds: odds.value,
   })
+  if (rolled) revealHistory()
+}
+
+async function rollEventPrompt() {
+  const rolled = await oracleStore.rollEventPrompt({ question: question.value.trim() || null })
+  if (rolled) revealHistory()
+}
+
+async function rollTable(table) {
+  const rolled = await oracleStore.rollTable(table.id, question.value.trim() || null)
+  if (rolled) revealHistory()
 }
 
 async function createTable() {
@@ -288,14 +310,17 @@ async function createTable() {
   }
 }
 
-function addRow(table) {
+async function addRow(table) {
   const count = oracleStore.rowsByTable[table.id]?.length ?? 0
-  oracleStore.createRow(table.id, {
+  const row = await oracleStore.createRow(table.id, {
     weight: 1,
     result: 'New result',
     notes: '',
     position: count,
   })
+  if (!row) return
+  await nextTick()
+  scrollRef.value?.querySelector(`[data-row-id="${row.id}"]`)?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
 }
 
 function chainTargets(tableId) {
@@ -432,7 +457,7 @@ function labelize(key) {
 
 .oracle-row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 22px;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 96px) 22px;
   align-items: center;
   gap: 4px;
 }
@@ -512,11 +537,6 @@ function labelize(key) {
 .oracle-chain-truncated {
   color: var(--ink-mute);
   font-style: italic;
-}
-
-.oracle-row-chain {
-  flex: 0 1 130px;
-  min-width: 90px;
 }
 
 .oracle-pack {
