@@ -621,6 +621,32 @@ svg {
     min-height: 0;
 }
 
+.ds-pane-divider {
+    flex: 0 0 7px;
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+    background: var(--paper-3);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+}
+.ds-pane-divider::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 28px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--rule-strong);
+}
+.ds-pane-divider:hover::after,
+.ds-pane-divider:active::after {
+    background: var(--accent);
+}
+
 .ds-panel-section {
     border-bottom: 1px solid var(--rule);
     display: flex;
