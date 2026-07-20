@@ -27,6 +27,7 @@ drop table if exists events;
 drop table if exists chat_messages;
 drop table if exists party_calendar_days;
 drop table if exists party_calendar_settings;
+drop table if exists session_oracle_tables;
 drop table if exists oracle_table_rows;
 drop table if exists oracle_tables;
 drop table if exists session_members;
@@ -81,7 +82,6 @@ create table party_calendar_days (
 
 create table oracle_tables (
     id          uuid primary key,
-    session_id  uuid not null,
     created_by  uuid not null,
     name        text not null,
     description text not null default '',
@@ -102,6 +102,15 @@ create table oracle_table_rows (
     position    int not null default 0,
     created_at  timestamptz not null default now(),
     updated_at  timestamptz not null default now()
+);
+
+create table session_oracle_tables (
+    id         uuid primary key default gen_random_uuid(),
+    session_id uuid not null,
+    table_id   uuid not null references oracle_tables(id) on delete cascade,
+    added_by   uuid not null,
+    created_at timestamptz not null default now(),
+    unique (session_id, table_id)
 );
 
 create table chat_messages (
@@ -174,10 +183,18 @@ async fn fixture(pool: &PgPool) -> (AppState, Uuid, Uuid) {
     // a one-row weather table so the roll is deterministic
     let table_id = Uuid::new_v4();
     sqlx::query(
-        "insert into oracle_tables (id, session_id, created_by, name, tag) values ($1, $2, $3, 'Weather', 'weather')",
+        "insert into oracle_tables (id, created_by, name, tag) values ($1, $2, 'Weather', 'weather')",
     )
     .bind(table_id)
+    .bind(owner)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "insert into session_oracle_tables (session_id, table_id, added_by) values ($1, $2, $3)",
+    )
     .bind(session_id)
+    .bind(table_id)
     .bind(owner)
     .execute(pool)
     .await
@@ -314,4 +331,38 @@ async fn difficult_terrain_eventually_gets_the_party_lost() {
     // plains moves never roll navigation
     let result = op(&state, owner, session_id, move_req("plains")).await;
     assert_eq!(result["lost"], json!(false));
+}
+
+#[tokio::test]
+async fn three_moves_at_pace_three_complete_the_day() {
+    let _db = DB_LOCK.lock().await;
+    let Some(pool) = setup().await else {
+        eprintln!("skipping travel test: DATABASE_URL not set");
+        return;
+    };
+    let (state, owner, session_id) = fixture(&pool).await;
+
+    op(
+        &state,
+        owner,
+        session_id,
+        TravelRequest {
+            op: "config".into(),
+            terrain: None,
+            patch: Some(json!({ "enabled": true, "rates": { "plains": 3.0 } })),
+        },
+    )
+    .await;
+
+    // 1/3 + 1/3 + 1/3 must be a whole day despite float summing error; this
+    // used to strand the party at 99% and roll the day one move late
+    let first = op(&state, owner, session_id, move_req("plains")).await;
+    assert_eq!(first["days_advanced"], 0);
+    let second = op(&state, owner, session_id, move_req("plains")).await;
+    assert_eq!(second["days_advanced"], 0);
+    let third = op(&state, owner, session_id, move_req("plains")).await;
+    assert_eq!(third["days_advanced"], 1);
+    assert_eq!(third["weather"]["weather"], "driving rain");
+    let fraction = third["travel_state"]["fraction"].as_f64().unwrap();
+    assert!(fraction.abs() < 1e-6, "fraction resets to zero, got {fraction}");
 }

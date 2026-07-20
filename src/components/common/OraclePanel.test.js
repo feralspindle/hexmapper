@@ -5,6 +5,9 @@ import OraclePanel from './OraclePanel.vue'
 const mocks = vi.hoisted(() => ({
   oracleStore: {
     tables: [],
+    sessionTables: [],
+    libraryTables: [],
+    sessionTableIds: new Set(),
     rowsByTable: {},
     rolls: [],
     loading: false,
@@ -21,6 +24,8 @@ const mocks = vi.hoisted(() => ({
     rollTable: vi.fn(),
     listPacks: vi.fn(() => Promise.resolve([])),
     installPack: vi.fn(),
+    attachTable: vi.fn(),
+    detachTable: vi.fn(),
   },
   journalStore: {
     pin: vi.fn(),
@@ -29,6 +34,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/stores/journalStore.js', () => ({
   useJournalStore: () => mocks.journalStore,
+}))
+
+vi.mock('@/stores/authStore.js', () => ({
+  useAuthStore: () => ({ user: { id: 'u1' } }),
 }))
 
 vi.mock('@/stores/oracleStore.js', () => ({
@@ -44,7 +53,11 @@ vi.mock('@/stores/oracleStore.js', () => ({
 
 describe('OraclePanel', () => {
   beforeEach(() => {
+    localStorage.clear()
     mocks.oracleStore.tables = []
+    mocks.oracleStore.sessionTables = []
+    mocks.oracleStore.libraryTables = []
+    mocks.oracleStore.sessionTableIds = new Set()
     mocks.oracleStore.rowsByTable = {}
     mocks.oracleStore.rolls = []
     mocks.oracleStore.error = null
@@ -87,7 +100,7 @@ describe('OraclePanel', () => {
   })
 
   test('renders table rolls and sends selected table id', async () => {
-    mocks.oracleStore.tables = [{ id: 'table-1', name: 'Encounters', description: '', mode: 'weighted' }]
+    mocks.oracleStore.sessionTables = [{ id: 'table-1', name: 'Encounters', description: '', mode: 'weighted', created_by: 'u1' }]
     mocks.oracleStore.rowsByTable = {
       'table-1': [{ id: 'row-1', table_id: 'table-1', weight: 2, result: 'Bandits', position: 0 }],
     }
@@ -96,6 +109,9 @@ describe('OraclePanel', () => {
     await wrapper.get('[data-testid="oracle-roll-table"]').trigger('click')
 
     expect(wrapper.get('[data-testid="oracle-table-name"]').element.value).toBe('Encounters')
+    // rows live behind the collapse toggle
+    expect(wrapper.find('[data-testid="oracle-row-result"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="oracle-collapse"]').trigger('click')
     expect(wrapper.get('[data-testid="oracle-row-result"]').element.value).toBe('Bandits')
     expect(mocks.oracleStore.rollTable).toHaveBeenCalledWith('table-1', null)
   })
@@ -126,15 +142,17 @@ describe('OraclePanel', () => {
   })
 
   test('chain select writes subtable_id and null clears it', async () => {
-    mocks.oracleStore.tables = [
-      { id: 'table-1', name: 'Encounters', description: '', mode: 'weighted' },
-      { id: 'table-2', name: 'Monsters', description: '', mode: 'weighted' },
-    ]
+    const encounters = { id: 'table-1', name: 'Encounters', description: '', mode: 'weighted', created_by: 'u1' }
+    const monsters = { id: 'table-2', name: 'Monsters', description: '', mode: 'weighted', created_by: 'u1' }
+    mocks.oracleStore.sessionTables = [encounters]
+    mocks.oracleStore.libraryTables = [encounters, monsters]
+    mocks.oracleStore.sessionTableIds = new Set(['table-1'])
     mocks.oracleStore.rowsByTable = {
       'table-1': [{ id: 'row-1', table_id: 'table-1', weight: 1, result: 'Bandits', position: 0, subtable_id: null }],
       'table-2': [],
     }
     const wrapper = mount(OraclePanel)
+    await wrapper.get('[data-testid="oracle-collapse"]').trigger('click')
 
     const select = wrapper.get('[data-testid="oracle-row-chain"]')
     // own table is not offered as a target
@@ -165,6 +183,71 @@ describe('OraclePanel', () => {
       text: 'Yes, but... (43)',
       detail: 'Is the bridge safe?',
     })
+  })
+
+  test('library rows toggle session membership and delete for real', async () => {
+    const mine = { id: 'table-1', name: 'Encounters', created_by: 'u1' }
+    const other = { id: 'table-2', name: 'Weather', created_by: 'u1' }
+    mocks.oracleStore.libraryTables = [mine, other]
+    mocks.oracleStore.sessionTableIds = new Set(['table-1'])
+    const wrapper = mount(OraclePanel)
+
+    const items = wrapper.findAll('[data-testid="oracle-library-item"]')
+    expect(items).toHaveLength(2)
+
+    await items[0].get('[data-testid="oracle-library-toggle"]').trigger('click')
+    expect(mocks.oracleStore.detachTable).toHaveBeenCalledWith('table-1')
+
+    await items[1].get('[data-testid="oracle-library-toggle"]').trigger('click')
+    expect(mocks.oracleStore.attachTable).toHaveBeenCalledWith('table-2')
+
+    await items[0].get('[data-testid="oracle-library-delete"]').trigger('click')
+    expect(mocks.oracleStore.deleteTable).toHaveBeenCalledWith('table-1')
+  })
+
+  test('removing a session table detaches instead of deleting', async () => {
+    mocks.oracleStore.sessionTables = [{ id: 'table-1', name: 'Encounters', created_by: 'u1' }]
+    const wrapper = mount(OraclePanel)
+
+    await wrapper.get('[data-testid="oracle-detach"]').trigger('click')
+
+    expect(mocks.oracleStore.detachTable).toHaveBeenCalledWith('table-1')
+    expect(mocks.oracleStore.deleteTable).not.toHaveBeenCalled()
+  })
+
+  test('a partner table renders read-only rows without edit controls', async () => {
+    mocks.oracleStore.sessionTables = [{ id: 'table-9', name: 'Their Omens', description: 'shared', created_by: 'u2' }]
+    mocks.oracleStore.rowsByTable = {
+      'table-9': [{ id: 'row-9', table_id: 'table-9', weight: 3, result: 'A comet', position: 0 }],
+    }
+    const wrapper = mount(OraclePanel)
+    await wrapper.get('[data-testid="oracle-collapse"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="oracle-row-new"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="oracle-row-result"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="oracle-row"]').text()).toContain('A comet')
+    expect(wrapper.find('[data-testid="oracle-roll-table"]').exists()).toBe(true)
+  })
+
+  test('library filter appears past 8 tables and narrows by name or tag', async () => {
+    mocks.oracleStore.libraryTables = Array.from({ length: 9 }, (_, i) => (
+      { id: `t${i}`, name: `Table ${i}`, created_by: 'u1', tag: i === 3 ? 'hex.terrain' : null }
+    ))
+    const wrapper = mount(OraclePanel)
+
+    await wrapper.get('[data-testid="oracle-library-filter"]').setValue('hex.terr')
+    expect(wrapper.findAll('[data-testid="oracle-library-item"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="oracle-library-item"]').text()).toContain('Table 3')
+  })
+
+  test('the tags help section documents every wired tag', () => {
+    const wrapper = mount(OraclePanel)
+
+    const help = wrapper.get('[data-testid="oracle-tags-help"]')
+    for (const tag of ['weather', 'hex.terrain', 'hex.poi', 'hex.encounter', 'crawl.encounter', 'dungeon.stocking']) {
+      expect(help.text()).toContain(tag)
+    }
+    expect(help.text()).toContain('added to this session')
   })
 
   test('content packs list and install', async () => {

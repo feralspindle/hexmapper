@@ -26,6 +26,7 @@ create schema if not exists auth;
 drop table if exists events;
 drop table if exists chat_messages;
 drop table if exists oracle_rolls;
+drop table if exists session_oracle_tables;
 drop table if exists oracle_table_rows;
 drop table if exists oracle_tables;
 drop table if exists light_sources;
@@ -79,7 +80,6 @@ create table light_sources (
 
 create table oracle_tables (
     id          uuid primary key,
-    session_id  uuid not null,
     created_by  uuid not null,
     name        text not null,
     description text not null default '',
@@ -101,6 +101,15 @@ create table oracle_table_rows (
     subtable_id uuid,
     created_at  timestamptz not null default now(),
     updated_at  timestamptz not null default now()
+);
+
+create table session_oracle_tables (
+    id         uuid primary key default gen_random_uuid(),
+    session_id uuid not null,
+    table_id   uuid not null references oracle_tables(id) on delete cascade,
+    added_by   uuid not null,
+    created_at timestamptz not null default now(),
+    unique (session_id, table_id)
 );
 
 create table oracle_rolls (
@@ -281,10 +290,18 @@ async fn encounter_check_eventually_fires_and_rolls_the_tagged_table() {
 
     let table_id = Uuid::new_v4();
     sqlx::query(
-        "insert into oracle_tables (id, session_id, created_by, name, tag) values ($1, $2, $3, 'Wandering', 'crawl.encounter')",
+        "insert into oracle_tables (id, created_by, name, tag) values ($1, $2, 'Wandering', 'crawl.encounter')",
     )
     .bind(table_id)
+    .bind(owner)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "insert into session_oracle_tables (session_id, table_id, added_by) values ($1, $2, $3)",
+    )
     .bind(session_id)
+    .bind(table_id)
     .bind(owner)
     .execute(&pool)
     .await

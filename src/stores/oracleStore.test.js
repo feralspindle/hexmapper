@@ -18,8 +18,9 @@ vi.mock('@/lib/apiClient.js', async () => {
 })
 
 import { useOracleStore } from './oracleStore.js'
+import { useAuthStore } from './authStore.js'
 
-const table = (id, overrides = {}) => ({ id, session_id: 's1', name: `Table ${id}`, updated_at: '2026-07-01T00:00:00Z', ...overrides })
+const table = (id, overrides = {}) => ({ id, created_by: 'u1', name: `Table ${id}`, updated_at: '2026-07-01T00:00:00Z', ...overrides })
 const row = (id, tableId, overrides = {}) => ({ id, table_id: tableId, text: `Row ${id}`, position: 0, created_at: '2026-07-01T00:00:00Z', ...overrides })
 const oracleRoll = (id, overrides = {}) => ({ id, session_id: 's1', kind: 'yes_no', created_at: '2026-07-01T00:00:00Z', ...overrides })
 
@@ -27,6 +28,7 @@ describe('oracleStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     resetKit(kit)
+    useAuthStore().user = { id: 'u1' }
   })
 
   test('init loads tables, their rows, and roll history', async () => {
@@ -40,7 +42,7 @@ describe('oracleStore', () => {
     expect(store.rowsByTable.t1.map(r => r.id)).toEqual(['r1', 'r2'])
     expect(store.rolls.map(r => r.id)).toEqual(['roll1'])
     expect(store.error).toBeNull()
-    expect(kit.channels).toHaveLength(3)
+    expect(kit.channels).toHaveLength(4)
   })
 
   test('a failed load surfaces the error instead of showing an empty oracle', async () => {
@@ -180,8 +182,75 @@ describe('oracleStore', () => {
     await first
 
     const liveChannels = kit.channels.filter(c => !c.removed)
-    expect(liveChannels).toHaveLength(3)
+    expect(liveChannels).toHaveLength(4)
     expect(liveChannels.every(c => c.name.endsWith(':s2'))).toBe(true)
+  })
+
+  test('a partner table added to the session loads and lands in sessionTables, not the library', async () => {
+    kit.responses.session_oracle_tables = { data: [{ id: 'l1', session_id: 's1', table_id: 't-theirs' }], error: null }
+    kit.responses.oracle_tables = calls => calls.some(call => call[0] === 'in')
+      ? { data: [table('t-theirs', { created_by: 'u2' })], error: null }
+      : { data: [table('t-mine')], error: null }
+    const store = useOracleStore()
+    await store.init('s1')
+
+    expect(store.tables.map(t => t.id).sort()).toEqual(['t-mine', 't-theirs'])
+    expect(store.sessionTables.map(t => t.id)).toEqual(['t-theirs'])
+    expect(store.libraryTables.map(t => t.id)).toEqual(['t-mine'])
+  })
+
+  test('attachTable records the link so the table joins sessionTables', async () => {
+    kit.responses.oracle_tables = { data: [table('t1')], error: null }
+    kit.api['post /oracle-tables/t1/attach'] = body => ({ id: 'l1', session_id: body.session_id, table_id: 't1' })
+    const store = useOracleStore()
+    await store.init('s1')
+    expect(store.sessionTables).toEqual([])
+
+    await store.attachTable('t1')
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith('/oracle-tables/t1/attach', { session_id: 's1' }, 'oracle_table_attach')
+    expect(store.sessionTables.map(t => t.id)).toEqual(['t1'])
+  })
+
+  test('detachTable keeps my table in the library but drops a partner table entirely', async () => {
+    kit.responses.session_oracle_tables = {
+      data: [
+        { id: 'l1', session_id: 's1', table_id: 't-mine' },
+        { id: 'l2', session_id: 's1', table_id: 't-theirs' },
+      ],
+      error: null,
+    }
+    kit.responses.oracle_tables = calls => calls.some(call => call[0] === 'in')
+      ? { data: [table('t-theirs', { created_by: 'u2' })], error: null }
+      : { data: [table('t-mine')], error: null }
+    const store = useOracleStore()
+    await store.init('s1')
+
+    await store.detachTable('t-mine')
+    expect(store.sessionTables.map(t => t.id)).toEqual(['t-theirs'])
+    expect(store.libraryTables.map(t => t.id)).toEqual(['t-mine'])
+
+    await store.detachTable('t-theirs')
+    expect(store.sessionTables).toEqual([])
+    expect(store.tables.map(t => t.id)).toEqual(['t-mine'])
+  })
+
+  test('a link DELETE over realtime removes a partner table and its rows', async () => {
+    kit.responses.session_oracle_tables = { data: [{ id: 'l1', session_id: 's1', table_id: 't-theirs' }], error: null }
+    kit.responses.oracle_tables = calls => calls.some(call => call[0] === 'in')
+      ? { data: [table('t-theirs', { created_by: 'u2' })], error: null }
+      : { data: [], error: null }
+    kit.responses.oracle_table_rows = { data: [row('r1', 't-theirs')], error: null }
+    const store = useOracleStore()
+    await store.init('s1')
+    expect(store.rows).toHaveLength(1)
+
+    const linksChannel = kit.channels.find(c => c.name === 'oracle:links:s1')
+    linksChannel.emitPostgres('session_oracle_tables', 'DELETE', {}, { id: 'l1' })
+
+    expect(store.sessionTables).toEqual([])
+    expect(store.tables).toEqual([])
+    expect(store.rows).toEqual([])
   })
 
   test('cleanup removes channels and clears state', async () => {

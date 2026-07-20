@@ -1,9 +1,11 @@
 # import api
 
 rest endpoints for pushing content into a solo/co-op session from an external
-tool (a local rules assistant, a book extractor, whatever). everything lands as
-ordinary session data - imported tables are editable in the oracle panel,
-imported monsters show up in the codex tab, and so on.
+tool (a local rules assistant, a book extractor, whatever). everything lands
+as ordinary data - imported oracle tables go into the key creator's personal
+table library (they follow the user from game to game) and are also added to
+the key's session so they're usable there immediately, imported monsters land
+in the session's codex tab, and so on. all of it stays editable in the app.
 
 ## getting a key
 
@@ -61,7 +63,7 @@ it defaults to the table name.
   `"range": [min, max]` instead of weights
 - `chain` points a row at another table in the same bundle by key - rolling
   the row also rolls the chained table
-- name collisions with existing session tables are rejected unless
+- name collisions with tables the key creator already owns are rejected unless
   `"replace": true`, which deletes the old copies first. replacing a table
   breaks chains that pointed at the old copy from tables outside the bundle,
   so re-import chained tables together

@@ -311,14 +311,17 @@ pub async fn travel(
 
                 let mut days_advanced = 0i64;
                 let mut weather: Value = Value::Null;
-                while fraction >= 1.0 {
+                // the stored fraction accumulates 1/rate steps, so summing
+                // error must count as a full day: at pace 3 three moves total
+                // 0.99 (or 0.9999... unrounded) and the day would never roll
+                while fraction >= 1.0 - 1e-9 {
                     fraction -= 1.0;
                     days_advanced += 1;
                     weather = advance_calendar_day(&mut tx, id, &metadata).await?;
                 }
 
                 let obj = travel.as_object_mut().expect("travel state is an object");
-                obj.insert("fraction".to_string(), json!((fraction * 100.0).round() / 100.0));
+                obj.insert("fraction".to_string(), json!(fraction.max(0.0)));
                 let row = projection::set_travel_state(&mut tx, id, &travel, &metadata)
                     .await?
                     .ok_or(AppError::NotFound)?;
@@ -415,15 +418,15 @@ async fn advance_calendar_day(
     Ok(json!({ "year": year, "month": month, "day": day, "weather": weather }))
 }
 
-/// rolls the most recent session table with the given tag, returning the row
-/// text or null when no table exists
+/// rolls the session's most recent added table with the given tag, returning
+/// the row text or null when no table is attached
 async fn roll_tagged(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     session_id: Uuid,
     tag: &str,
 ) -> Result<Value, AppError> {
     let table: Option<(Uuid, String)> = sqlx::query_as(
-        "select id, mode from oracle_tables where session_id = $1 and tag = $2 order by updated_at desc limit 1",
+        "select t.id, t.mode from oracle_tables t join session_oracle_tables sot on sot.table_id = t.id where sot.session_id = $1 and t.tag = $2 order by t.updated_at desc limit 1",
     )
     .bind(session_id)
     .bind(tag)
@@ -874,9 +877,9 @@ pub async fn crawl_round(
     }
 }
 
-/// rolls the most recently updated session table tagged `crawl.encounter` and
-/// records it in the oracle roll history. no tagged table -> a bare marker
-/// object so the chat line still lands.
+/// rolls the session's most recently updated added table tagged
+/// `crawl.encounter` and records it in the oracle roll history. no tagged
+/// table -> a bare marker object so the chat line still lands.
 async fn crawl_encounter(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     session_id: Uuid,
@@ -884,9 +887,10 @@ async fn crawl_encounter(
 ) -> Result<Value, AppError> {
     let table: Option<(Uuid, String, String)> = sqlx::query_as(
         r#"
-        select id, name, mode from oracle_tables
-        where session_id = $1 and tag = 'crawl.encounter'
-        order by updated_at desc
+        select t.id, t.name, t.mode from oracle_tables t
+        join session_oracle_tables sot on sot.table_id = t.id
+        where sot.session_id = $1 and t.tag = 'crawl.encounter'
+        order by t.updated_at desc
         limit 1
         "#,
     )

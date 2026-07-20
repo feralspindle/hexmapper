@@ -1,8 +1,8 @@
 //! built-in oracle table packs (#48). a pack is a json bundle of tables in the
-//! chained format; installing one creates ordinary session tables through the
-//! event-sourced projections, so the copies are user-editable and nothing
-//! references the pack afterwards. chain keys resolve inside the pack at
-//! install time.
+//! chained format; installing one creates ordinary tables in the installing
+//! user's library through the event-sourced projections, so the copies are
+//! user-editable and nothing references the pack afterwards. chain keys
+//! resolve inside the pack at install time.
 
 use std::collections::{HashMap, HashSet};
 
@@ -128,20 +128,26 @@ pub async fn install_pack(
         .find(|pack| pack.id == req.pack_id)
         .ok_or(AppError::NotFound)?;
 
-    // block a double install: pack table names colliding with existing session
-    // tables is the honest signal (installed copies are user-editable, so
-    // there's nothing sturdier to key on)
-    let colliding = colliding_tables(&state, req.session_id, &pack.tables).await?;
+    // block a double install: pack table names colliding with tables the user
+    // already owns is the honest signal (installed copies are user-editable,
+    // so there's nothing sturdier to key on)
+    let colliding = colliding_tables(&state, auth.user_id, &pack.tables).await?;
     if !colliding.is_empty() {
         let names: Vec<String> = colliding.into_iter().map(|(_, name)| name).collect();
         return Err(AppError::BadRequest(format!(
-            "pack tables already exist in this session: {}",
+            "pack tables already exist in your library: {}",
             names.join(", ")
         )));
     }
 
-    let installed_rows =
-        install_table_bundle(&state, req.session_id, &pack.tables, &[], &auth.metadata()).await?;
+    let installed_rows = install_table_bundle(
+        &state,
+        &pack.tables,
+        &[],
+        Some(req.session_id),
+        &auth.metadata(),
+    )
+    .await?;
 
     Ok(Json(InstallPackResponse {
         installed_tables: pack.tables.len(),
@@ -149,15 +155,15 @@ pub async fn install_pack(
     }))
 }
 
-/// Existing session tables whose names collide with the bundle's, as (id, name).
+/// Tables the user already owns whose names collide with the bundle's, as (id, name).
 pub(crate) async fn colliding_tables(
     state: &AppState,
-    session_id: Uuid,
+    owner_id: Uuid,
     tables: &[PackTable],
 ) -> Result<Vec<(Uuid, String)>, AppError> {
     let names: Vec<String> = tables.iter().map(|t| t.name.clone()).collect();
-    sqlx::query_as("select id, name from oracle_tables where session_id = $1 and name = any($2)")
-        .bind(session_id)
+    sqlx::query_as("select id, name from oracle_tables where created_by = $1 and name = any($2)")
+        .bind(owner_id)
         .bind(&names)
         .fetch_all(state.pool())
         .await
@@ -166,16 +172,23 @@ pub(crate) async fn colliding_tables(
 
 /// Shared by pack install and the external import endpoint: emits the created
 /// events for a whole bundle in one transaction, optionally deleting existing
-/// tables first (replace-on-import). Returns the row count installed.
+/// tables first (replace-on-import). Ownership comes from the user_id in
+/// `metadata`, same as any other table create; `attach_to` also adds every
+/// installed table to that session so the bundle is usable (and visible to
+/// co-op partners) right away. Returns the row count installed.
 pub(crate) async fn install_table_bundle(
     state: &AppState,
-    session_id: Uuid,
     tables: &[PackTable],
     delete_first: &[Uuid],
+    attach_to: Option<Uuid>,
     metadata: &serde_json::Value,
 ) -> Result<usize, AppError> {
     // key -> id up front so rows can chain to tables created later in the loop
     let ids: HashMap<&str, Uuid> = tables
+        .iter()
+        .map(|table| (table.key.as_str(), Uuid::new_v4()))
+        .collect();
+    let attach_ids: HashMap<&str, Uuid> = tables
         .iter()
         .map(|table| (table.key.as_str(), Uuid::new_v4()))
         .collect();
@@ -185,7 +198,7 @@ pub(crate) async fn install_table_bundle(
             let event = NewEvent {
                 aggregate_type: "oracle_table",
                 aggregate_id: *table_id,
-                session_id: Some(session_id),
+                session_id: None,
                 event_type: "oracle_table.deleted",
                 payload: json!({}),
                 metadata: metadata.clone(),
@@ -200,7 +213,7 @@ pub(crate) async fn install_table_bundle(
             let event = NewEvent {
                 aggregate_type: "oracle_table",
                 aggregate_id: ids[table.key.as_str()],
-                session_id: Some(session_id),
+                session_id: None,
                 event_type: "oracle_table.created",
                 payload: json!({
                     "name": table.name,
@@ -211,6 +224,17 @@ pub(crate) async fn install_table_bundle(
                 metadata: metadata.clone(),
             };
             projection::append_table_created(&mut tx, &event).await?;
+            if let Some(session_id) = attach_to {
+                let event = NewEvent {
+                    aggregate_type: "session_oracle_table",
+                    aggregate_id: attach_ids[table.key.as_str()],
+                    session_id: Some(session_id),
+                    event_type: "session_oracle_table.created",
+                    payload: json!({ "table_id": ids[table.key.as_str()] }),
+                    metadata: metadata.clone(),
+                };
+                projection::append_table_attached(&mut tx, &event).await?;
+            }
         }
 
         for table in tables {
@@ -219,7 +243,7 @@ pub(crate) async fn install_table_bundle(
                 let event = NewEvent {
                     aggregate_type: "oracle_table_row",
                     aggregate_id: Uuid::new_v4(),
-                    session_id: Some(session_id),
+                    session_id: None,
                     event_type: "oracle_table_row.created",
                     payload: json!({
                         "table_id": ids[table.key.as_str()],

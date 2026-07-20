@@ -34,6 +34,7 @@ export const REALTIME_TABLES = {
   reference_photo: 'reference_photos',
   session: 'sessions',
   session_member: 'session_members',
+  session_oracle_table: 'session_oracle_tables',
   stat_block: 'stat_blocks',
 }
 
