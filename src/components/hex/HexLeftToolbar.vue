@@ -345,6 +345,11 @@
             <ToolbarToggleButton kind="party" testid="hex-party-toggle" />
             <ToolbarToggleButton kind="vault" testid="hex-vault-toggle" />
         </div>
+
+        <div v-if="sessionStore.playMode === 'gm_less'" class="ds-tool-group">
+            <span class="ds-tool-label">Solo</span>
+            <ToolbarToggleButton kind="toolkit" testid="hex-toolkit-toggle" />
+        </div>
     </aside>
 
     <div v-else class="ds-toolbar-float">
@@ -417,6 +422,12 @@
         <div class="ds-float-sep" />
         <ToolbarToggleButton kind="party" testid="hex-party-toggle" :size="16" />
         <ToolbarToggleButton kind="vault" testid="hex-vault-toggle" :size="16" />
+        <ToolbarToggleButton
+            v-if="sessionStore.playMode === 'gm_less'"
+            kind="toolkit"
+            testid="hex-toolkit-toggle"
+            :size="16"
+        />
         <div class="ds-float-sep" />
         <ToolbarToggleButton kind="sound" testid="hex-sound-toggle" :size="16" />
         <template v-if="hexMode === 'blank'">
@@ -504,6 +515,7 @@
 import { useToolTooltip } from "@/composables/useToolTooltip.js";
 import ToolbarToggleButton from "@/components/common/ToolbarToggleButton.vue";
 import { useUserPrefsStore } from "@/stores/userPrefsStore.js";
+import { useSessionStore } from "@/stores/sessionStore.js";
 
 defineProps({
     hexMode: { type: String, default: null },
@@ -518,5 +530,6 @@ defineProps({
 const emit = defineEmits(["tool", "reveal-all", "hide-all", "map-settings", "toggle-exploration"]);
 
 const prefs = useUserPrefsStore();
+const sessionStore = useSessionStore();
 const { tip, onHover, onLeave } = useToolTooltip();
 </script>

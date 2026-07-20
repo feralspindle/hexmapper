@@ -17,13 +17,24 @@ export function hexCell(page, q, r) {
   return page.locator(`[data-testid="hex-cell"][data-q="${q}"][data-r="${r}"]`).first()
 }
 
+export async function openToolkit(page) {
+  const panel = page.getByTestId('solo-toolkit-panel')
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.getByTestId(/toolkit-toggle/).click()
+  }
+  await panel.waitFor()
+  return panel
+}
+
 export async function openOracle(page) {
-  await page.getByRole('button', { name: 'Oracle' }).click()
+  const panel = await openToolkit(page)
+  await panel.getByRole('button', { name: 'Oracle' }).click()
   await page.getByTestId('oracle-roll-yes-no').waitFor()
 }
 
 export async function openStatBlocks(page) {
-  await page.getByRole('button', { name: 'Codex' }).click()
+  const panel = await openToolkit(page)
+  await panel.getByRole('button', { name: 'Codex' }).click()
   await page.getByTestId('statblock-add-name').waitFor()
 }
 

@@ -1,14 +1,16 @@
 import { computed } from 'vue'
 import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
 import { usePartyPanel } from '@/composables/usePartyPanel.js'
+import { useSoloToolkit } from '@/composables/useSoloToolkit.js'
 
-// the party / inventory / vault toggle trio both left toolbars wire up
+// the panel toggles both left toolbars wire up
 export function usePartyToggles() {
   const { visible: inventoryVisible, activeTab: notebookTab, toggle: toggleInventory, open: openNotebook } = usePartyNotebook()
   const { visible: partyVisible, toggle: toggleParty } = usePartyPanel()
+  const { visible: toolkitVisible, toggle: toggleToolkit } = useSoloToolkit()
   const vaultVisible = computed(() => inventoryVisible.value && notebookTab.value === 'vault')
   function toggleVault() {
     if (vaultVisible.value) { toggleInventory() } else { openNotebook('vault') }
   }
-  return { partyVisible, toggleParty, vaultVisible, toggleVault }
+  return { partyVisible, toggleParty, vaultVisible, toggleVault, toolkitVisible, toggleToolkit }
 }
