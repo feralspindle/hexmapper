@@ -126,6 +126,45 @@ async fn dispatch_row(state: &AppState, mut row: EventRow) -> Result<(), sqlx::E
         .max(0) as f64
         / 1000.0;
     metrics::histogram!("realtime_event_delivery_lag_seconds").record(lag);
+
+    // oracle tables and their rows are user-owned aggregates with no session
+    // of their own; fan their events out to every session the table is added
+    // to, since the hub routes strictly by session and would drop them
+    if row.session_id.is_none()
+        && matches!(
+            row.aggregate_type.as_str(),
+            "oracle_table" | "oracle_table_row"
+        )
+    {
+        let table_id = if row.aggregate_type == "oracle_table" {
+            Some(row.aggregate_id)
+        } else {
+            row.payload
+                .get("table_id")
+                .and_then(Value::as_str)
+                .and_then(|s| s.parse::<uuid::Uuid>().ok())
+        };
+        if let Some(table_id) = table_id {
+            let sessions: Vec<uuid::Uuid> = retry_query(
+                || {
+                    sqlx::query_scalar(
+                        "select session_id from session_oracle_tables where table_id = $1",
+                    )
+                    .bind(table_id)
+                    .fetch_all(state.pool())
+                },
+                "oracle_table_sessions",
+            )
+            .await?;
+            for session_id in sessions {
+                let mut copy = row.clone();
+                copy.session_id = Some(session_id);
+                state.realtime().dispatch_event(copy).await;
+            }
+        }
+        return Ok(());
+    }
+
     state.realtime().dispatch_event(row).await;
     Ok(())
 }

@@ -149,8 +149,12 @@ insert into public.journal_entries (session_id, author_user_id, author_name, bod
 values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'GM', 'We set out at dawn.');
 
 insert into public.oracle_tables
-  (id, session_id, created_by, name)
-values ('b0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Encounters');
+  (id, created_by, name)
+values ('b0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Encounters');
+
+insert into public.session_oracle_tables
+  (id, session_id, table_id, added_by)
+values ('b3000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001');
 
 insert into public.oracle_table_rows
   (id, table_id, weight, result)

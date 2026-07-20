@@ -783,7 +783,7 @@ export const useD = defineStore('dungeon', () => {
   }
 
   async function _rollStocking() {
-    const table = useOracleStore().tables.find(t => t.tag === 'dungeon.stocking')
+    const table = useOracleStore().sessionTables.find(t => t.tag === 'dungeon.stocking')
     if (table) {
       // straight to the api - no shared rolling-flag coupling with the oracle
       // panel, and the roll still lands in oracle history

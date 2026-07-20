@@ -14,6 +14,10 @@ pub fn router() -> Router<AppState> {
             "/oracle-tables/{id}",
             patch(handlers::update_table).delete(handlers::delete_table),
         )
+        .route(
+            "/oracle-tables/{id}/attach",
+            post(handlers::attach_table).delete(handlers::detach_table),
+        )
         .route("/oracle-tables/{id}/rows", post(handlers::create_row))
         .route(
             "/oracle-table-rows/{id}",

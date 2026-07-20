@@ -23,7 +23,7 @@ vi.mock('@/stores/activityStore.js', () => ({
   useActivityStore: () => kit.activity,
 }))
 vi.mock('@/stores/oracleStore.js', () => ({
-  useOracleStore: () => kit.oracle ?? { tables: [], rollTable: vi.fn() },
+  useOracleStore: () => kit.oracle ?? { sessionTables: [], rollTable: vi.fn() },
 }))
 
 import { useD } from './dungeonStore.js'
@@ -105,7 +105,7 @@ describe('dungeonStore', () => {
   })
 
   test('generateRoom draws a stocked, connected, editable room in one create', async () => {
-    kit.oracle = { tables: [{ id: 't1', tag: 'dungeon.stocking' }], rollTable: vi.fn() }
+    kit.oracle = { sessionTables: [{ id: 't1', tag: 'dungeon.stocking' }], rollTable: vi.fn() }
     const stockingRoll = vi.fn(() => ({ result: { result: 'Monster - 2 ghouls' } }))
     kit.api['post /oracle-rolls'] = stockingRoll
     kit.api['post /dungeon-rooms'] = body => room('gen-room', body)
