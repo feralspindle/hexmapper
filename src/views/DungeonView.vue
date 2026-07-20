@@ -86,6 +86,7 @@
 
     <DungeonPartyPanel v-if="!showModePicker" />
     <PartyNotebook v-if="!showModePicker" :session-id="sessionId" />
+    <SoloToolkitPanel v-if="!showModePicker" />
 
 
     <CharacterDrawer parchment :open="charOpen" :nav-height="topbarHeight" @close="charOpen = false" />
@@ -126,6 +127,7 @@ import MapLoadingOverlay   from '@/components/common/MapLoadingOverlay.vue'
 import DungeonInspector    from '@/components/dungeon/DungeonInspector.vue'
 import DungeonPartyPanel   from '@/components/common/DungeonPartyPanel.vue'
 import PartyNotebook       from '@/components/common/PartyNotebook.vue'
+import SoloToolkitPanel    from '@/components/common/SoloToolkitPanel.vue'
 
 import CharacterDrawer     from '@/components/common/CharacterDrawer.vue'
 import ConfirmDialog       from '@/components/common/ConfirmDialog.vue'

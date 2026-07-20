@@ -145,13 +145,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed } from "vue";
 import { useCharacterStore } from "@/stores/characterStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
+import { useFloatingPanel } from "@/composables/useFloatingPanel.js";
 import DiceStatsPanel from "@/components/common/DiceStatsPanel.vue";
 import DiceLeaderboardPanel from "@/components/common/DiceLeaderboardPanel.vue";
 
@@ -164,77 +165,10 @@ const { visible: partyVisible, close: closeParty } = usePartyPanel();
 
 const partyTab = ref("party");
 
-const STORAGE_KEY = "dm.partyPanel.pos";
-const SIZE_KEY = "dm.partyPanel.size";
-const DEFAULT_POS = { x: 80, y: 88 };
-const DEFAULT_SIZE = { w: 320, h: 400 };
-
-const pos = ref({ ...DEFAULT_POS });
-const size = ref({ ...DEFAULT_SIZE });
-
-onMounted(() => {
-    try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-        if (saved?.x !== undefined) pos.value = saved;
-        const savedSize = JSON.parse(localStorage.getItem(SIZE_KEY) ?? "null");
-        if (savedSize?.w !== undefined) size.value = savedSize;
-    } catch {}
-});
-
-function persistPos() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pos.value));
-}
-
-let dragStart = null;
-
-function startDrag(e) {
-    dragStart = {
-        mx: e.clientX,
-        my: e.clientY,
-        px: pos.value.x,
-        py: pos.value.y,
-    };
-    window.addEventListener("mousemove", onDragMove);
-    window.addEventListener("mouseup", onDragUp);
-}
-function onDragMove(e) {
-    if (!dragStart) return;
-    pos.value = {
-        x: Math.max(0, dragStart.px + (e.clientX - dragStart.mx)),
-        y: Math.max(0, dragStart.py + (e.clientY - dragStart.my)),
-    };
-}
-function onDragUp() {
-    dragStart = null;
-    persistPos();
-    window.removeEventListener("mousemove", onDragMove);
-    window.removeEventListener("mouseup", onDragUp);
-}
-let resizeStart = null;
-function startResize(e) {
-    resizeStart = { mx: e.clientX, my: e.clientY, w: size.value.w, h: size.value.h };
-    window.addEventListener("mousemove", onResizeMove);
-    window.addEventListener("mouseup", onResizeUp);
-}
-function onResizeMove(e) {
-    if (!resizeStart) return;
-    size.value = {
-        w: Math.max(280, Math.min(600, resizeStart.w + (e.clientX - resizeStart.mx))),
-        h: Math.max(200, Math.min(window.innerHeight - 60, resizeStart.h + (e.clientY - resizeStart.my))),
-    };
-}
-function onResizeUp() {
-    resizeStart = null;
-    localStorage.setItem(SIZE_KEY, JSON.stringify(size.value));
-    window.removeEventListener("mousemove", onResizeMove);
-    window.removeEventListener("mouseup", onResizeUp);
-}
-
-onUnmounted(() => {
-    window.removeEventListener("mousemove", onDragMove);
-    window.removeEventListener("mouseup", onDragUp);
-    window.removeEventListener("mousemove", onResizeMove);
-    window.removeEventListener("mouseup", onResizeUp);
+const { pos, size, startDrag, startResize } = useFloatingPanel({
+    storagePrefix: "dm.partyPanel",
+    defaultPos: { x: 80, y: 88 },
+    defaultSize: { w: 320, h: 400 },
 });
 
 const isGM = computed(() => authStore.user?.id === sessionStore.sessionOwnerId);

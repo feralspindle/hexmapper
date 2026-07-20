@@ -1377,7 +1377,8 @@ textarea.ds-input {
 }
 
 /* party panel */
-.ds-party-panel {
+.ds-party-panel,
+.stk-panel {
     position: fixed;
     z-index: 90;
     background: var(--paper);
@@ -2929,6 +2930,7 @@ textarea.ds-input {
 
     /* draggable floating windows: pin to a full-bleed sheet under the topbar */
     .ds-party-panel,
+    .stk-panel,
     .pn-panel,
     .ds-char-drawer {
         left: 0 !important;
