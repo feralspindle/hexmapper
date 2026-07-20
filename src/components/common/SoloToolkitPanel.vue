@@ -103,7 +103,7 @@ const tab = ref('oracle')
 const { pos, size, startDrag, startResize } = useFloatingPanel({
   storagePrefix: 'dm.soloToolkit',
   defaultPos: { x: 120, y: 96 },
-  defaultSize: { w: 360, h: 520 },
+  defaultSize: { w: 360, h: Math.max(420, Math.min(680, window.innerHeight - 160)) },
   maxW: 720,
 })
 </script>
