@@ -152,6 +152,10 @@ insert into public.oracle_tables
   (id, created_by, name)
 values ('b0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Encounters');
 
+insert into public.session_oracle_tables
+  (id, session_id, table_id, added_by)
+values ('b3000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001');
+
 insert into public.oracle_table_rows
   (id, table_id, weight, result)
 values ('b1000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 1, 'Bandits');

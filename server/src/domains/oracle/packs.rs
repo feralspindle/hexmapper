@@ -140,7 +140,14 @@ pub async fn install_pack(
         )));
     }
 
-    let installed_rows = install_table_bundle(&state, &pack.tables, &[], &auth.metadata()).await?;
+    let installed_rows = install_table_bundle(
+        &state,
+        &pack.tables,
+        &[],
+        Some(req.session_id),
+        &auth.metadata(),
+    )
+    .await?;
 
     Ok(Json(InstallPackResponse {
         installed_tables: pack.tables.len(),
@@ -166,15 +173,22 @@ pub(crate) async fn colliding_tables(
 /// Shared by pack install and the external import endpoint: emits the created
 /// events for a whole bundle in one transaction, optionally deleting existing
 /// tables first (replace-on-import). Ownership comes from the user_id in
-/// `metadata`, same as any other table create. Returns the row count installed.
+/// `metadata`, same as any other table create; `attach_to` also adds every
+/// installed table to that session so the bundle is usable (and visible to
+/// co-op partners) right away. Returns the row count installed.
 pub(crate) async fn install_table_bundle(
     state: &AppState,
     tables: &[PackTable],
     delete_first: &[Uuid],
+    attach_to: Option<Uuid>,
     metadata: &serde_json::Value,
 ) -> Result<usize, AppError> {
     // key -> id up front so rows can chain to tables created later in the loop
     let ids: HashMap<&str, Uuid> = tables
+        .iter()
+        .map(|table| (table.key.as_str(), Uuid::new_v4()))
+        .collect();
+    let attach_ids: HashMap<&str, Uuid> = tables
         .iter()
         .map(|table| (table.key.as_str(), Uuid::new_v4()))
         .collect();
@@ -210,6 +224,17 @@ pub(crate) async fn install_table_bundle(
                 metadata: metadata.clone(),
             };
             projection::append_table_created(&mut tx, &event).await?;
+            if let Some(session_id) = attach_to {
+                let event = NewEvent {
+                    aggregate_type: "session_oracle_table",
+                    aggregate_id: attach_ids[table.key.as_str()],
+                    session_id: Some(session_id),
+                    event_type: "session_oracle_table.created",
+                    payload: json!({ "table_id": ids[table.key.as_str()] }),
+                    metadata: metadata.clone(),
+                };
+                projection::append_table_attached(&mut tx, &event).await?;
+            }
         }
 
         for table in tables {

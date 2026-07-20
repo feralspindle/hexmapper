@@ -3,9 +3,9 @@
 rest endpoints for pushing content into a solo/co-op session from an external
 tool (a local rules assistant, a book extractor, whatever). everything lands
 as ordinary data - imported oracle tables go into the key creator's personal
-table library (they follow the user from game to game), imported monsters
-land in the session's codex tab, and so on. all of it stays editable in the
-app.
+table library (they follow the user from game to game) and are also added to
+the key's session so they're usable there immediately, imported monsters land
+in the session's codex tab, and so on. all of it stays editable in the app.
 
 ## getting a key
 

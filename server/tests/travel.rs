@@ -27,6 +27,7 @@ drop table if exists events;
 drop table if exists chat_messages;
 drop table if exists party_calendar_days;
 drop table if exists party_calendar_settings;
+drop table if exists session_oracle_tables;
 drop table if exists oracle_table_rows;
 drop table if exists oracle_tables;
 drop table if exists session_members;
@@ -103,6 +104,15 @@ create table oracle_table_rows (
     updated_at  timestamptz not null default now()
 );
 
+create table session_oracle_tables (
+    id         uuid primary key default gen_random_uuid(),
+    session_id uuid not null,
+    table_id   uuid not null references oracle_tables(id) on delete cascade,
+    added_by   uuid not null,
+    created_at timestamptz not null default now(),
+    unique (session_id, table_id)
+);
+
 create table chat_messages (
     id           uuid primary key,
     session_id   uuid not null,
@@ -175,6 +185,15 @@ async fn fixture(pool: &PgPool) -> (AppState, Uuid, Uuid) {
     sqlx::query(
         "insert into oracle_tables (id, created_by, name, tag) values ($1, $2, 'Weather', 'weather')",
     )
+    .bind(table_id)
+    .bind(owner)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "insert into session_oracle_tables (session_id, table_id, added_by) values ($1, $2, $3)",
+    )
+    .bind(session_id)
     .bind(table_id)
     .bind(owner)
     .execute(pool)

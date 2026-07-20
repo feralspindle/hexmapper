@@ -87,7 +87,7 @@ pub(super) enum ClientMessage {
     },
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub(super) struct EventRow {
     pub(super) id: i64,
     pub(super) aggregate_type: String,

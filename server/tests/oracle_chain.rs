@@ -8,11 +8,12 @@
 //! a minimal schema (including a stub auth.users for display-name lookup), so
 //! point it only at a throwaway db.
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::Json;
 use hexmap_server::auth::AuthUser;
 use hexmap_server::domains::oracle::handlers::{
-    create_row, roll_oracle, CreateRowRequest, RollOracleRequest,
+    attach_table, create_row, detach_table, roll_oracle, AttachTableRequest, CreateRowRequest,
+    RollOracleRequest, SessionQuery,
 };
 use hexmap_server::state::AppState;
 use jsonwebtoken::jwk::JwkSet;
@@ -29,6 +30,7 @@ const SCHEMA: &str = r#"
 create schema if not exists auth;
 drop table if exists events;
 drop table if exists oracle_rolls;
+drop table if exists session_oracle_tables;
 drop table if exists oracle_table_rows;
 drop table if exists oracle_tables;
 drop table if exists session_members;
@@ -76,6 +78,15 @@ create table oracle_table_rows (
     subtable_id uuid references oracle_tables(id) on delete set null,
     created_at  timestamptz not null default now(),
     updated_at  timestamptz not null default now()
+);
+
+create table session_oracle_tables (
+    id         uuid primary key default gen_random_uuid(),
+    session_id uuid not null,
+    table_id   uuid not null references oracle_tables(id) on delete cascade,
+    added_by   uuid not null,
+    created_at timestamptz not null default now(),
+    unique (session_id, table_id)
 );
 
 create table oracle_rolls (
@@ -309,4 +320,98 @@ async fn cross_owner_chain_is_rejected_at_write() {
     .await;
 
     assert!(result.is_err(), "chaining into another user's table must fail");
+}
+
+#[tokio::test]
+async fn partners_roll_attached_tables_only_and_detach_revokes() {
+    let _db = DB_LOCK.lock().await;
+    let Some(pool) = setup().await else {
+        eprintln!("skipping oracle_chain test: DATABASE_URL not set");
+        return;
+    };
+    let state = AppState::new(pool.clone(), JwkSet { keys: vec![] }, vec![]);
+
+    let owner = Uuid::new_v4();
+    let partner = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+    for (id, email) in [(owner, "owner@test"), (partner, "partner@test")] {
+        sqlx::query("insert into auth.users (id, email) values ($1, $2)")
+            .bind(id)
+            .bind(email)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query("insert into sessions (id, owner_id) values ($1, $2)")
+        .bind(session_id)
+        .bind(owner)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("insert into session_members (session_id, user_id) values ($1, $2)")
+        .bind(session_id)
+        .bind(partner)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let shared = seed_table(&pool, owner, "Shared").await;
+    let private = seed_table(&pool, owner, "Private").await;
+    seed_row(&pool, shared, "a thing happens", None).await;
+    seed_row(&pool, private, "a secret thing", None).await;
+
+    let roll_req = |table_id| RollOracleRequest {
+        session_id,
+        kind: "table".into(),
+        question: None,
+        odds: None,
+        table_id: Some(table_id),
+    };
+
+    // nothing attached yet: the partner can roll neither table
+    let denied = roll_oracle(State(state.clone()), auth(partner), Json(roll_req(shared))).await;
+    assert!(denied.is_err(), "unattached table must not roll for a partner");
+
+    attach_table(
+        State(state.clone()),
+        auth(owner),
+        Path(shared),
+        Json(AttachTableRequest { session_id }),
+    )
+    .await
+    .expect("owner attaches their table");
+
+    let Json(roll) = roll_oracle(State(state.clone()), auth(partner), Json(roll_req(shared)))
+        .await
+        .expect("attached table rolls for a partner");
+    assert_eq!(roll.result["result"], "a thing happens");
+
+    let denied = roll_oracle(State(state.clone()), auth(partner), Json(roll_req(private))).await;
+    assert!(denied.is_err(), "the rest of the owner's library stays private");
+
+    // the partner takes the table off the session board; the owner keeps it
+    detach_table(
+        State(state.clone()),
+        auth(partner),
+        Path(shared),
+        Query(SessionQuery { session_id }),
+    )
+    .await
+    .expect("any member can detach");
+
+    let denied = roll_oracle(State(state.clone()), auth(partner), Json(roll_req(shared))).await;
+    assert!(denied.is_err(), "detach revokes the partner's access");
+
+    let table_still_owned: i64 =
+        sqlx::query_scalar("select count(*) from oracle_tables where id = $1")
+            .bind(shared)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(table_still_owned, 1, "detaching never deletes the table");
+
+    let Json(roll) = roll_oracle(State(state), auth(owner), Json(roll_req(shared)))
+        .await
+        .expect("the owner still rolls their own table anywhere");
+    assert_eq!(roll.result["result"], "a thing happens");
 }

@@ -224,8 +224,14 @@ pub async fn import_oracle_tables(
         Vec::new()
     };
 
-    let installed_rows =
-        install_table_bundle(&state, &tables, &delete_first, &auth.metadata()).await?;
+    let installed_rows = install_table_bundle(
+        &state,
+        &tables,
+        &delete_first,
+        Some(auth.session_id),
+        &auth.metadata(),
+    )
+    .await?;
 
     Ok(Json(json!({
         "installed_tables": tables.len(),

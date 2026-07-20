@@ -46,6 +46,8 @@ test.describe.serial('oracle multiplayer sync', () => {
       await openOracle(room.gm.page)
       await openOracle(room.player2.page)
 
+      // the created table was auto-added to the session, so others see the card
+      await expect(room.gm.page.getByTestId('oracle-table').first()).toBeVisible()
       await expect(room.gm.page.getByTestId('oracle-roll-history').first()).toContainText('First result')
       await expect(room.player2.page.getByTestId('oracle-roll-history').first()).toContainText('First result')
     } finally {

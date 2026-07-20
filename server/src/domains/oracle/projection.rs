@@ -4,7 +4,7 @@ use crate::error::AppError;
 use crate::events::projector::APPEND_EVENT_CTE;
 use crate::events::NewEvent;
 
-use super::handlers::{OracleRollRow, OracleTableRow, OracleTableRowRow};
+use super::handlers::{OracleRollRow, OracleTableRow, OracleTableRowRow, SessionTableLink};
 
 pub async fn append_table_created(
     tx: &mut Transaction<'_, Postgres>,
@@ -78,6 +78,59 @@ pub async fn append_table_deleted(
         r#"
         {APPEND_EVENT_CTE}
         delete from oracle_tables where id in (select aggregate_id from evt)
+        "#
+    );
+
+    sqlx::query(&sql)
+        .bind(event.aggregate_type)
+        .bind(event.aggregate_id)
+        .bind(event.session_id)
+        .bind(event.event_type)
+        .bind(&event.payload)
+        .bind(&event.metadata)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+pub async fn append_table_attached(
+    tx: &mut Transaction<'_, Postgres>,
+    event: &NewEvent,
+) -> Result<SessionTableLink, AppError> {
+    let sql = format!(
+        r#"
+        {APPEND_EVENT_CTE}
+        insert into session_oracle_tables (id, session_id, table_id, added_by, created_at)
+        select aggregate_id,
+               session_id,
+               (payload->>'table_id')::uuid,
+               (metadata->>'user_id')::uuid,
+               created_at
+        from evt
+        returning id, session_id, table_id, added_by, created_at
+        "#
+    );
+
+    sqlx::query_as(&sql)
+        .bind(event.aggregate_type)
+        .bind(event.aggregate_id)
+        .bind(event.session_id)
+        .bind(event.event_type)
+        .bind(&event.payload)
+        .bind(&event.metadata)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn append_table_detached(
+    tx: &mut Transaction<'_, Postgres>,
+    event: &NewEvent,
+) -> Result<(), AppError> {
+    let sql = format!(
+        r#"
+        {APPEND_EVENT_CTE}
+        delete from session_oracle_tables where id in (select aggregate_id from evt)
         "#
     );
 

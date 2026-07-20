@@ -61,6 +61,15 @@ pub struct OracleTableRowRow {
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct SessionTableLink {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub table_id: Uuid,
+    pub added_by: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct OracleRollRow {
     pub id: Uuid,
     pub session_id: Uuid,
@@ -76,8 +85,7 @@ pub struct OracleRollRow {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTableRequest {
-    // tables are user-owned; tolerated so a cached frontend can keep posting it
-    #[allow(dead_code)]
+    // tables are user-owned; passing a session also adds the new table to it
     pub session_id: Option<Uuid>,
     pub name: String,
     #[serde(default)]
@@ -127,6 +135,11 @@ where
     D: Deserializer<'de>,
 {
     Deserialize::deserialize(de).map(Some)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AttachTableRequest {
+    pub session_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
@@ -199,6 +212,9 @@ pub async fn create_table(
     auth: AuthUser,
     Json(req): Json<CreateTableRequest>,
 ) -> Result<Json<OracleTableRow>, AppError> {
+    if let Some(session_id) = req.session_id {
+        require_member(&state, auth.user_id, session_id).await?;
+    }
     let name = clean_text(&req.name, "table name", 1, MAX_NAME_LEN)?;
     let description = clean_text(&req.description, "description", 0, MAX_DESC_LEN)?;
     validate_mode(&req.mode)?;
@@ -212,12 +228,84 @@ pub async fn create_table(
         payload: json!({ "name": name, "description": description, "mode": req.mode, "tag": tag }),
         metadata: auth.metadata(),
     };
+    let attach_event = req.session_id.map(|session_id| NewEvent {
+        aggregate_type: "session_oracle_table",
+        aggregate_id: Uuid::new_v4(),
+        session_id: Some(session_id),
+        event_type: "session_oracle_table.created",
+        payload: json!({ "table_id": event.aggregate_id }),
+        metadata: auth.metadata(),
+    });
 
     let row = retry_tx!(state.pool(), |tx| {
-        projection::append_table_created(&mut tx, &event).await
+        let row = projection::append_table_created(&mut tx, &event).await?;
+        if let Some(attach) = &attach_event {
+            projection::append_table_attached(&mut tx, attach).await?;
+        }
+        Ok(row)
     })?;
 
     Ok(Json(row))
+}
+
+pub async fn attach_table(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<AttachTableRequest>,
+) -> Result<Json<SessionTableLink>, AppError> {
+    let scope = table_scope(&state, id).await?.ok_or(AppError::NotFound)?;
+    require_owner(&scope, auth.user_id)?;
+    require_member(&state, auth.user_id, req.session_id).await?;
+
+    // adding a table twice is a no-op, not an error
+    if let Some(existing) = attachment(&state, req.session_id, id).await? {
+        return Ok(Json(existing));
+    }
+
+    let event = NewEvent {
+        aggregate_type: "session_oracle_table",
+        aggregate_id: Uuid::new_v4(),
+        session_id: Some(req.session_id),
+        event_type: "session_oracle_table.created",
+        payload: json!({ "table_id": id }),
+        metadata: auth.metadata(),
+    };
+
+    let link = retry_tx!(state.pool(), |tx| {
+        projection::append_table_attached(&mut tx, &event).await
+    })?;
+
+    Ok(Json(link))
+}
+
+/// any session member can take a table off the session board; the table
+/// itself stays in its owner's library
+pub async fn detach_table(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Query(query): Query<SessionQuery>,
+) -> Result<StatusCode, AppError> {
+    require_member(&state, auth.user_id, query.session_id).await?;
+    let link = attachment(&state, query.session_id, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let event = NewEvent {
+        aggregate_type: "session_oracle_table",
+        aggregate_id: link.id,
+        session_id: Some(query.session_id),
+        event_type: "session_oracle_table.deleted",
+        payload: json!({}),
+        metadata: auth.metadata(),
+    };
+
+    retry_tx!(state.pool(), |tx| {
+        projection::append_table_detached(&mut tx, &event).await
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn update_table(
@@ -277,6 +365,26 @@ pub async fn delete_table(
     let scope = table_scope(&state, id).await?.ok_or(AppError::NotFound)?;
     require_owner(&scope, auth.user_id)?;
 
+    // explicit detach events per session first: the fk cascade would remove
+    // the links silently, and the realtime bus routes by session, so without
+    // these the sessions using the table would never hear it went away
+    let links: Vec<(Uuid, Uuid)> =
+        sqlx::query_as("select id, session_id from session_oracle_tables where table_id = $1")
+            .bind(id)
+            .fetch_all(state.pool())
+            .await?;
+    let detach_events: Vec<NewEvent> = links
+        .into_iter()
+        .map(|(link_id, session_id)| NewEvent {
+            aggregate_type: "session_oracle_table",
+            aggregate_id: link_id,
+            session_id: Some(session_id),
+            event_type: "session_oracle_table.deleted",
+            payload: json!({}),
+            metadata: auth.metadata(),
+        })
+        .collect();
+
     let event = NewEvent {
         aggregate_type: "oracle_table",
         aggregate_id: id,
@@ -287,6 +395,9 @@ pub async fn delete_table(
     };
 
     retry_tx!(state.pool(), |tx| {
+        for detach in &detach_events {
+            projection::append_table_detached(&mut tx, detach).await?;
+        }
         projection::append_table_deleted(&mut tx, &event).await
     })?;
 
@@ -385,6 +496,9 @@ pub async fn update_row(
     if payload.is_empty() {
         return Err(AppError::BadRequest("empty row update".to_string()));
     }
+    // the realtime listener fans row events out to the table's sessions and
+    // needs the table id; the update projection ignores unknown keys
+    payload.insert("table_id".to_string(), json!(current.table_id));
 
     let event = NewEvent {
         aggregate_type: "oracle_table_row",
@@ -407,7 +521,7 @@ pub async fn delete_row(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let (owner_id, _) = row_scope(&state, id).await?.ok_or(AppError::NotFound)?;
+    let (owner_id, current) = row_scope(&state, id).await?.ok_or(AppError::NotFound)?;
     if owner_id != auth.user_id {
         return Err(AppError::Forbidden);
     }
@@ -417,7 +531,9 @@ pub async fn delete_row(
         aggregate_id: id,
         session_id: None,
         event_type: "oracle_table_row.deleted",
-        payload: json!({}),
+        // the row is gone by dispatch time, so the fan-out lookup needs the
+        // table id in the event itself
+        payload: json!({ "table_id": current.table_id }),
         metadata: auth.metadata(),
     };
 
@@ -453,7 +569,13 @@ pub async fn roll_oracle(
             let scope = table_scope(&state, table_id)
                 .await?
                 .ok_or(AppError::NotFound)?;
-            require_owner(&scope, auth.user_id)?;
+            // your own tables roll anywhere; other people's only where the
+            // owner has added them to the session
+            if scope.created_by != auth.user_id
+                && attachment(&state, req.session_id, table_id).await?.is_none()
+            {
+                return Err(AppError::Forbidden);
+            }
             let result = table_result(&state, table_id, &scope).await?;
             (Some(table_id), Some(scope.name), result)
         }
@@ -504,6 +626,21 @@ async fn table_scope(state: &AppState, table_id: Uuid) -> Result<Option<TableSco
         .fetch_optional(state.pool())
         .await
         .map_err(Into::into)
+}
+
+async fn attachment(
+    state: &AppState,
+    session_id: Uuid,
+    table_id: Uuid,
+) -> Result<Option<SessionTableLink>, AppError> {
+    sqlx::query_as(
+        "select id, session_id, table_id, added_by, created_at from session_oracle_tables where session_id = $1 and table_id = $2",
+    )
+    .bind(session_id)
+    .bind(table_id)
+    .fetch_optional(state.pool())
+    .await
+    .map_err(Into::into)
 }
 
 async fn row_scope(
