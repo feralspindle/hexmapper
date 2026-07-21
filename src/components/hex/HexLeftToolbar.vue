@@ -349,6 +349,7 @@
         <div v-if="sessionStore.playMode === 'gm_less'" class="ds-tool-group">
             <span class="ds-tool-label">Solo</span>
             <ToolbarToggleButton kind="toolkit" testid="hex-toolkit-toggle" />
+            <ToolbarToggleButton kind="journal" testid="hex-journal-toggle" />
         </div>
     </aside>
 
@@ -426,6 +427,12 @@
             v-if="sessionStore.playMode === 'gm_less'"
             kind="toolkit"
             testid="hex-toolkit-toggle"
+            :size="16"
+        />
+        <ToolbarToggleButton
+            v-if="sessionStore.playMode === 'gm_less'"
+            kind="journal"
+            testid="hex-journal-toggle"
             :size="16"
         />
         <div class="ds-float-sep" />
