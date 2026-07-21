@@ -220,7 +220,65 @@
       <section class="oracle-section">
         <div class="oracle-section-title">
           <span class="ds-field-label">My Tables</span>
-          <span class="ds-meta">{{ oracleStore.libraryTables.length }}</span>
+          <div class="oracle-import-head">
+            <span class="ds-meta">{{ oracleStore.libraryTables.length }}</span>
+            <button
+              type="button"
+              class="hm-card-icon-btn"
+              :class="{ 'oracle-library-added': importOpen }"
+              title="Import tables from JSON"
+              data-testid="oracle-import-toggle"
+              @click="importOpen = !importOpen"
+            >
+              <i class="fa-solid fa-file-import" />
+            </button>
+          </div>
+        </div>
+
+        <div v-if="importOpen" class="oracle-import" data-testid="oracle-import">
+          <p class="ds-meta">
+            Paste a JSON bundle in the import API format:
+            <code>{ "tables": [ { "name": ..., "rows": [...] } ] }</code>
+            (a bare array of tables works too).
+          </p>
+          <textarea
+            v-model="importText"
+            class="ds-input oracle-import-text"
+            rows="6"
+            spellcheck="false"
+            data-testid="oracle-import-text"
+            placeholder='{ "tables": [ { "name": "Reaction", "rows": [ { "result": "Hostile" } ] } ] }'
+          ></textarea>
+          <label class="oracle-import-replace">
+            <input v-model="importReplace" type="checkbox" data-testid="oracle-import-replace" />
+            <span>Replace my tables with the same names</span>
+          </label>
+          <div class="oracle-import-actions">
+            <input
+              ref="importFileRef"
+              type="file"
+              accept=".json,application/json"
+              class="oracle-import-file"
+              data-testid="oracle-import-file"
+              @change="loadImportFile"
+            />
+            <button type="button" class="ds-btn tiny" @click="importFileRef.click()">
+              <i class="fa-solid fa-folder-open" />
+              <span>Load file</span>
+            </button>
+            <button
+              type="button"
+              class="ds-btn tiny"
+              :disabled="importing || !importText.trim()"
+              data-testid="oracle-import-run"
+              @click="runImport"
+            >
+              <i class="fa-solid fa-file-import" />
+              <span>{{ importing ? 'Importing…' : 'Import' }}</span>
+            </button>
+          </div>
+          <div v-if="importError" class="oracle-empty" data-testid="oracle-import-error">{{ importError }}</div>
+          <div v-else-if="importSummary" class="ds-meta" data-testid="oracle-import-summary">{{ importSummary }}</div>
         </div>
 
         <div v-if="!oracleStore.libraryTables.length" class="oracle-empty">
@@ -454,6 +512,67 @@ async function installPack(packId) {
   const result = await oracleStore.installPack(packId)
   if (!result) packsError.value = oracleStore.error ?? 'Pack install failed.'
   installingPack.value = null
+}
+
+const importOpen = ref(false)
+const importText = ref('')
+const importReplace = ref(false)
+const importing = ref(false)
+const importError = ref(null)
+const importSummary = ref(null)
+const importFileRef = ref(null)
+
+function parseImportBundle(text) {
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch (err) {
+    throw new Error(`Not valid JSON: ${err.message}`, { cause: err })
+  }
+  const bundleTables = Array.isArray(parsed) ? parsed : parsed?.tables
+  if (!Array.isArray(bundleTables) || !bundleTables.length) {
+    throw new Error('Expected { "tables": [...] } or a JSON array of tables.')
+  }
+  return bundleTables
+}
+
+async function runImport() {
+  importError.value = null
+  importSummary.value = null
+  let bundleTables
+  try {
+    bundleTables = parseImportBundle(importText.value)
+  } catch (err) {
+    importError.value = err.message
+    return
+  }
+  importing.value = true
+  const result = await oracleStore.importTables({
+    tables: bundleTables,
+    replace: importReplace.value,
+  })
+  importing.value = false
+  if (!result) {
+    importError.value = oracleStore.error ?? 'Import failed.'
+    return
+  }
+  const replaced = result.replaced_tables ? `, replaced ${result.replaced_tables}` : ''
+  importSummary.value = `Imported ${result.installed_tables} tables (${result.installed_rows} rows)${replaced}.`
+  importText.value = ''
+  importReplace.value = false
+}
+
+function loadImportFile(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    importText.value = String(reader.result ?? '')
+    importError.value = null
+    importSummary.value = null
+  }
+  reader.readAsText(file)
 }
 
 const scrollRef = ref(null)
@@ -702,6 +821,48 @@ function labelize(key) {
 
 .oracle-library-added {
   color: var(--accent-2);
+}
+
+.oracle-import-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.oracle-import {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--rule-strong);
+  border-left: 3px solid var(--accent-2);
+  padding: 8px 10px;
+  background: var(--paper);
+}
+
+.oracle-import code {
+  word-break: break-all;
+}
+
+.oracle-import-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  resize: vertical;
+}
+
+.oracle-import-replace {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.oracle-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.oracle-import-file {
+  display: none;
 }
 
 .oracle-tags-help summary {

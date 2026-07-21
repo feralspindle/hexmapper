@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use axum::extract::State;
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
@@ -21,6 +21,15 @@ use crate::retry_tx;
 use crate::state::AppState;
 
 const STARTER_PACK: &str = include_str!("packs/shadowdark_starter.json");
+
+const MAX_BUNDLE_TABLES: usize = 100;
+const MAX_BUNDLE_ROWS_PER_TABLE: usize = 1000;
+// mirror the oracle handler caps so imported tables stay editable in the ui
+pub(crate) const MAX_NAME_LEN: usize = 120;
+const MAX_DESCRIPTION_LEN: usize = 500;
+const MAX_RESULT_LEN: usize = 500;
+const MAX_NOTES_LEN: usize = 1000;
+const MAX_TAG_LEN: usize = 60;
 
 #[derive(Debug, Deserialize)]
 pub struct Pack {
@@ -59,6 +68,20 @@ fn default_mode() -> String {
 
 fn default_weight() -> i32 {
     1
+}
+
+/// wire shape shared by the external import api and the in-app json import:
+/// a PackTable whose chain key defaults to the table name
+#[derive(Debug, Deserialize)]
+pub struct ImportTable {
+    pub key: Option<String>,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_mode")]
+    pub mode: String,
+    pub tag: Option<String>,
+    pub rows: Vec<PackRow>,
 }
 
 pub fn builtin_packs() -> Result<Vec<Pack>, AppError> {
@@ -153,6 +176,119 @@ pub async fn install_pack(
         installed_tables: pack.tables.len(),
         installed_rows,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportTablesRequest {
+    pub session_id: Option<Uuid>,
+    #[serde(default)]
+    pub replace: bool,
+    pub tables: Vec<ImportTable>,
+}
+
+/// In-app twin of the external POST /import/oracle-tables: same bundle json,
+/// but under browser auth, so the panel can import without minting a key.
+pub async fn import_tables(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(req): Json<ImportTablesRequest>,
+) -> Result<Json<Value>, AppError> {
+    if let Some(session_id) = req.session_id {
+        if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
+            return Err(AppError::Forbidden);
+        }
+    }
+    let result = import_bundle(
+        &state,
+        auth.user_id,
+        req.session_id,
+        req.replace,
+        req.tables,
+        &auth.metadata(),
+    )
+    .await?;
+    Ok(Json(result))
+}
+
+/// Validates and installs a json table bundle into `owner_id`'s library,
+/// attaching to `attach_to` when set. Shared by the external import endpoint
+/// and the in-app import; both accept the same body and get the same errors.
+pub(crate) async fn import_bundle(
+    state: &AppState,
+    owner_id: Uuid,
+    attach_to: Option<Uuid>,
+    replace: bool,
+    tables: Vec<ImportTable>,
+    metadata: &Value,
+) -> Result<Value, AppError> {
+    if tables.is_empty() || tables.len() > MAX_BUNDLE_TABLES {
+        return Err(AppError::BadRequest(format!(
+            "bundle must contain 1-{MAX_BUNDLE_TABLES} tables"
+        )));
+    }
+    for table in &tables {
+        check_len(&table.name, "table name", 1, MAX_NAME_LEN)?;
+        check_len(&table.description, "description", 0, MAX_DESCRIPTION_LEN)?;
+        if let Some(tag) = &table.tag {
+            check_len(tag, "tag", 1, MAX_TAG_LEN)?;
+        }
+        if table.rows.is_empty() || table.rows.len() > MAX_BUNDLE_ROWS_PER_TABLE {
+            return Err(AppError::BadRequest(format!(
+                "table {} must have 1-{MAX_BUNDLE_ROWS_PER_TABLE} rows",
+                table.name
+            )));
+        }
+        for row in &table.rows {
+            check_len(&row.result, "row result", 1, MAX_RESULT_LEN)?;
+            check_len(&row.notes, "row notes", 0, MAX_NOTES_LEN)?;
+        }
+    }
+
+    let tables: Vec<PackTable> = tables
+        .into_iter()
+        .map(|t| PackTable {
+            key: t.key.unwrap_or_else(|| t.name.clone()),
+            name: t.name,
+            description: t.description,
+            mode: t.mode,
+            tag: t.tag.map(|tag| tag.to_lowercase()),
+            rows: t.rows,
+        })
+        .collect();
+    validate_tables(&tables).map_err(AppError::BadRequest)?;
+
+    let colliding = colliding_tables(state, owner_id, &tables).await?;
+    let replaced = colliding.len();
+    let delete_first: Vec<Uuid> = if replace {
+        colliding.iter().map(|(id, _)| *id).collect()
+    } else if !colliding.is_empty() {
+        let names: Vec<String> = colliding.into_iter().map(|(_, name)| name).collect();
+        return Err(AppError::BadRequest(format!(
+            "tables already exist (send replace: true to overwrite): {}",
+            names.join(", ")
+        )));
+    } else {
+        Vec::new()
+    };
+
+    let installed_rows =
+        install_table_bundle(state, &tables, &delete_first, attach_to, metadata).await?;
+
+    Ok(json!({
+        "installed_tables": tables.len(),
+        "installed_rows": installed_rows,
+        "replaced_tables": replaced,
+    }))
+}
+
+pub(crate) fn check_len(value: &str, what: &str, min: usize, max: usize) -> Result<(), AppError> {
+    let len = value.chars().count();
+    if len < min || len > max {
+        return Err(AppError::BadRequest(format!(
+            "{what} must be {min}-{max} characters"
+        )));
+    }
+    Ok(())
 }
 
 /// Tables the user already owns whose names collide with the bundle's, as (id, name).
