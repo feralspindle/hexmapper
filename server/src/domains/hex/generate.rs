@@ -20,8 +20,10 @@ use crate::error::AppError;
 pub const TERRAIN_IDS: &[&str] = &[
     "plains",
     "forest",
+    "jungle",
     "mountain",
     "water",
+    "coast",
     "desert",
     "swamp",
     "city",

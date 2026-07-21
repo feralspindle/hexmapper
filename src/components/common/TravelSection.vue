@@ -57,7 +57,7 @@
 import { computed, ref, watch } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore.js'
 
-const TERRAINS = ['plains', 'forest', 'mountain', 'water', 'desert', 'swamp', 'snow', 'volcanic']
+const TERRAINS = ['plains', 'forest', 'jungle', 'mountain', 'water', 'coast', 'desert', 'swamp', 'snow', 'volcanic']
 
 const sessionStore = useSessionStore()
 const open = ref(false)
