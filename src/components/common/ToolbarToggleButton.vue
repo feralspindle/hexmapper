@@ -19,6 +19,10 @@
         <path d="M11 4l1.6 4.8a2 2 0 001.3 1.3L18.7 12l-4.8 1.6a2 2 0 00-1.3 1.3L11 19.7l-1.6-4.8a2 2 0 00-1.3-1.3L3.3 12l4.8-1.6a2 2 0 001.3-1.3z" />
         <path d="M19 3v4M17 5h4" />
       </template>
+      <template v-else-if="kind === 'journal'">
+        <path d="M4 4.5A2.5 2.5 0 016.5 2H20v17H6.5A2.5 2.5 0 004 21.5z" />
+        <path d="M4 4.5v17M8 6h8M8 10h8M8 14h5" />
+      </template>
       <template v-else-if="kind === 'sound'">
         <path d="M11 5L6 9H2v6h4l5 4V5z" />
         <template v-if="soundEnabled">
@@ -46,12 +50,13 @@ const props = defineProps({
   size: { type: Number, default: 18 },
 })
 
-const { partyVisible, toggleParty, vaultVisible, toggleVault, toolkitVisible, toggleToolkit } = usePartyToggles()
+const { partyVisible, toggleParty, vaultVisible, toggleVault, toolkitVisible, toggleToolkit, journalVisible, toggleJournal } = usePartyToggles()
 
 const pressed = computed(() => {
   if (props.kind === 'party') return partyVisible.value
   if (props.kind === 'vault') return vaultVisible.value
   if (props.kind === 'toolkit') return toolkitVisible.value
+  if (props.kind === 'journal') return journalVisible.value
   return !soundEnabled.value
 })
 
@@ -59,6 +64,7 @@ const tipText = computed(() => {
   if (props.kind === 'party') return 'Party panel'
   if (props.kind === 'vault') return 'Party vault'
   if (props.kind === 'toolkit') return 'Solo toolkit'
+  if (props.kind === 'journal') return 'Journal'
   return soundEnabled.value ? 'Mute sounds' : 'Unmute sounds'
 })
 
@@ -66,6 +72,7 @@ function onClick() {
   if (props.kind === 'party') toggleParty()
   else if (props.kind === 'vault') toggleVault()
   else if (props.kind === 'toolkit') toggleToolkit()
+  else if (props.kind === 'journal') toggleJournal()
   else toggleSound()
 }
 </script>
