@@ -45,9 +45,19 @@ export const useLightStore = defineStore('light', () => {
         }
         const row = payload.new
         if (!row?.id) return
-        const idx = sources.value.findIndex(s => s.id === row.id)
-        if (idx === -1) sources.value = [...sources.value, row]
-        else sources.value = sources.value.map(s => (s.id === row.id ? row : s))
+        const existing = sources.value.find(s => s.id === row.id)
+        if (existing) {
+          // updated events carry only the changed anchors plus the event time
+          // as created_at; merge so name/kind/durations survive the echo
+          const merged = { ...existing, ...row, created_at: existing.created_at }
+          sources.value = sources.value.map(s => (s.id === row.id ? merged : s))
+        } else if (payload.eventType === 'INSERT') {
+          // created events omit the counter columns the table defaults
+          sources.value = [...sources.value, { elapsed_ms: 0, running: false, started_at: null, rounds_elapsed: 0, expired: false, ...row }]
+        } else {
+          // an update for a source this client never loaded is only a fragment
+          void refresh()
+        }
       }))
     await refresh(generation)
     _ticker = setInterval(_tick, 500)
