@@ -333,6 +333,18 @@ export const useOracleStore = defineStore('oracle', () => {
     })
   }
 
+  async function importTables({ tables: bundle, replace = false }) {
+    return run(async () => {
+      const data = await apiClient.post('/oracle-tables/import', {
+        session_id: session.key ?? undefined,
+        replace,
+        tables: bundle,
+      }, 'oracle_tables_import')
+      await refresh()
+      return data
+    })
+  }
+
   async function rollYesNo({ question, odds }) {
     return roll({ kind: 'yes_no', question, odds })
   }
@@ -419,6 +431,7 @@ export const useOracleStore = defineStore('oracle', () => {
     deleteRow,
     listPacks,
     installPack,
+    importTables,
     rollYesNo,
     rollEventPrompt,
     rollTable,

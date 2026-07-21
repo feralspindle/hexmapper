@@ -1,6 +1,8 @@
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, patch, post};
 use axum::Router;
 
+use crate::domains::import::routes::MAX_IMPORT_BODY_BYTES;
 use crate::domains::oracle::{handlers, packs};
 use crate::state::AppState;
 
@@ -9,6 +11,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/oracle-tables",
             get(handlers::list_tables).post(handlers::create_table),
+        )
+        .route(
+            "/oracle-tables/import",
+            post(packs::import_tables).layer(DefaultBodyLimit::max(MAX_IMPORT_BODY_BYTES)),
         )
         .route(
             "/oracle-tables/{id}",
