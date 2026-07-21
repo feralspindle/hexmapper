@@ -79,6 +79,7 @@
         <span class="ds-tip">Generate room<kbd>G</kbd></span>
       </button>
       <ToolbarToggleButton kind="toolkit" testid="dungeon-toolkit-toggle" />
+      <ToolbarToggleButton kind="journal" testid="dungeon-journal-toggle" />
     </div>
 
     <div class="ds-tool-group">
@@ -191,4 +192,3 @@ function deleteSelected() {
 
 
 </script>
-

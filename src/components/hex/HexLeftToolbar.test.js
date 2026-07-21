@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { useUserPrefsStore } from '@/stores/userPrefsStore.js'
+import { useSessionStore } from '@/stores/sessionStore.js'
 import HexLeftToolbar from './HexLeftToolbar.vue'
 
 beforeEach(() => {
@@ -56,6 +57,14 @@ describe('HexLeftToolbar GM gating', () => {
     for (const id of ['hex-tool-select', 'hex-tool-pan', 'hex-party-toggle', 'hex-vault-toggle', 'hex-sound-toggle', 'hex-markers-visibility']) {
       expect(has(player, id), `everyone should see ${id}`).toBe(true)
     }
+  })
+
+  test('journal gets its own toolbar control in solo play', () => {
+    const session = useSessionStore()
+    session.playMode = 'gm_less'
+    const toolbar = mountToolbar({ hexMode: 'fow', isGM: true })
+    expect(has(toolbar, 'hex-journal-toggle')).toBe(true)
+    expect(has(toolbar, 'hex-toolkit-toggle')).toBe(true)
   })
 
   test('marker visibility toggle flips the player pref in both toolbar variants', async () => {

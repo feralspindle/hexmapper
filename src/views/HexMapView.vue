@@ -224,6 +224,7 @@
         <DungeonPartyPanel v-if="!showModePicker" />
         <PartyNotebook v-if="!showModePicker" :session-id="sessionId" />
         <SoloToolkitPanel v-if="!showModePicker" show-travel />
+        <JournalFloatingPanel v-if="!showModePicker" :session-id="sessionId" />
 
     </div>
 </template>
@@ -253,6 +254,7 @@ import CharacterDrawer from "@/components/common/CharacterDrawer.vue";
 import DungeonPartyPanel from "@/components/common/DungeonPartyPanel.vue";
 import PartyNotebook       from "@/components/common/PartyNotebook.vue";
 import SoloToolkitPanel    from "@/components/common/SoloToolkitPanel.vue";
+import JournalFloatingPanel from "@/components/common/JournalFloatingPanel.vue";
 
 import HexBottomBar from "@/components/hex/HexBottomBar.vue";
 import MapScale from "@/components/hex/MapScale.vue";
