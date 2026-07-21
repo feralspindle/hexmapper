@@ -56,6 +56,25 @@ describe('calendarStore behavior', () => {
     expect(store.settings.days_per_month).toHaveLength(12)
   })
 
+  test('concurrent init callers wait for settings to load', async () => {
+    let resolveSettings
+    kit.responses.party_calendar_settings = () => new Promise(resolve => { resolveSettings = resolve })
+    const store = useCalendarStore()
+
+    const first = store.init('s1')
+    const second = store.init('s1')
+    let secondDone = false
+    second.then(() => { secondDone = true })
+    await Promise.resolve()
+
+    expect(secondDone).toBe(false)
+
+    resolveSettings({ data: { session_id: 's1', current_day: 14 }, error: null })
+    await Promise.all([first, second])
+
+    expect(store.settings.current_day).toBe(14)
+  })
+
   test('day INSERTs upsert by calendar date so optimistic rows are replaced, not duplicated', async () => {
     const store = useCalendarStore()
     await store.init('s1')
