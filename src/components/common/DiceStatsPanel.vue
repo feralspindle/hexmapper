@@ -40,7 +40,7 @@
             <div class="dstat-title">Best at each skill</div>
             <div v-for="entry in bestAt" :key="entry.label ?? '_'" class="dstat-line">
                 <span class="dstat-skill">{{ skillName(entry.label) }}</span>
-                <span class="dstat-name" :style="{ color: playerColorFor(entry.userId) }">{{ entry.displayName }}</span>
+                <span class="dstat-name" :style="{ color: playerTextColorFor(entry.userId) }">{{ entry.displayName }}</span>
                 <span class="dstat-z" :class="entry.avgZ >= 0 ? 'pos' : 'neg'">{{ formatZ(entry.avgZ) }}</span>
             </div>
         </div>
@@ -51,7 +51,7 @@
 import { computed, ref } from 'vue'
 import { useDiceStatsStore } from '@/stores/diceStatsStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
-import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { playerTextColorFor } from '@/composables/usePlayerColor.js'
 import { formatZ } from '@/lib/diceStats.js'
 
 const statsStore = useDiceStatsStore()

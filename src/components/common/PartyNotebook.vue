@@ -754,7 +754,7 @@ import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
 import { createPatchDebouncer } from '@/composables/usePatchDebounce.js'
-import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { playerTextColorFor } from '@/composables/usePlayerColor.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
 import { playDiceSound } from '@/lib/diceSound.js'
 
@@ -1008,7 +1008,7 @@ function onItemBlur(kind, id) {
 
 function authorColor(note) {
   if (note.is_gm_author) return 'var(--accent)'
-  return playerColorFor(note.author_user_id)
+  return playerTextColorFor(note.author_user_id)
 }
 
 function formatTs(ts) {

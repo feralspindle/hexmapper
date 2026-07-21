@@ -4,13 +4,27 @@ export default {
   theme: {
     extend: {
       colors: {
+        stone: {
+          100: 'var(--ink)',
+          200: 'var(--ink)',
+          300: 'var(--ink-2)',
+          400: 'var(--ink-soft)',
+          500: 'var(--ink-mute)',
+          600: 'var(--paper-edge)',
+          700: 'var(--paper-3)',
+          750: 'var(--paper-3)',
+          800: 'var(--paper-2)',
+          900: 'var(--paper)',
+        },
+        red: { 400: 'var(--danger-text, #f87171)' },
+        amber: { 200: 'var(--warning-hover, #fde68a)', 300: 'var(--warning-text, #fcd34d)' },
         parchment: {
-          50: '#fdf8f0',
-          100: '#f9eedb',
-          200: '#f2dcb8',
-          300: '#e8c488',
-          400: '#dca85a',
-          500: '#d09038',
+          50: 'var(--paper)',
+          100: 'var(--paper)',
+          200: 'var(--ink)',
+          300: 'var(--accent-2)',
+          400: 'var(--accent-2)',
+          500: 'var(--accent)',
         },
       },
       fontFamily: {
