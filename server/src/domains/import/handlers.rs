@@ -17,26 +17,16 @@ use crate::auth::{AuthUser, ImportAuth};
 use crate::authz;
 use crate::domains::character;
 use crate::domains::compendium;
-use crate::domains::oracle::packs::{
-    colliding_tables, install_table_bundle, validate_tables, PackRow, PackTable,
-};
+use crate::domains::oracle::packs::{check_len, import_bundle, ImportTable, MAX_NAME_LEN};
 use crate::domains::statblock;
 use crate::error::AppError;
 use crate::retry_tx;
 use crate::state::AppState;
 
 const MAX_KEY_NAME_LEN: usize = 80;
-const MAX_TABLES: usize = 100;
-const MAX_ROWS_PER_TABLE: usize = 1000;
 const MAX_STAT_BLOCKS: usize = 500;
 const MAX_CHARACTERS: usize = 50;
 const MAX_COMPENDIUM_ENTRIES: usize = 2000;
-// mirror the oracle handler caps so imported tables stay editable in the ui
-const MAX_NAME_LEN: usize = 120;
-const MAX_DESCRIPTION_LEN: usize = 500;
-const MAX_RESULT_LEN: usize = 500;
-const MAX_NOTES_LEN: usize = 1000;
-const MAX_TAG_LEN: usize = 60;
 
 // ---- key management (browser auth, session owner only) ----------------------
 
@@ -151,93 +141,21 @@ pub struct ImportTablesRequest {
     pub tables: Vec<ImportTable>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ImportTable {
-    /// chain target handle; defaults to the table name when omitted
-    pub key: Option<String>,
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default = "default_mode")]
-    pub mode: String,
-    pub tag: Option<String>,
-    pub rows: Vec<PackRow>,
-}
-
-fn default_mode() -> String {
-    "weighted".to_string()
-}
-
 pub async fn import_oracle_tables(
     State(state): State<AppState>,
     auth: ImportAuth,
     Json(req): Json<ImportTablesRequest>,
 ) -> Result<Json<Value>, AppError> {
-    if req.tables.is_empty() || req.tables.len() > MAX_TABLES {
-        return Err(AppError::BadRequest(format!(
-            "bundle must contain 1-{MAX_TABLES} tables"
-        )));
-    }
-    for table in &req.tables {
-        check_len(&table.name, "table name", 1, MAX_NAME_LEN)?;
-        check_len(&table.description, "description", 0, MAX_DESCRIPTION_LEN)?;
-        if let Some(tag) = &table.tag {
-            check_len(tag, "tag", 1, MAX_TAG_LEN)?;
-        }
-        if table.rows.is_empty() || table.rows.len() > MAX_ROWS_PER_TABLE {
-            return Err(AppError::BadRequest(format!(
-                "table {} must have 1-{MAX_ROWS_PER_TABLE} rows",
-                table.name
-            )));
-        }
-        for row in &table.rows {
-            check_len(&row.result, "row result", 1, MAX_RESULT_LEN)?;
-            check_len(&row.notes, "row notes", 0, MAX_NOTES_LEN)?;
-        }
-    }
-
-    let tables: Vec<PackTable> = req
-        .tables
-        .into_iter()
-        .map(|t| PackTable {
-            key: t.key.unwrap_or_else(|| t.name.clone()),
-            name: t.name,
-            description: t.description,
-            mode: t.mode,
-            tag: t.tag.map(|tag| tag.to_lowercase()),
-            rows: t.rows,
-        })
-        .collect();
-    validate_tables(&tables).map_err(AppError::BadRequest)?;
-
-    let colliding = colliding_tables(&state, auth.user_id, &tables).await?;
-    let replaced = colliding.len();
-    let delete_first: Vec<Uuid> = if req.replace {
-        colliding.iter().map(|(id, _)| *id).collect()
-    } else if !colliding.is_empty() {
-        let names: Vec<String> = colliding.into_iter().map(|(_, name)| name).collect();
-        return Err(AppError::BadRequest(format!(
-            "tables already exist (send replace: true to overwrite): {}",
-            names.join(", ")
-        )));
-    } else {
-        Vec::new()
-    };
-
-    let installed_rows = install_table_bundle(
+    let result = import_bundle(
         &state,
-        &tables,
-        &delete_first,
+        auth.user_id,
         Some(auth.session_id),
+        req.replace,
+        req.tables,
         &auth.metadata(),
     )
     .await?;
-
-    Ok(Json(json!({
-        "installed_tables": tables.len(),
-        "installed_rows": installed_rows,
-        "replaced_tables": replaced,
-    })))
+    Ok(Json(result))
 }
 
 #[derive(Debug, Deserialize)]
@@ -395,16 +313,6 @@ pub async fn import_compendium(
 }
 
 // ---- helpers ----------------------------------------------------------------
-
-fn check_len(value: &str, what: &str, min: usize, max: usize) -> Result<(), AppError> {
-    let len = value.chars().count();
-    if len < min || len > max {
-        return Err(AppError::BadRequest(format!(
-            "{what} must be {min}-{max} characters"
-        )));
-    }
-    Ok(())
-}
 
 async fn require_owner(state: &AppState, user_id: Uuid, session_id: Uuid) -> Result<(), AppError> {
     if authz::is_session_gm(state.pool(), user_id, session_id).await? {

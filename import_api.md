@@ -40,6 +40,10 @@ errors come back as `{"message": "bad request: ..."}` with a 4xx status.
 rollable tables. `key` is only needed when another row chains to the table;
 it defaults to the table name.
 
+no key handy? the same bundle json can be pasted straight into the app: the
+import button next to "My Tables" in the oracle panel takes this exact format
+(the `tables` array, with or without the wrapper object).
+
 ```json
 {
   "replace": false,

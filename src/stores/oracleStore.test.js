@@ -166,6 +166,37 @@ describe('oracleStore', () => {
     expect(store.rows.map(r => r.id)).toEqual(['r-new'])
   })
 
+  test('importTables posts the bundle and refetches the library', async () => {
+    const bundle = [{ name: 'Reaction', rows: [{ result: 'Hostile' }] }]
+    kit.api['post /oracle-tables/import'] = () => ({ installed_tables: 1, installed_rows: 1, replaced_tables: 0 })
+    const store = useOracleStore()
+    await store.init('s1')
+
+    kit.responses.oracle_tables = { data: [table('t-imported', { name: 'Reaction' })], error: null }
+    const result = await store.importTables({ tables: bundle, replace: true })
+
+    expect(kit.apiClient.post).toHaveBeenCalledWith(
+      '/oracle-tables/import',
+      { session_id: 's1', replace: true, tables: bundle },
+      'oracle_tables_import',
+    )
+    expect(result.installed_tables).toBe(1)
+    expect(store.tables.map(t => t.id)).toEqual(['t-imported'])
+  })
+
+  test('a rejected import surfaces the server message', async () => {
+    kit.api['post /oracle-tables/import'] = new kit.ApiError('bad request: tables already exist', 400)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const store = useOracleStore()
+    await store.init('s1')
+
+    const result = await store.importTables({ tables: [{ name: 'Dupe', rows: [] }] })
+
+    expect(result).toBeNull()
+    expect(store.error).toBe('bad request: tables already exist')
+    errorSpy.mockRestore()
+  })
+
   test('a stale init never subscribes channels for the abandoned session', async () => {
     let resolveFirst
     let tableCalls = 0

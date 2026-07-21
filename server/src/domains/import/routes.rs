@@ -6,7 +6,7 @@ use crate::domains::import::handlers;
 use crate::state::AppState;
 
 // a whole book's worth of tables can outgrow axum's 2 MB default body limit
-const MAX_IMPORT_BODY_BYTES: usize = 10 * 1024 * 1024;
+pub(crate) const MAX_IMPORT_BODY_BYTES: usize = 10 * 1024 * 1024;
 
 pub fn router() -> Router<AppState> {
     Router::new()

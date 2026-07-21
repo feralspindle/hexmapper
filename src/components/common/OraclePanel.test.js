@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     rollTable: vi.fn(),
     listPacks: vi.fn(() => Promise.resolve([])),
     installPack: vi.fn(),
+    importTables: vi.fn(),
     attachTable: vi.fn(),
     detachTable: vi.fn(),
   },
@@ -248,6 +249,70 @@ describe('OraclePanel', () => {
       expect(help.text()).toContain(tag)
     }
     expect(help.text()).toContain('added to this session')
+  })
+
+  test('json import parses a bundle, sends it, and reports the result', async () => {
+    mocks.oracleStore.importTables.mockResolvedValue({ installed_tables: 2, installed_rows: 4, replaced_tables: 1 })
+    const wrapper = mount(OraclePanel)
+
+    expect(wrapper.find('[data-testid="oracle-import"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="oracle-import-toggle"]').trigger('click')
+
+    const bundle = { tables: [{ name: 'Reaction', rows: [{ result: 'Hostile' }] }] }
+    await wrapper.get('[data-testid="oracle-import-text"]').setValue(JSON.stringify(bundle))
+    await wrapper.get('[data-testid="oracle-import-replace"]').setValue(true)
+    await wrapper.get('[data-testid="oracle-import-run"]').trigger('click')
+    await new Promise(resolve => setTimeout(resolve))
+
+    expect(mocks.oracleStore.importTables).toHaveBeenCalledWith({
+      tables: bundle.tables,
+      replace: true,
+    })
+    expect(wrapper.get('[data-testid="oracle-import-summary"]').text())
+      .toBe('Imported 2 tables (4 rows), replaced 1.')
+    expect(wrapper.get('[data-testid="oracle-import-text"]').element.value).toBe('')
+  })
+
+  test('json import accepts a bare array of tables', async () => {
+    mocks.oracleStore.importTables.mockResolvedValue({ installed_tables: 1, installed_rows: 1, replaced_tables: 0 })
+    const wrapper = mount(OraclePanel)
+    await wrapper.get('[data-testid="oracle-import-toggle"]').trigger('click')
+
+    const tables = [{ name: 'Mood', rows: [{ result: 'Grim' }] }]
+    await wrapper.get('[data-testid="oracle-import-text"]').setValue(JSON.stringify(tables))
+    await wrapper.get('[data-testid="oracle-import-run"]').trigger('click')
+
+    expect(mocks.oracleStore.importTables).toHaveBeenCalledWith({ tables, replace: false })
+  })
+
+  test('json import rejects malformed input without calling the api', async () => {
+    const wrapper = mount(OraclePanel)
+    await wrapper.get('[data-testid="oracle-import-toggle"]').trigger('click')
+
+    await wrapper.get('[data-testid="oracle-import-text"]').setValue('{ not json')
+    await wrapper.get('[data-testid="oracle-import-run"]').trigger('click')
+    expect(wrapper.get('[data-testid="oracle-import-error"]').text()).toContain('Not valid JSON')
+
+    await wrapper.get('[data-testid="oracle-import-text"]').setValue('{ "tables": [] }')
+    await wrapper.get('[data-testid="oracle-import-run"]').trigger('click')
+    expect(wrapper.get('[data-testid="oracle-import-error"]').text()).toContain('Expected')
+
+    expect(mocks.oracleStore.importTables).not.toHaveBeenCalled()
+  })
+
+  test('json import surfaces server rejections', async () => {
+    mocks.oracleStore.importTables.mockImplementation(() => {
+      mocks.oracleStore.error = 'bad request: tables already exist'
+      return Promise.resolve(null)
+    })
+    const wrapper = mount(OraclePanel)
+    await wrapper.get('[data-testid="oracle-import-toggle"]').trigger('click')
+
+    await wrapper.get('[data-testid="oracle-import-text"]').setValue('[{ "name": "Dupe", "rows": [{ "result": "x" }] }]')
+    await wrapper.get('[data-testid="oracle-import-run"]').trigger('click')
+    await new Promise(resolve => setTimeout(resolve))
+
+    expect(wrapper.get('[data-testid="oracle-import-error"]').text()).toBe('bad request: tables already exist')
   })
 
   test('content packs list and install', async () => {
