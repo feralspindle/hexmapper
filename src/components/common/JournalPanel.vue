@@ -84,7 +84,21 @@
             {{ c.data?.name || 'Unnamed' }}
           </option>
         </select>
+        <div class="journal-format-bar" role="toolbar" aria-label="Markdown formatting">
+          <button
+            v-for="tool in markdownTools"
+            :key="tool.label"
+            type="button"
+            :title="tool.title"
+            :aria-label="tool.title"
+            @mousedown.prevent="applyMarkdown(tool)"
+          >
+            <i :class="tool.icon" />
+            <span v-if="tool.text">{{ tool.text }}</span>
+          </button>
+        </div>
         <textarea
+          ref="textareaEl"
           v-model="draft"
           rows="3"
           class="ds-input journal-input"
@@ -109,6 +123,7 @@ import { useJournalStore } from '@/stores/journalStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
+import { applyMarkdownEdit } from '@/lib/journalMarkdown.js'
 
 const props = defineProps({ sessionId: { type: String, required: true } })
 
@@ -120,7 +135,17 @@ const characterStore = useCharacterStore()
 const draft = ref('')
 const speakerId = ref('')
 const scrollEl = ref(null)
+const textareaEl = ref(null)
 const query = ref('')
+
+const markdownTools = [
+  { label: 'bold', title: 'Bold', icon: 'fa-solid fa-bold', before: '**', after: '**', placeholder: 'bold text' },
+  { label: 'italic', title: 'Italic', icon: 'fa-solid fa-italic', before: '_', after: '_', placeholder: 'italic text' },
+  { label: 'heading', title: 'Heading', icon: 'fa-solid fa-heading', linePrefix: '## ', placeholder: 'Heading' },
+  { label: 'bulleted-list', title: 'Bulleted list', icon: 'fa-solid fa-list-ul', linePrefix: '- ', placeholder: 'list item' },
+  { label: 'quote', title: 'Quote', icon: 'fa-solid fa-quote-left', linePrefix: '> ', placeholder: 'quote' },
+  { label: 'link', title: 'Link', icon: 'fa-solid fa-link', before: '[', after: '](url)', placeholder: 'link text' },
+]
 
 const speaker = computed(() =>
   characterStore.characters.find(c => c.id === speakerId.value) ?? null)
@@ -163,6 +188,18 @@ function dayHeader(entry, index) {
 function entryTime(entry) {
   if (!entry.created_at) return ''
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(entry.created_at))
+}
+
+async function applyMarkdown(tool) {
+  const textarea = textareaEl.value
+  if (!textarea) return
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const edit = applyMarkdownEdit(draft.value, start, end, tool)
+  draft.value = edit.text
+  await nextTick()
+  textarea.focus()
+  textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd)
 }
 
 async function submit() {
@@ -397,6 +434,42 @@ function exportMd() {
   padding: 2px 6px;
 }
 
+.journal-format-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--rule);
+  border-bottom: 0;
+  background: var(--paper-3);
+}
+
+.journal-format-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.journal-format-bar button:last-child {
+  border-right: 0;
+}
+
+.journal-format-bar button:hover,
+.journal-format-bar button:focus-visible {
+  background: var(--paper);
+  color: var(--ink);
+  outline: 1px solid var(--rule-strong);
+}
+
 .journal-speaker-name {
   color: var(--accent-2, #c9a227);
   font-family: var(--font-display);
@@ -410,6 +483,8 @@ function exportMd() {
   resize: vertical;
   min-height: 66px;
   line-height: 1.45;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 @media (max-width: 560px) {
