@@ -9,7 +9,7 @@ use crate::events::NewEvent;
 
 use super::handlers::JournalEntryRow;
 
-const RETURNING: &str = "id, session_id, author_user_id, author_name, kind, body, pin, game_date, created_at, updated_at";
+const RETURNING: &str = "id, session_id, author_user_id, author_name, kind, body, pin, game_date, character_id, character_name, created_at, updated_at";
 
 pub async fn append_created(
     tx: &mut Transaction<'_, Postgres>,
@@ -19,7 +19,7 @@ pub async fn append_created(
         r#"
         {APPEND_EVENT_CTE}
         insert into journal_entries
-            (id, session_id, author_user_id, author_name, kind, body, pin, game_date, created_at, updated_at)
+            (id, session_id, author_user_id, author_name, kind, body, pin, game_date, character_id, character_name, created_at, updated_at)
         select aggregate_id,
                session_id,
                (metadata->>'user_id')::uuid,
@@ -28,6 +28,8 @@ pub async fn append_created(
                coalesce(payload->>'body', ''),
                payload->'pin',
                payload->'game_date',
+               nullif(payload->>'character_id', '')::uuid,
+               payload->>'character_name',
                created_at,
                created_at
         from evt
@@ -53,7 +55,7 @@ pub async fn append_updated(
             updated_at = evt.created_at
         from evt
         where j.id = evt.aggregate_id
-        returning j.id, j.session_id, j.author_user_id, j.author_name, j.kind, j.body, j.pin, j.game_date, j.created_at, j.updated_at
+        returning j.id, j.session_id, j.author_user_id, j.author_name, j.kind, j.body, j.pin, j.game_date, j.character_id, j.character_name, j.created_at, j.updated_at
         "#
     );
 

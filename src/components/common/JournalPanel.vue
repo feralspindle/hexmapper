@@ -32,7 +32,11 @@
 
         <div v-else class="journal-prose" data-testid="journal-prose">
           <div class="journal-meta">
-            <span>{{ entry.author_name }}</span>
+            <span v-if="entry.character_name" class="journal-speaker-name" data-testid="journal-speaker-name">
+              <i class="fa-solid fa-masks-theater" />
+              {{ entry.character_name }}
+            </span>
+            <span v-else>{{ entry.author_name }}</span>
             <button v-if="canTouch(entry)" type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Delete entry" @click="journalStore.removeEntry(entry.id)">
               <i class="fa-solid fa-xmark" />
             </button>
@@ -43,15 +47,29 @@
     </div>
 
     <div class="journal-compose">
-      <textarea
-        v-model="draft"
-        rows="2"
-        class="ds-input journal-input"
-        placeholder="What happened…"
-        maxlength="8000"
-        data-testid="journal-input"
-        @keydown.enter.exact.prevent="submit"
-      />
+      <div class="journal-compose-fields">
+        <select
+          v-if="characterStore.characters.length"
+          v-model="speakerId"
+          class="ds-input journal-speaker"
+          data-testid="journal-speaker"
+          title="Attach this entry to a character"
+        >
+          <option value="">narration</option>
+          <option v-for="c in characterStore.characters" :key="c.id" :value="c.id">
+            {{ c.data?.name || 'Unnamed' }}
+          </option>
+        </select>
+        <textarea
+          v-model="draft"
+          rows="2"
+          class="ds-input journal-input"
+          :placeholder="speakerName ? `What does ${speakerName} say or do…` : 'What happened…'"
+          maxlength="8000"
+          data-testid="journal-input"
+          @keydown.enter.exact.prevent="submit"
+        />
+      </div>
       <button type="button" class="ds-btn" data-testid="journal-submit" :disabled="!draft.trim()" @click="submit">
         <i class="fa-solid fa-feather" />
         <span>Write</span>
@@ -62,19 +80,26 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useJournalStore } from '@/stores/journalStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
+import { useCharacterStore } from '@/stores/characterStore.js'
 
 const props = defineProps({ sessionId: { type: String, required: true } })
 
 const journalStore = useJournalStore()
 const sessionStore = useSessionStore()
 const authStore = useAuthStore()
+const characterStore = useCharacterStore()
 
 const draft = ref('')
+const speakerId = ref('')
 const scrollEl = ref(null)
+
+const speaker = computed(() =>
+  characterStore.characters.find(c => c.id === speakerId.value) ?? null)
+const speakerName = computed(() => speaker.value?.data?.name || (speaker.value ? 'Unnamed' : null))
 
 onMounted(() => journalStore.init(props.sessionId))
 
@@ -99,7 +124,7 @@ function dayHeader(entry, index) {
 async function submit() {
   const body = draft.value.trim()
   if (!body) return
-  const saved = await journalStore.addProse(body)
+  const saved = await journalStore.addProse(body, { characterId: speaker.value?.id ?? null })
   if (saved) draft.value = ''
 }
 
@@ -212,8 +237,32 @@ function exportMd() {
   margin-top: 8px;
 }
 
-.journal-input {
+.journal-compose-fields {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.journal-speaker {
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.journal-speaker-name {
+  color: var(--accent-2, #c9a227);
+  font-family: var(--font-display);
+}
+
+.journal-speaker-name i {
+  margin-right: 4px;
+}
+
+.journal-input {
   resize: vertical;
   min-height: 40px;
 }

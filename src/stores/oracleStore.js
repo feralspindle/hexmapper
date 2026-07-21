@@ -56,7 +56,7 @@ export const useOracleStore = defineStore('oracle', () => {
     try {
       await Promise.all([loadTables(sessionId, generation), loadRolls(sessionId, generation)])
       if (!session.isCurrent(generation)) return
-      await loadRows()
+      await loadRows(generation)
       if (!session.isCurrent(generation)) return
       subscribe(sessionId)
     } catch (err) {
@@ -72,7 +72,7 @@ export const useOracleStore = defineStore('oracle', () => {
     try {
       await Promise.all([loadTables(sessionId, generation), loadRolls(sessionId, generation)])
       if (!session.isCurrent(generation)) return
-      await loadRows()
+      await loadRows(generation)
     } catch (err) {
       console.error('oracleStore.refresh:', err instanceof ApiError ? err.message : err)
     }
@@ -120,8 +120,10 @@ export const useOracleStore = defineStore('oracle', () => {
       .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
   }
 
-  async function loadRows() {
+  let rowsFetchSeq = 0
+  async function loadRows(generation = session.generation) {
     const ids = tables.value.map(table => table.id)
+    const fetchSeq = ++rowsFetchSeq
     if (!ids.length) {
       rows.value = []
       return
@@ -134,6 +136,9 @@ export const useOracleStore = defineStore('oracle', () => {
       .order('created_at', { ascending: true })
 
     if (loadError) throw loadError
+    // refetches overlap (realtime handlers fire one per table event); an older
+    // snapshot resolving late must not clobber a newer one or a new session
+    if (fetchSeq !== rowsFetchSeq || !session.isCurrent(generation)) return
     rows.value = data ?? []
   }
 
@@ -165,14 +170,23 @@ export const useOracleStore = defineStore('oracle', () => {
           tables.value = tables.value.filter(table => table.id !== event.old.id)
           rows.value = rows.value.filter(row => row.table_id !== event.old.id)
           sessionLinks.value = sessionLinks.value.filter(link => link.table_id !== event.old.id)
-        } else {
-          const relevant = event.new.created_by === userId
-            || sessionTableIds.value.has(event.new.id)
-            || tables.value.some(table => table.id === event.new.id)
-          if (!relevant) return
-          upsertById(tables, event.new)
+          return
         }
-        tables.value = [...tables.value].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+        if (event.eventType === 'UPDATE') {
+          // an update for a table this client never loaded has nothing to
+          // merge into; the links channel refetches when it becomes relevant
+          if (mergeById(tables, event.new)) sortTables()
+          return
+        }
+        // rust-transport created events carry the author as user_id, not
+        // created_by, and stamp updated_at only as the event's created_at
+        const incoming = { created_by: event.new.user_id, updated_at: event.new.created_at, ...event.new }
+        const relevant = incoming.created_by === userId
+          || sessionTableIds.value.has(incoming.id)
+          || tables.value.some(table => table.id === incoming.id)
+        if (!relevant) return
+        upsertById(tables, incoming)
+        sortTables()
         await loadRows()
       }))
 
@@ -212,6 +226,8 @@ export const useOracleStore = defineStore('oracle', () => {
 
         if (event.eventType === 'DELETE') {
           rows.value = rows.value.filter(row => row.id !== event.old.id)
+        } else if (event.eventType === 'UPDATE') {
+          mergeById(rows, event.new)
         } else {
           upsertById(rows, event.new)
         }
@@ -392,6 +408,27 @@ export const useOracleStore = defineStore('oracle', () => {
     } else {
       listRef.value = listRef.value.map(item => item.id === row.id ? row : item)
     }
+  }
+
+  // realtime UPDATE payloads over the rust transport carry only the changed
+  // columns, plus the event's commit time injected as created_at. merging
+  // keeps the fields the patch doesn't mention (position, weight, created_by)
+  // and turns the event time into updated_at, which the patch never carries
+  function mergeById(listRef, patch) {
+    const existing = listRef.value.find(item => item.id === patch.id)
+    if (!existing) return false
+    const merged = {
+      ...existing,
+      ...patch,
+      created_at: existing.created_at,
+      updated_at: patch.updated_at ?? patch.created_at ?? existing.updated_at,
+    }
+    listRef.value = listRef.value.map(item => item.id === patch.id ? merged : item)
+    return true
+  }
+
+  function sortTables() {
+    tables.value = [...tables.value].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
   }
 
   function cleanup() {

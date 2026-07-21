@@ -59,6 +59,38 @@ describe('journalStore', () => {
     expect(store.entries).toHaveLength(1)
   })
 
+  test('addProse can speak as a character', async () => {
+    kit.api['get /journal-entries?session_id=sess-1'] = []
+    const create = vi.fn(body => entry({ id: 'new', body: body.body, character_id: body.character_id, character_name: 'Wren' }))
+    kit.api['post /journal-entries'] = create
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    await store.addProse('crosses the bridge first', { characterId: 'char-1' })
+
+    expect(create.mock.calls[0][0].character_id).toBe('char-1')
+    expect(store.entries[0].character_name).toBe('Wren')
+  })
+
+  test('a sparse realtime UPDATE merges into the existing entry', async () => {
+    kit.api['get /journal-entries?session_id=sess-1'] = [entry()]
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    const channel = kit.channels.find(c => c.name === 'journal:sess-1')
+    channel.emitPostgres('journal_entries', 'UPDATE', {
+      id: 'e1',
+      body: 'we made camp (edited)',
+      created_at: '2026-07-08T09:00:00Z',
+    })
+
+    const updated = store.entries[0]
+    expect(updated.body).toBe('we made camp (edited)')
+    expect(updated.kind).toBe('prose')
+    expect(updated.author_name).toBe('Me')
+    expect(updated.created_at).toBe('2026-07-07T01:00:00Z')
+  })
+
   test('realtime inserts land sorted by creation time', async () => {
     kit.api['get /journal-entries?session_id=sess-1'] = [entry({ id: 'b', created_at: '2026-07-07T02:00:00Z' })]
     const store = useJournalStore()
@@ -84,6 +116,7 @@ describe('journalStore', () => {
         created_at: '2026-07-07T01:10:00Z',
       }),
       entry({ id: 'p3', body: 'crossed anyway', game_date: { year: 2, month: 3, day: 15 }, created_at: '2026-07-07T02:00:00Z' }),
+      entry({ id: 'p4', body: 'I told you so', character_name: 'Wren', game_date: { year: 2, month: 3, day: 15 }, created_at: '2026-07-07T02:10:00Z' }),
     ]
     const store = useJournalStore()
     await store.init('sess-1')
@@ -94,6 +127,7 @@ describe('journalStore', () => {
     expect(md).toContain('## day 2-3-15')
     expect(md).toContain('> **Yes / No**: Yes, but... (43)')
     expect(md).toContain('we made camp')
+    expect(md).toContain('**Wren:** I told you so')
     expect(md.indexOf('## day 2-3-14')).toBeLessThan(md.indexOf('## day 2-3-15'))
   })
 })
