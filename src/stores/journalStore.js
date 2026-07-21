@@ -50,8 +50,7 @@ export const useJournalStore = defineStore('journal', () => {
     error.value = null
   }
 
-  function _gameDate() {
-    const settings = useCalendarStore().settings
+  function _gameDate(settings) {
     if (!settings?.current_year) return null
     return {
       year: settings.current_year,
@@ -76,9 +75,11 @@ export const useJournalStore = defineStore('journal', () => {
 
   async function _create(payload) {
     try {
+      const calendarStore = useCalendarStore()
+      await calendarStore.init(session.key)
       const row = await apiClient.post('/journal-entries', {
         session_id: session.key,
-        game_date: _gameDate(),
+        game_date: _gameDate(calendarStore.settings),
         ...payload,
       }, `journal_${payload.kind}`)
       _apply(row)
