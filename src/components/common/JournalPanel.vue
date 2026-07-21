@@ -41,8 +41,8 @@
               {{ entry.pin?.label ?? 'pinned' }}
             </span>
             <time :datetime="entry.created_at">{{ entryTime(entry) }}</time>
-            <button v-if="canTouch(entry)" type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Remove pin" @click="journalStore.removeEntry(entry.id)">
-              <i class="fa-solid fa-xmark" />
+            <button v-if="canTouch(entry)" type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Delete pin" data-testid="journal-delete" @click="confirmDelete(entry)">
+              <i class="fa-solid fa-trash" />
             </button>
           </div>
           <p class="journal-pin-text">{{ entry.pin?.text }}</p>
@@ -57,11 +57,23 @@
             </span>
             <span v-else>{{ entry.author_name }}</span>
             <time :datetime="entry.created_at">{{ entryTime(entry) }}</time>
-            <button v-if="canTouch(entry)" type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Delete entry" @click="journalStore.removeEntry(entry.id)">
-              <i class="fa-solid fa-xmark" />
-            </button>
+            <div v-if="canTouch(entry)" class="journal-entry-actions">
+              <button type="button" class="hm-card-icon-btn" title="Edit entry" data-testid="journal-edit" @click="startEdit(entry)">
+                <i class="fa-solid fa-pen" />
+              </button>
+              <button type="button" class="hm-card-icon-btn hm-card-icon-btn--danger" title="Delete entry" data-testid="journal-delete" @click="confirmDelete(entry)">
+                <i class="fa-solid fa-trash" />
+              </button>
+            </div>
           </div>
-          <p class="journal-body">{{ entry.body }}</p>
+          <div v-if="editingId === entry.id" class="journal-edit-form">
+            <textarea v-model="editDraft" rows="3" class="ds-input" maxlength="8000" data-testid="journal-edit-input" @keydown.esc="cancelEdit" @keydown.enter.exact.prevent="saveEdit(entry.id)" />
+            <div class="journal-edit-actions">
+              <button type="button" class="ds-btn tiny ghost" @click="cancelEdit">Cancel</button>
+              <button type="button" class="ds-btn tiny" data-testid="journal-edit-save" :disabled="!editDraft.trim() || editSaving" @click="saveEdit(entry.id)">Save</button>
+            </div>
+          </div>
+          <p v-else class="journal-body">{{ entry.body }}</p>
         </div>
       </template>
     </div>
@@ -124,6 +136,7 @@ import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { applyMarkdownEdit } from '@/lib/journalMarkdown.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 
 const props = defineProps({ sessionId: { type: String, required: true } })
 
@@ -131,12 +144,16 @@ const journalStore = useJournalStore()
 const sessionStore = useSessionStore()
 const authStore = useAuthStore()
 const characterStore = useCharacterStore()
+const { confirm } = useConfirmDialog()
 
 const draft = ref('')
 const speakerId = ref('')
 const scrollEl = ref(null)
 const textareaEl = ref(null)
 const query = ref('')
+const editingId = ref(null)
+const editDraft = ref('')
+const editSaving = ref(false)
 
 const markdownTools = [
   { label: 'bold', title: 'Bold', icon: 'fa-solid fa-bold', before: '**', after: '**', placeholder: 'bold text' },
@@ -174,6 +191,35 @@ watch(() => journalStore.entries.length, async () => {
 
 function canTouch(entry) {
   return entry.author_user_id === authStore.user?.id || sessionStore.isGM
+}
+
+function startEdit(entry) {
+  editingId.value = entry.id
+  editDraft.value = entry.body
+}
+
+function cancelEdit() {
+  editingId.value = null
+  editDraft.value = ''
+}
+
+async function saveEdit(id) {
+  const body = editDraft.value.trim()
+  if (!body || editSaving.value) return
+  editSaving.value = true
+  const saved = await journalStore.updateEntry(id, body)
+  editSaving.value = false
+  if (saved) cancelEdit()
+}
+
+function confirmDelete(entry) {
+  confirm(
+    entry.kind === 'pin' ? 'Delete this pinned result?' : 'Delete this journal entry?',
+    () => {
+      if (editingId.value === entry.id) cancelEdit()
+      journalStore.removeEntry(entry.id)
+    },
+  )
 }
 
 function dayHeader(entry, index) {
@@ -347,6 +393,30 @@ function exportMd() {
   margin-right: 7px;
   font-family: var(--font-mono);
   font-size: 9px;
+}
+
+.journal-entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.journal-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.journal-edit-form textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.journal-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .journal-body {

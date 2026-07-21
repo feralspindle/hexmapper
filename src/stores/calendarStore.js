@@ -23,6 +23,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   const session = createSessionChannel()
   let _settingsLoaded = false
+  let _initPromise = null
   const _fetchedYears = new Set()
 
   // while our own writes are in flight, realtime echoes and out-of-order
@@ -38,14 +39,25 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   async function init(sessionId) {
-    if (session.key === sessionId) return
+    if (session.key === sessionId) {
+      await _initPromise
+      return
+    }
     cleanup()
     const generation = session.begin(sessionId)
-    await _loadSettings(sessionId, generation)
-    await _loadDays(sessionId, settings.value.current_year, generation)
-    if (!session.isCurrent(generation)) return
-    _subscribeSettings(sessionId)
-    _subscribeDays(sessionId)
+    const promise = (async () => {
+      await _loadSettings(sessionId, generation)
+      await _loadDays(sessionId, settings.value.current_year, generation)
+      if (!session.isCurrent(generation)) return
+      _subscribeSettings(sessionId)
+      _subscribeDays(sessionId)
+    })()
+    _initPromise = promise
+    try {
+      await promise
+    } finally {
+      if (_initPromise === promise) _initPromise = null
+    }
   }
 
   async function refresh(generation = session.generation) {
@@ -65,6 +77,7 @@ export const useCalendarStore = defineStore('calendar', () => {
 
   function cleanup() {
     session.close()
+    _initPromise = null
     _settingsLoaded = false
     settings.value = { ...DEFAULT_SETTINGS }
     days.value = []

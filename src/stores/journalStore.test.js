@@ -13,7 +13,7 @@ vi.mock('@/lib/apiClient.js', async () => {
   return createApiClientMock(kit)
 })
 vi.mock('@/stores/calendarStore.js', () => ({
-  useCalendarStore: () => ({ settings: { current_year: 2, current_month: 3, current_day: 14 } }),
+  useCalendarStore: () => kit.calendarStore,
 }))
 
 import { useJournalStore } from './journalStore.js'
@@ -35,6 +35,10 @@ describe('journalStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     resetKit(kit)
+    kit.calendarStore = {
+      init: vi.fn(() => Promise.resolve()),
+      settings: { current_year: 2, current_month: 3, current_day: 14 },
+    }
   })
 
   test('init loads entries and subscribes', async () => {
@@ -57,6 +61,27 @@ describe('journalStore', () => {
 
     expect(create.mock.calls[0][0].game_date).toEqual({ year: 2, month: 3, day: 14 })
     expect(store.entries).toHaveLength(1)
+  })
+
+  test('addProse waits for the saved calendar date after a refresh', async () => {
+    let finishCalendarLoad
+    kit.calendarStore.settings = { current_year: 1, current_month: 1, current_day: 1 }
+    kit.calendarStore.init = vi.fn(() => new Promise(resolve => { finishCalendarLoad = resolve }))
+    kit.api['get /journal-entries?session_id=sess-1'] = []
+    const create = vi.fn(body => entry({ id: 'new', game_date: body.game_date }))
+    kit.api['post /journal-entries'] = create
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    const add = store.addProse('we made camp')
+    await Promise.resolve()
+    expect(create).not.toHaveBeenCalled()
+
+    Object.assign(kit.calendarStore.settings, { current_year: 2, current_month: 3, current_day: 14 })
+    finishCalendarLoad()
+    await add
+
+    expect(create.mock.calls[0][0].game_date).toEqual({ year: 2, month: 3, day: 14 })
   })
 
   test('addProse can speak as a character', async () => {
