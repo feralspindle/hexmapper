@@ -585,40 +585,14 @@ import { realtime } from '@/lib/realtime.js'
 import { playerColorFor } from '@/composables/usePlayerColor.js'
 import { conditionBadge } from '@/lib/conditions.js'
 import { tokenImageUrl } from '@/lib/tokenImage.js'
+import { canvasTheme } from '@/lib/theme.js'
 
 const prefs = useUserPrefsStore()
 const sessionStore = useSessionStore()
 const mapStyle = computed(() => prefs.mapStyle ?? 'classic')
-const styleColors = computed(() => {
-  switch (mapStyle.value) {
-    case 'parchment':
-      return { bg: '#1a0f06', grid: 'rgba(58,46,34,.10)', gridStrong: 'rgba(58,46,34,.22)', floor: '#f4e8cc', wall: '#2a1810', wallW: 2, selectedColor: '#8a1c1c' }
-    case 'blueprint':
-      return { bg: '#0c2438', grid: 'rgba(255,255,255,.05)', gridStrong: 'rgba(255,255,255,.10)', floor: '#1d4868', wall: '#b8e0f0', wallW: 1.5, selectedColor: '#ffaa55' }
-    default:
-      return { bg: '#1a1a1a', grid: 'rgba(255,255,255,.04)', gridStrong: 'rgba(255,255,255,.08)', floor: '#ffffff', wall: '#000000', wallW: 2.5, selectedColor: '#d00000' }
-  }
-})
-
-const labelStyle = computed(() => {
-  switch (mapStyle.value) {
-    case 'blueprint':
-      return {
-        name: { family: '"JetBrains Mono",monospace', size: 11, fill: '#f0f6fa', italic: false, weight: '600', uppercase: true, letterSpacing: '.12em' },
-        dims: { family: '"JetBrains Mono",monospace', fill: '#8eb6c8', letterSpacing: '.08em' },
-      }
-    case 'parchment':
-      return {
-        name: { family: '"IM Fell English",serif', size: 14, fill: '#2a1810', italic: true, weight: '400', uppercase: false, letterSpacing: '.01em' },
-        dims: { family: '"JetBrains Mono",monospace', fill: 'rgba(58,46,34,.6)', letterSpacing: '.06em' },
-      }
-    default:
-      return {
-        name: { family: '"Special Elite",monospace', size: 12, fill: '#000000', italic: false, weight: '400', uppercase: true, letterSpacing: '.04em' },
-        dims: { family: '"JetBrains Mono",monospace', fill: 'rgba(0,0,0,.55)', letterSpacing: '.04em' },
-      }
-  }
-})
+const activeCanvasTheme = computed(() => canvasTheme(mapStyle.value))
+const styleColors = computed(() => ({ ...activeCanvasTheme.value.colors, wallW: activeCanvasTheme.value.wallW }))
+const labelStyle = computed(() => ({ name: activeCanvasTheme.value.name, dims: activeCanvasTheme.value.dims }))
 
 const TOOL_HINTS = {
   room:     [{ type: 'text', text: 'Click and drag to draw a room. ' }, { type: 'kbd', text: 'Double-click' }, { type: 'text', text: ' for exact dimensions.' }],

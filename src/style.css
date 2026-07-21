@@ -45,7 +45,7 @@ svg {
     --ink: #1a1410;
     --ink-2: #3a2e22;
     --ink-soft: #5a4a3a;
-    --ink-mute: #8a7a68;
+    --ink-mute: #5f4e3e;
     --paper: #ede1c7;
     --paper-2: #e3d4b3;
     --paper-3: #d8c69e;
@@ -55,7 +55,7 @@ svg {
     --accent: #8a1c1c;
     --accent-2: #b8541c;
     --accent-3: #5a6b3a;
-    --gold: #b89c2a;
+    --gold: #6b3f00;
     --void: #0d0a07;
     --grid: rgba(58, 46, 34, 0.1);
     --grid-strong: rgba(58, 46, 34, 0.22);
@@ -65,6 +65,27 @@ svg {
     --p4: #2c5266;
     --p5: #6b3a5a;
     --p6: #b89c2a;
+    --canvas-parchment-bg: #1a0f06;
+    --canvas-parchment-grid: rgba(58, 46, 34, 0.1);
+    --canvas-parchment-grid-strong: rgba(58, 46, 34, 0.22);
+    --canvas-parchment-floor: #f4e8cc;
+    --canvas-parchment-wall: #2a1810;
+    --canvas-parchment-label: #2a1810;
+    --canvas-parchment-meta: rgba(58, 46, 34, 0.72);
+    --canvas-blueprint-bg: #0c2438;
+    --canvas-blueprint-grid: rgba(255, 255, 255, 0.05);
+    --canvas-blueprint-grid-strong: rgba(255, 255, 255, 0.1);
+    --canvas-blueprint-floor: #1d4868;
+    --canvas-blueprint-wall: #b8e0f0;
+    --canvas-blueprint-label: #f0f6fa;
+    --canvas-blueprint-meta: #a9d3e5;
+    --canvas-classic-bg: #1a1a1a;
+    --canvas-classic-grid: rgba(255, 255, 255, 0.04);
+    --canvas-classic-grid-strong: rgba(255, 255, 255, 0.08);
+    --canvas-classic-floor: #ffffff;
+    --canvas-classic-wall: #000000;
+    --canvas-classic-label: #000000;
+    --canvas-classic-meta: rgba(0, 0, 0, 0.65);
     --font-display: "Special Elite", "Courier New", monospace;
     --font-zine: "Special Elite", "Courier New", monospace;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -854,8 +875,8 @@ textarea.ds-input {
     background: transparent;
     border: 0;
     color: var(--ink-mute);
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     display: grid;
     place-items: center;
     border-radius: 3px;
@@ -1004,6 +1025,8 @@ textarea.ds-input {
     padding: 0 2px;
     font-size: 12px;
     line-height: 1;
+    min-width: 24px;
+    min-height: 24px;
     color: var(--ink-mute);
     transition: color 0.12s;
 }
@@ -1867,8 +1890,8 @@ textarea.ds-input {
     background: transparent;
     border: 0;
     color: var(--ink-mute);
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     display: grid;
     place-items: center;
     border-radius: 3px;
@@ -2741,8 +2764,8 @@ textarea.ds-input {
 }
 
 .hm-marker-remove-btn {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     border-radius: 3px;
     border: 1px solid var(--rule-strong);
     background: none;
@@ -2944,7 +2967,7 @@ textarea.ds-input {
         align-items: center;
         justify-content: center;
         flex: 0 0 auto;
-        width: 34px;
+        width: 44px;
         border: none;
         border-left: 1px solid var(--rule);
         background: var(--paper-3);
@@ -2999,7 +3022,7 @@ textarea.ds-input {
 @media (max-width: 620px) {
     .dungeon-scribe {
         --toolbar-w: 48px;
-        --tool-size: 34px;
+        --tool-size: 44px;
         --topbar-h: 48px;
     }
     .ds-topbar {

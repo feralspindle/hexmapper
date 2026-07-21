@@ -685,11 +685,7 @@
                             >
                                 <button
                                     class="cs-adj-btn"
-                                    style="
-                                        width: 18px;
-                                        height: 18px;
-                                        font-size: 11px;
-                                    "
+                                    style="font-size: 11px"
                                     @click="
                                         characterStore.adjustStat(stat.key, -1)
                                     "
@@ -701,11 +697,7 @@
                                 }}</span>
                                 <button
                                     class="cs-adj-btn"
-                                    style="
-                                        width: 18px;
-                                        height: 18px;
-                                        font-size: 11px;
-                                    "
+                                    style="font-size: 11px"
                                     @click="
                                         characterStore.adjustStat(stat.key, 1)
                                     "
@@ -1279,10 +1271,10 @@
                 <div class="cs-gear-header">
                     <span class="cs-section-label">Gear Slots</span>
                     <div class="cs-gear-slot-count">
-                        <button v-if="canEdit" class="cs-adj-btn" style="width:18px;height:18px;font-size:11px" @click="characterStore.updateField('gearSlotsTotal', Math.max(0, (char.gearSlotsTotal ?? 0) - 1))">−</button>
+                        <button v-if="canEdit" class="cs-adj-btn" @click="characterStore.updateField('gearSlotsTotal', Math.max(0, (char.gearSlotsTotal ?? 0) - 1))">−</button>
                         <span class="cs-gear-slot-num" :style="{ color: slotRatio > 0.9 ? '#8a1c1c' : slotRatio > 0.7 ? '#b8541c' : 'var(--ink)' }">{{ effectiveGearSlotsUsed }}</span>
                         <span class="cs-gear-slot-sep">/ {{ char.gearSlotsTotal }}</span>
-                        <button v-if="canEdit" class="cs-adj-btn" style="width:18px;height:18px;font-size:11px" @click="characterStore.updateField('gearSlotsTotal', (char.gearSlotsTotal ?? 0) + 1)">+</button>
+                        <button v-if="canEdit" class="cs-adj-btn" @click="characterStore.updateField('gearSlotsTotal', (char.gearSlotsTotal ?? 0) + 1)">+</button>
                     </div>
                     <div class="cs-slot-bar">
                         <div class="cs-slot-bar-fill" :style="{ width: `${Math.min(100, slotRatio * 100)}%`, background: slotRatio > 0.9 ? '#8a1c1c' : slotRatio > 0.7 ? '#b8541c' : 'var(--accent-3, #5a6b3a)' }" />
@@ -3071,8 +3063,8 @@ button.cs-big-val:hover .cs-tip {
     color: #3f6b8a;
 }
 .cs-adj-btn-sm {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
     font-size: 11px;
 }
 .cs-temp-hp-val {
@@ -3542,8 +3534,8 @@ button.cs-stat-val:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     cursor: pointer;
     border-radius: 2px;
     transition:
