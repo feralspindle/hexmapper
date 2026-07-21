@@ -1,5 +1,5 @@
 <template>
-  <div class="ds-panel-section" :class="{ collapsed: !open }" style="flex:0 0 auto">
+  <div class="ds-panel-section" :class="{ collapsed: !open }" data-split-target style="flex:0 0 var(--photos-h, auto)">
     <div class="ds-section-head" @click="open = !open">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto">
         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>

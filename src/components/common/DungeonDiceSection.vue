@@ -302,8 +302,10 @@
         <div
             ref="scrollEl"
             class="ds-section-body"
+            data-split-target
             style="
-                max-height: 220px;
+                height: var(--dice-history-h, auto);
+                max-height: var(--dice-history-h, 220px);
                 border-top: 1px solid var(--rule);
                 padding-top: 8px;
             "

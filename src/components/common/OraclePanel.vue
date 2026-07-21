@@ -309,11 +309,16 @@
               <dt>dungeon.stocking</dt>
               <dd>room contents when generating dungeon rooms</dd>
             </div>
+            <div>
+              <dt>prompt.action <span class="oracle-tag-alt">/ prompt.theme, prompt.subject, prompt.location, prompt.complication</span></dt>
+              <dd>replaces that column of the event prompt generator; columns without a tagged table keep the built-in list</dd>
+            </div>
           </dl>
           <p>
             Any other tag is just a label for your own organizing - nothing
             rolls it automatically. The starter pack ships tables for every
-            tag above.
+            tag above except the prompt slots, which work out of the box
+            without one.
           </p>
         </details>
       </section>
