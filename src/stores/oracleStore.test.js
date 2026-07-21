@@ -111,6 +111,91 @@ describe('oracleStore', () => {
     expect(store.rows.map(r => r.id)).toEqual(['r-mine'])
   })
 
+  test('a sparse row UPDATE over realtime merges into the existing row', async () => {
+    kit.responses.oracle_tables = { data: [table('t1')], error: null }
+    kit.responses.oracle_table_rows = {
+      data: [
+        row('r-first', 't1', { position: 0, result: 'Drizzle' }),
+        row('r-edited', 't1', { position: 4, weight: 3, result: 'Rain' }),
+      ],
+      error: null,
+    }
+    const store = useOracleStore()
+    await store.init('s1')
+
+    const rowsChannel = kit.channels.find(c => c.name === 'oracle:rows:s1')
+    rowsChannel.emitPostgres('oracle_table_rows', 'UPDATE', {
+      id: 'r-edited',
+      table_id: 't1',
+      result: 'Storm',
+      created_at: '2026-07-21T00:00:00Z',
+    })
+
+    const edited = store.rows.find(r => r.id === 'r-edited')
+    expect(edited.result).toBe('Storm')
+    expect(edited.weight).toBe(3)
+    expect(edited.position).toBe(4)
+    expect(edited.created_at).toBe('2026-07-01T00:00:00Z')
+    expect(store.rowsByTable.t1.map(r => r.id)).toEqual(['r-first', 'r-edited'])
+  })
+
+  test('a sparse table UPDATE keeps ownership and stamps updated_at from the event', async () => {
+    kit.responses.oracle_tables = { data: [table('t1')], error: null }
+    const store = useOracleStore()
+    await store.init('s1')
+
+    const tablesChannel = kit.channels.find(c => c.name === 'oracle:tables:s1')
+    tablesChannel.emitPostgres('oracle_tables', 'UPDATE', {
+      id: 't1',
+      name: 'Renamed',
+      user_id: 'u1',
+      created_at: '2026-07-05T00:00:00Z',
+    })
+
+    const t1 = store.tables.find(t => t.id === 't1')
+    expect(t1.name).toBe('Renamed')
+    expect(t1.created_by).toBe('u1')
+    expect(t1.updated_at).toBe('2026-07-05T00:00:00Z')
+    expect(store.libraryTables.map(t => t.id)).toEqual(['t1'])
+  })
+
+  test('a table INSERT over realtime maps the event author to created_by', async () => {
+    const store = useOracleStore()
+    await store.init('s1')
+
+    const tablesChannel = kit.channels.find(c => c.name === 'oracle:tables:s1')
+    tablesChannel.emitPostgres('oracle_tables', 'INSERT', {
+      id: 't-other-tab',
+      name: 'Made elsewhere',
+      user_id: 'u1',
+      created_at: '2026-07-05T00:00:00Z',
+    })
+
+    expect(store.libraryTables.map(t => t.id)).toEqual(['t-other-tab'])
+    expect(store.tables.find(t => t.id === 't-other-tab').updated_at).toBe('2026-07-05T00:00:00Z')
+  })
+
+  test('an older rows refetch resolving late cannot clobber a newer one', async () => {
+    kit.responses.oracle_tables = { data: [table('t1')], error: null }
+    kit.responses.oracle_table_rows = { data: [row('r1', 't1')], error: null }
+    const store = useOracleStore()
+    await store.init('s1')
+
+    let resolveSlow
+    let rowCalls = 0
+    kit.responses.oracle_table_rows = () => {
+      rowCalls += 1
+      if (rowCalls === 1) return new Promise(resolve => (resolveSlow = () => resolve({ data: [row('r-stale', 't1')], error: null })))
+      return { data: [row('r-fresh', 't1')], error: null }
+    }
+    const slow = store.loadRows()
+    await store.loadRows()
+    resolveSlow()
+    await slow
+
+    expect(store.rows.map(r => r.id)).toEqual(['r-fresh'])
+  })
+
   test('roll INSERTs are deduped against the API echo', async () => {
     kit.api['post /oracle-rolls'] = body => oracleRoll('roll-new', body)
     const store = useOracleStore()

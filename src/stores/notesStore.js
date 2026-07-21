@@ -108,7 +108,12 @@ export const useNotesStore = defineStore('notes', () => {
       notes.value = [...notes.value, row]
     } else if (eventType === 'UPDATE') {
       if (!_rowInContext(row)) return
-      notes.value = notes.value.map(n => (n.id === row.id ? row : n))
+      // edited events arrive as sparse patches whose injected user_id and
+      // display_name are the editor (a gm can edit anyone's note) and whose
+      // created_at is the edit time; only the body and the edit stamp may land
+      notes.value = notes.value.map(n => (n.id === row.id
+        ? { ...n, body: row.body ?? n.body, updated_at: row.updated_at ?? row.created_at ?? n.updated_at }
+        : n))
     } else if (eventType === 'DELETE') {
       notes.value = notes.value.filter(n => n.id !== old.id)
     }

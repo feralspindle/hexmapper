@@ -60,9 +60,11 @@ export const useJournalStore = defineStore('journal', () => {
     }
   }
 
-  async function addProse(body) {
+  // characterId attaches the entry to a party character (solo play: recording
+  // what an individual character says or does, distinct from narration)
+  async function addProse(body, { characterId = null } = {}) {
     if (!session.key || !body?.trim()) return null
-    return _create({ kind: 'prose', body: body.trim() })
+    return _create({ kind: 'prose', body: body.trim(), character_id: characterId })
   }
 
   // pin = {source: 'oracle'|'dice', label, text, detail?} - a snapshot, not a
@@ -127,7 +129,7 @@ export const useJournalStore = defineStore('journal', () => {
         if (entry.pin.detail) lines.push(`> ${entry.pin.detail}`)
         lines.push('')
       } else {
-        lines.push(entry.body, '')
+        lines.push(entry.character_name ? `**${entry.character_name}:** ${entry.body}` : entry.body, '')
       }
     }
     return lines.join('\n')
@@ -135,13 +137,20 @@ export const useJournalStore = defineStore('journal', () => {
 
   function _apply(row) {
     if (!row?.id) return
-    const idx = entries.value.findIndex(e => e.id === row.id)
-    if (idx === -1) {
-      entries.value = [...entries.value, row].sort(
+    const existing = entries.value.find(e => e.id === row.id)
+    if (!existing) {
+      // realtime created events carry the author as user_id, api rows as
+      // author_user_id
+      const incoming = { author_user_id: row.user_id, ...row }
+      entries.value = [...entries.value, incoming].sort(
         (a, b) => new Date(a.created_at) - new Date(b.created_at),
       )
     } else {
-      entries.value = entries.value.map(e => (e.id === row.id ? row : e))
+      // realtime update payloads are sparse (body plus the event's timestamp
+      // as created_at); merge so kind/pin/author survive and the entry keeps
+      // its place in the stream
+      const merged = { ...existing, ...row, created_at: existing.created_at }
+      entries.value = entries.value.map(e => (e.id === row.id ? merged : e))
     }
   }
 

@@ -30,6 +30,8 @@ pub struct JournalEntryRow {
     pub body: String,
     pub pin: Option<Value>,
     pub game_date: Option<Value>,
+    pub character_id: Option<Uuid>,
+    pub character_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -48,6 +50,7 @@ pub struct CreateEntryRequest {
     pub body: String,
     pub pin: Option<Value>,
     pub game_date: Option<Value>,
+    pub character_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,7 +70,7 @@ pub async fn list_entries(
     require_member(&state, auth.user_id, query.session_id).await?;
     let rows = sqlx::query_as(
         r#"
-        select id, session_id, author_user_id, author_name, kind, body, pin, game_date, created_at, updated_at
+        select id, session_id, author_user_id, author_name, kind, body, pin, game_date, character_id, character_name, created_at, updated_at
         from journal_entries
         where session_id = $1
         order by created_at asc
@@ -107,6 +110,10 @@ pub async fn create_entry(
         )));
     }
     let display_name = authz::resolve_display_name(state.pool(), auth.user_id).await?;
+    let character_name = match req.character_id {
+        Some(character_id) => Some(speaker_name(&state, character_id, req.session_id).await?),
+        None => None,
+    };
 
     let event = NewEvent {
         aggregate_type: "journal_entry",
@@ -119,6 +126,8 @@ pub async fn create_entry(
             "pin": req.pin,
             "game_date": req.game_date,
             "author_name": display_name,
+            "character_id": req.character_id,
+            "character_name": character_name,
         }),
         metadata: auth.metadata(),
     };
@@ -183,6 +192,32 @@ pub async fn delete_entry(
     })?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// speaker snapshot for an entry attached to a character: the character must
+/// live in the entry's session, and the name is captured at write time, same
+/// as author_name
+async fn speaker_name(
+    state: &AppState,
+    character_id: Uuid,
+    session_id: Uuid,
+) -> Result<String, AppError> {
+    let row: Option<(Uuid, Option<String>)> =
+        sqlx::query_as("select session_id, data->>'name' from characters where id = $1")
+            .bind(character_id)
+            .fetch_optional(state.pool())
+            .await?;
+    let (character_session, name) =
+        row.ok_or_else(|| AppError::BadRequest("character does not exist".to_string()))?;
+    if character_session != session_id {
+        return Err(AppError::BadRequest(
+            "character is not in this session".to_string(),
+        ));
+    }
+    Ok(name
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "Unnamed".to_string()))
 }
 
 async fn entry_scope(state: &AppState, id: Uuid) -> Result<Option<(Uuid, Uuid)>, AppError> {

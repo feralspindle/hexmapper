@@ -89,6 +89,31 @@ describe('notesStore', () => {
     expect(store.notes.map(n => n.id)).toEqual(['n1'])
   })
 
+  test('a sparse edit patch keeps the author and creation time', async () => {
+    kit.responses.hex_notes = {
+      data: [note('n1', { user_id: 'author', display_name: 'Author', created_at: '2026-07-04T10:00:00Z' })],
+      error: null,
+    }
+    const store = useNotesStore()
+    await store.initForHex('hex-1', 's1')
+
+    kit.channels[0].emitPostgres('hex_notes', 'UPDATE', {
+      id: 'n1',
+      hex_cell_id: 'hex-1',
+      body: 'gm cleaned this up',
+      user_id: 'the-gm',
+      display_name: 'The GM',
+      created_at: '2026-07-21T09:00:00Z',
+    })
+
+    const updated = store.notes[0]
+    expect(updated.body).toBe('gm cleaned this up')
+    expect(updated.user_id).toBe('author')
+    expect(updated.display_name).toBe('Author')
+    expect(updated.created_at).toBe('2026-07-04T10:00:00Z')
+    expect(updated.updated_at).toBe('2026-07-21T09:00:00Z')
+  })
+
   test('the realtime echo of your own freshly added note never duplicates it', async () => {
     kit.api['post /hex-notes'] = body => note('server-note', { body: body.body, user_id: 'me' })
     const store = useNotesStore()

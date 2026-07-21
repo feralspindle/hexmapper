@@ -133,4 +133,73 @@ describe('lightStore', () => {
     channel.emitPostgres('light_sources', 'DELETE', {}, { id: 'light-1' })
     expect(store.sources).toHaveLength(0)
   })
+
+  test('a sparse start patch keeps the torch identity and durations', async () => {
+    kit.api['get /light-sources?session_id=sess-1'] = [source({ created_at: '2026-07-20T18:00:00Z' })]
+    const store = useLightStore()
+    await store.init('sess-1')
+
+    const channel = kit.channels.find(c => c.name === 'lights:sess-1')
+    channel.emitPostgres('light_sources', 'UPDATE', {
+      id: 'light-1',
+      session_id: 'sess-1',
+      running: true,
+      started_at: '2026-07-21T09:00:00Z',
+      created_at: '2026-07-21T09:00:00Z',
+    })
+
+    const torch = store.sources[0]
+    expect(torch.running).toBe(true)
+    expect(torch.name).toBe('Torch')
+    expect(torch.mode).toBe('real_time')
+    expect(torch.duration_ms).toBe(3_600_000)
+    expect(torch.created_at).toBe('2026-07-20T18:00:00Z')
+    expect(Number.isFinite(store.remaining(torch))).toBe(true)
+  })
+
+  test('a created event without counter columns still yields a working source', async () => {
+    kit.api['get /light-sources?session_id=sess-1'] = []
+    const store = useLightStore()
+    await store.init('sess-1')
+
+    const channel = kit.channels.find(c => c.name === 'lights:sess-1')
+    channel.emitPostgres('light_sources', 'INSERT', {
+      id: 'light-2',
+      session_id: 'sess-1',
+      name: 'Lantern',
+      kind: 'lantern',
+      mode: 'real_time',
+      duration_ms: 21_600_000,
+      duration_rounds: 60,
+      created_at: '2026-07-21T09:00:00Z',
+    })
+
+    const lantern = store.sources[0]
+    expect(lantern.elapsed_ms).toBe(0)
+    expect(lantern.running).toBe(false)
+    expect(lantern.expired).toBe(false)
+    expect(store.remaining(lantern)).toBe(21_600_000)
+  })
+
+  test('a sparse update for an unknown source refetches instead of storing a fragment', async () => {
+    kit.api['get /light-sources?session_id=sess-1'] = []
+    const store = useLightStore()
+    await store.init('sess-1')
+
+    const fullList = [source({ id: 'light-3', running: true })]
+    kit.api['get /light-sources?session_id=sess-1'] = fullList
+    const channel = kit.channels.find(c => c.name === 'lights:sess-1')
+    channel.emitPostgres('light_sources', 'UPDATE', {
+      id: 'light-3',
+      session_id: 'sess-1',
+      running: true,
+      created_at: '2026-07-21T09:00:00Z',
+    })
+    await vi.waitFor(() => {
+      if (!store.sources.length) throw new Error('not refetched yet')
+    })
+
+    expect(store.sources[0].name).toBe('Torch')
+    expect(store.sources[0].duration_ms).toBe(3_600_000)
+  })
 })
