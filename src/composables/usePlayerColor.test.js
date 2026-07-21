@@ -6,7 +6,7 @@ vi.mock('@/stores/userPrefsStore.js', () => ({
   useUserPrefsStore: () => prefs,
 }))
 
-import { playerColorFor } from './usePlayerColor.js'
+import { playerColorFor, playerTextColorFor } from './usePlayerColor.js'
 
 describe('playerColorFor', () => {
   beforeEach(() => {
@@ -37,5 +37,10 @@ describe('playerColorFor', () => {
   test('handles a missing user id without throwing', () => {
     expect(playerColorFor(null)).toMatch(/^#[0-9a-f]{6}$/)
     expect(playerColorFor(undefined)).toMatch(/^#[0-9a-f]{6}$/)
+  })
+
+  test('uses a separate contrast-safe color for text', () => {
+    expect(playerTextColorFor('user-abc')).toMatch(/^#[0-9a-f]{6}$/)
+    expect(playerTextColorFor('user-abc')).not.toBe(playerColorFor('user-abc'))
   })
 })

@@ -5,7 +5,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex:0 0 auto;margin-top:2px">
           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
         </svg>
-        <span class="ds-ct-who" :style="{ color: playerColorFor(toast.msg.user_id) }">
+        <span class="ds-ct-who" :style="{ color: playerTextColorFor(toast.msg.user_id) }">
           {{ gmName(toast.msg.user_id, toast.msg.display_name) }}
         </span>
         <span class="ds-ct-sep">·</span>
@@ -20,7 +20,7 @@
 import { ref, watch } from 'vue'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
-import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { playerTextColorFor } from '@/composables/usePlayerColor.js'
 
 defineProps({ bottomClass: { type: String, default: 'bottom-16' } })
 

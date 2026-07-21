@@ -58,14 +58,14 @@
                   <button
                     v-if="note.user_id === authStore.user?.id && editingNoteId !== note.id"
                     class="ds-x-btn"
-                    style="width:16px;height:16px;font-size:11px"
+                    style="font-size:11px"
                     title="Edit note"
                     @click="startEditNote(note)"
                   >✎</button>
                   <button
                     v-if="note.user_id === authStore.user?.id"
                     class="ds-x-btn"
-                    style="width:16px;height:16px;font-size:11px"
+                    style="font-size:11px"
                     @click="confirm('Delete this note?', () => notesStore.deleteNote(note.id))"
                   >×</button>
                 </div>
@@ -221,14 +221,14 @@
                   <button
                     v-if="note.user_id === authStore.user?.id && editingNoteId !== note.id"
                     class="ds-x-btn"
-                    style="width:16px;height:16px;font-size:11px"
+                    style="font-size:11px"
                     title="Edit note"
                     @click="startEditNote(note)"
                   >✎</button>
                   <button
                     v-if="note.user_id === authStore.user?.id"
                     class="ds-x-btn"
-                    style="width:16px;height:16px;font-size:11px"
+                    style="font-size:11px"
                     @click="confirm('Delete this note?', () => notesStore.deleteNote(note.id))"
                   >×</button>
                 </div>
@@ -277,7 +277,7 @@ import { useSessionStore } from '@/stores/sessionStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import { faClassForType } from '@/lib/roomItems.js'
-import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { playerTextColorFor } from '@/composables/usePlayerColor.js'
 import { useTimeAgo } from '@/composables/useTimeAgo.js'
 import { useNoteEditing } from '@/composables/useNoteEditing.js'
 import TokenInspectorSection from '@/components/dungeon/TokenInspectorSection.vue'
@@ -354,7 +354,7 @@ function debouncedSave() {
 }
 
 function noteColor(userId) {
-  return playerColorFor(userId)
+  return playerTextColorFor(userId)
 }
 
 // the realtime echo of our own save lands after the http patch resolves and

@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-stone-900 flex flex-col items-center py-12 px-6">
+  <div class="min-h-screen bg-stone-900 flex flex-col items-center py-12 px-6" :style="HEX_MAP_THEME">
     <div class="w-full max-w-lg">
 
       <div class="text-center mb-10">
@@ -286,6 +286,7 @@ import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { HEX_MAP_THEME } from '@/lib/theme.js'
 
 const router = useRouter()
 const sessionStore = useSessionStore()

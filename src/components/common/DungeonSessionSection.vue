@@ -80,7 +80,7 @@ import { ref, watch, nextTick } from 'vue'
 import { useChatStore } from '@/stores/chatStore.js'
 import { useActivityStore } from '@/stores/activityStore.js'
 import { useGMLabel } from '@/composables/useGMLabel.js'
-import { playerColorFor } from '@/composables/usePlayerColor.js'
+import { playerTextColorFor } from '@/composables/usePlayerColor.js'
 import { useTimeAgo } from '@/composables/useTimeAgo.js'
 
 const chatStore     = useChatStore()
@@ -104,6 +104,6 @@ watch(() => chatStore.messages.length, () => nextTick(() => {
   if (chatLogEl.value) chatLogEl.value.scrollTop = chatLogEl.value.scrollHeight
 }), { immediate: true })
 
-function msgColor(userId) { return playerColorFor(userId) }
-function actColor(userId) { return playerColorFor(userId) }
+function msgColor(userId) { return playerTextColorFor(userId) }
+function actColor(userId) { return playerTextColorFor(userId) }
 </script>
