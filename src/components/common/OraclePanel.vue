@@ -349,7 +349,7 @@
             </div>
             <div>
               <dt>hex.terrain</dt>
-              <dd>picks terrain for newly explored hexes. results must be terrain ids: plains, forest, mountain, water, desert, swamp, city, dungeon, snow, volcanic</dd>
+              <dd>picks terrain for newly explored hexes. results must be terrain ids: plains, forest, jungle, mountain, water, coast, desert, swamp, city, dungeon, snow, volcanic</dd>
             </div>
             <div>
               <dt>hex.poi <span class="oracle-tag-alt">/ hex.poi.forest</span></dt>

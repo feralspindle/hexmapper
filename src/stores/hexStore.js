@@ -48,8 +48,10 @@ export function serializeMarkers(markers) {
 export const TERRAIN_TYPES = [
   { id: "plains", label: "Plains", color: "#c8d98a" },
   { id: "forest", label: "Forest", color: "#4a7c59" },
+  { id: "jungle", label: "Jungle", color: "#2e6b3f" },
   { id: "mountain", label: "Mountain", color: "#8a7568" },
   { id: "water", label: "Water", color: "#4a90b8" },
+  { id: "coast", label: "Coast", color: "#86c5ba" },
   { id: "desert", label: "Desert", color: "#d4b483" },
   { id: "swamp", label: "Swamp", color: "#5e7a5e" },
   { id: "city", label: "City", color: "#c0a060" },

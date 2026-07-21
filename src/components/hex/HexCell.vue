@@ -44,11 +44,24 @@
       <template v-else-if="cell.terrain_type === 'forest'">
         <path d="M12 3l5 8h-3l3 5h-4l-1 5-1-5H7l3-5H7z"/>
       </template>
+      <template v-else-if="cell.terrain_type === 'jungle'">
+        <path d="M12 21c1-4 1-8-1-11"/>
+        <path d="M11 10C8 6 4 6 2 8c3 0 5 1 7 3"/>
+        <path d="M11 10c-1-5 1-8 5-8-2 2-3 5-2 7"/>
+        <path d="M11 10c3-3 7-3 9 0-3-1-6 0-8 2"/>
+      </template>
       <template v-else-if="cell.terrain_type === 'mountain'">
         <path d="M3 19l5-9 4 6 3-4 6 7z"/>
       </template>
       <template v-else-if="cell.terrain_type === 'water'">
         <path d="M3 8c3-2 6 2 9 0s6-2 9 0M3 14c3-2 6 2 9 0s6-2 9 0M3 20c3-2 6 2 9 0s6-2 9 0"/>
+      </template>
+      <template v-else-if="cell.terrain_type === 'coast'">
+        <path d="M20 3c-1 7-6 12-14 15"/>
+        <path d="M3 10c2-1.5 4 1.5 6 0M3 15c1.5-1.5 3 1.5 4.5 0"/>
+        <circle cx="17" cy="13" r="0.9" fill="currentColor" stroke="none" opacity="0.6"/>
+        <circle cx="14" cy="18" r="0.9" fill="currentColor" stroke="none" opacity="0.6"/>
+        <circle cx="19" cy="18" r="0.9" fill="currentColor" stroke="none" opacity="0.6"/>
       </template>
       <template v-else-if="cell.terrain_type === 'desert'">
         <circle cx="12" cy="9" r="3" fill="currentColor" stroke="none" opacity="0.6"/>
