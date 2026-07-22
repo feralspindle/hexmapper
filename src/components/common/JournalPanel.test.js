@@ -177,6 +177,69 @@ describe('JournalPanel pages', () => {
     expect(wrapper.text()).toContain('We crossed the river.')
   })
 
+  test('a page break carries a title and can be renamed inline', async () => {
+    mocks.journalStore.entries = [
+      entry(),
+      pageBreak({ body: 'Into the Mire' }),
+      entry({ id: 'entry-2', body: 'We crossed the river.', created_at: '2026-07-07T03:00:00Z' }),
+    ]
+    mocks.journalStore.updateEntry.mockImplementation((id, body) => {
+      const target = mocks.journalStore.entries.find(e => e.id === id)
+      target.body = body
+      return Promise.resolve({ ...target })
+    })
+    const wrapper = mountPanel()
+
+    expect(wrapper.get('[data-testid="journal-page-title"]').text()).toBe('Into the Mire')
+
+    await wrapper.get('[data-testid="journal-page-title-edit"]').trigger('click')
+    const input = wrapper.get('[data-testid="journal-page-title-input"]')
+    expect(input.element.value).toBe('Into the Mire')
+
+    await input.setValue('Out of the Mire')
+    await wrapper.get('[data-testid="journal-page-title-save"]').trigger('submit')
+    await wrapper.vm.$nextTick()
+
+    expect(mocks.journalStore.updateEntry).toHaveBeenCalledWith('break-1', 'Out of the Mire')
+    expect(wrapper.get('[data-testid="journal-page-title"]').text()).toBe('Out of the Mire')
+  })
+
+  test('export offers the whole journal or just the current page', async () => {
+    vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() })
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    mocks.journalStore.entries = [
+      entry(),
+      pageBreak(),
+      entry({ id: 'entry-2', body: 'We crossed the river.', created_at: '2026-07-07T03:00:00Z' }),
+    ]
+    const wrapper = mountPanel()
+
+    await wrapper.get('[data-testid="journal-export"]').trigger('click')
+    await wrapper.get('[data-testid="journal-export-page"]').trigger('click')
+    expect(mocks.journalStore.exportMarkdown).toHaveBeenCalledWith('Campaign', { pageIndex: 1 })
+
+    await wrapper.get('[data-testid="journal-export"]').trigger('click')
+    await wrapper.get('[data-testid="journal-export-all"]').trigger('click')
+    expect(mocks.journalStore.exportMarkdown).toHaveBeenCalledWith('Campaign', { pageIndex: null })
+
+    expect(anchorClick).toHaveBeenCalledTimes(2)
+    vi.unstubAllGlobals()
+    anchorClick.mockRestore()
+  })
+
+  test('export skips the menu when there is a single page', async () => {
+    vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() })
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const wrapper = mountPanel()
+
+    await wrapper.get('[data-testid="journal-export"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="journal-export-all"]').exists()).toBe(false)
+    expect(mocks.journalStore.exportMarkdown).toHaveBeenCalledWith('Campaign', { pageIndex: null })
+    vi.unstubAllGlobals()
+    anchorClick.mockRestore()
+  })
+
   test('search spans every page', async () => {
     mocks.journalStore.entries = [
       entry(),

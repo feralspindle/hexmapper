@@ -13,10 +13,16 @@
           <i class="fa-solid fa-file-circle-plus" />
           <span>New page</span>
         </button>
-        <button type="button" class="ds-btn tiny ghost" data-testid="journal-export" title="Download as markdown" @click="exportMd">
-          <i class="fa-solid fa-file-arrow-down" />
-          <span>Export</span>
-        </button>
+        <div class="journal-export">
+          <button type="button" class="ds-btn tiny ghost" data-testid="journal-export" title="Download as markdown" @click="pages.length > 1 ? (exportMenuOpen = !exportMenuOpen) : exportMd()">
+            <i class="fa-solid fa-file-arrow-down" />
+            <span>Export</span>
+          </button>
+          <div v-if="exportMenuOpen" class="journal-export-options">
+            <button type="button" data-testid="journal-export-all" @click="exportMd()">whole journal</button>
+            <button type="button" data-testid="journal-export-page" @click="exportMd(activePageIndex)">page {{ activePageIndex + 1 }}</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -40,17 +46,46 @@
 
     <div ref="scrollEl" class="journal-scroll">
       <div v-if="!searching && currentPage.pageBreak" class="journal-page-break" data-testid="journal-page-break">
-        <span>page {{ activePageIndex + 1 }} begins</span>
-        <button
-          v-if="canTouch(currentPage.pageBreak)"
-          type="button"
-          class="hm-card-icon-btn hm-card-icon-btn--danger"
-          title="Remove this page break, its entries join the previous page"
-          data-testid="journal-page-break-delete"
-          @click="confirmRemoveBreak"
-        >
-          <i class="fa-solid fa-trash" />
-        </button>
+        <form v-if="renamingBreak" class="journal-page-rename" @submit.prevent="saveTitle">
+          <input
+            ref="titleInputEl"
+            v-model="titleDraft"
+            class="ds-input"
+            maxlength="200"
+            placeholder="Name this page (optional)"
+            data-testid="journal-page-title-input"
+            @keydown.esc="renamingBreak = false"
+          />
+          <button type="submit" class="hm-card-icon-btn" title="Save title" data-testid="journal-page-title-save" :disabled="titleSaving">
+            <i class="fa-solid fa-check" />
+          </button>
+          <button type="button" class="hm-card-icon-btn" title="Cancel" @click="renamingBreak = false">
+            <i class="fa-solid fa-xmark" />
+          </button>
+        </form>
+        <template v-else>
+          <span data-testid="journal-page-title">{{ pageTitle || `page ${activePageIndex + 1} begins` }}</span>
+          <button
+            v-if="canTouch(currentPage.pageBreak)"
+            type="button"
+            class="hm-card-icon-btn"
+            title="Name this page"
+            data-testid="journal-page-title-edit"
+            @click="startRename"
+          >
+            <i class="fa-solid fa-pen" />
+          </button>
+          <button
+            v-if="canTouch(currentPage.pageBreak)"
+            type="button"
+            class="hm-card-icon-btn hm-card-icon-btn--danger"
+            title="Remove this page break, its entries join the previous page"
+            data-testid="journal-page-break-delete"
+            @click="confirmRemoveBreak"
+          >
+            <i class="fa-solid fa-trash" />
+          </button>
+        </template>
       </div>
 
       <div v-if="!visibleEntries.length" class="journal-empty">{{ emptyMessage }}</div>
@@ -176,6 +211,11 @@ const scrollEl = ref(null)
 const textareaEl = ref(null)
 const query = ref('')
 const pageIndex = ref(null)
+const exportMenuOpen = ref(false)
+const renamingBreak = ref(false)
+const titleDraft = ref('')
+const titleSaving = ref(false)
+const titleInputEl = ref(null)
 const editingId = ref(null)
 const editDraft = ref('')
 const editSaving = ref(false)
@@ -200,6 +240,7 @@ const pages = computed(() => journalStore.pages)
 const activePageIndex = computed(() =>
   pageIndex.value === null ? pages.value.length - 1 : Math.min(pageIndex.value, pages.value.length - 1))
 const currentPage = computed(() => pages.value[activePageIndex.value])
+const pageTitle = computed(() => currentPage.value.pageBreak?.body?.trim() || '')
 const visibleEntries = computed(() => {
   if (!searching.value) return currentPage.value.entries
   const needle = query.value.trim().toLocaleLowerCase()
@@ -227,6 +268,8 @@ watch(() => journalStore.entries.length, async () => {
 })
 
 watch(activePageIndex, async (index) => {
+  renamingBreak.value = false
+  exportMenuOpen.value = false
   await nextTick()
   if (!scrollEl.value) return
   scrollEl.value.scrollTop = index === pages.value.length - 1 ? scrollEl.value.scrollHeight : 0
@@ -285,7 +328,31 @@ async function newPage() {
     return
   }
   const saved = await journalStore.addPageBreak()
-  if (saved) pageIndex.value = null
+  if (saved) {
+    pageIndex.value = null
+    startRename()
+  }
+}
+
+async function startRename() {
+  titleDraft.value = pageTitle.value
+  renamingBreak.value = true
+  await nextTick()
+  titleInputEl.value?.focus()
+}
+
+async function saveTitle() {
+  const pageBreak = currentPage.value.pageBreak
+  if (!pageBreak || titleSaving.value) return
+  const title = titleDraft.value.trim()
+  if (title === pageTitle.value) {
+    renamingBreak.value = false
+    return
+  }
+  titleSaving.value = true
+  const saved = await journalStore.updateEntry(pageBreak.id, title)
+  titleSaving.value = false
+  if (saved) renamingBreak.value = false
 }
 
 function confirmRemoveBreak() {
@@ -325,13 +392,15 @@ async function submit() {
   }
 }
 
-function exportMd() {
-  const md = journalStore.exportMarkdown(sessionStore.sessionName)
+function exportMd(exportPageIndex = null) {
+  exportMenuOpen.value = false
+  const md = journalStore.exportMarkdown(sessionStore.sessionName, { pageIndex: exportPageIndex })
   const blob = new Blob([md], { type: 'text/markdown' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${(sessionStore.sessionName || 'campaign').toLowerCase().replace(/\s+/g, '-')}-journal.md`
+  const base = `${(sessionStore.sessionName || 'campaign').toLowerCase().replace(/\s+/g, '-')}-journal`
+  a.download = exportPageIndex === null ? `${base}.md` : `${base}-page-${exportPageIndex + 1}.md`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -387,6 +456,38 @@ function exportMd() {
   gap: 6px;
 }
 
+.journal-export {
+  position: relative;
+}
+
+.journal-export-options {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 130px;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-2);
+  box-shadow: 0 6px 18px rgba(40, 25, 10, 0.12);
+}
+
+.journal-export-options button {
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 12px var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.journal-export-options button:hover,
+.journal-export-options button:focus-visible {
+  background: var(--paper);
+}
+
 .journal-pager {
   display: flex;
   align-items: center;
@@ -423,6 +524,24 @@ function exportMd() {
   flex: 1;
   height: 1px;
   background: var(--rule-strong);
+}
+
+.journal-page-break span {
+  color: var(--ink);
+}
+
+.journal-page-rename {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.journal-page-rename input {
+  width: 190px;
+  padding: 3px 7px;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .journal-search {

@@ -160,10 +160,10 @@ describe('journalStore', () => {
     expect(store.pages).toHaveLength(2)
   })
 
-  test('exportMarkdown separates pages with a rule', async () => {
+  test('exportMarkdown separates pages with a rule and titles them', async () => {
     kit.api['get /journal-entries?session_id=sess-1'] = [
       entry({ id: 'p1', body: 'we made camp' }),
-      entry({ id: 'br1', kind: 'page_break', body: '', created_at: '2026-07-07T02:00:00Z' }),
+      entry({ id: 'br1', kind: 'page_break', body: 'Into the Mire', created_at: '2026-07-07T02:00:00Z' }),
       entry({ id: 'p2', body: 'crossed anyway', game_date: { year: 2, month: 3, day: 15 }, created_at: '2026-07-07T03:00:00Z' }),
     ]
     const store = useJournalStore()
@@ -172,7 +172,29 @@ describe('journalStore', () => {
     const md = store.exportMarkdown('The Sunken Keep')
     expect(md).toContain('---')
     expect(md.indexOf('we made camp')).toBeLessThan(md.indexOf('---'))
-    expect(md.indexOf('---')).toBeLessThan(md.indexOf('## day 2-3-15'))
+    expect(md.indexOf('---')).toBeLessThan(md.indexOf('## Into the Mire'))
+    expect(md.indexOf('## Into the Mire')).toBeLessThan(md.indexOf('## day 2-3-15'))
+  })
+
+  test('exportMarkdown can export a single page', async () => {
+    kit.api['get /journal-entries?session_id=sess-1'] = [
+      entry({ id: 'p1', body: 'we made camp' }),
+      entry({ id: 'br1', kind: 'page_break', body: 'Into the Mire', created_at: '2026-07-07T02:00:00Z' }),
+      entry({ id: 'p2', body: 'crossed anyway', game_date: { year: 2, month: 3, day: 15 }, created_at: '2026-07-07T03:00:00Z' }),
+    ]
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    const md = store.exportMarkdown('The Sunken Keep', { pageIndex: 1 })
+    expect(md).toContain('# The Sunken Keep journal, page 2: Into the Mire')
+    expect(md).toContain('crossed anyway')
+    expect(md).toContain('## day 2-3-15')
+    expect(md).not.toContain('we made camp')
+    expect(md).not.toContain('---')
+
+    const untitled = store.exportMarkdown('The Sunken Keep', { pageIndex: 0 })
+    expect(untitled).toContain('# The Sunken Keep journal, page 1')
+    expect(untitled).toContain('we made camp')
   })
 
   test('exportMarkdown groups by day and quotes pins', async () => {

@@ -128,13 +128,21 @@ export const useJournalStore = defineStore('journal', () => {
   }
 
   // one markdown document, day headers from the calendar stamps, pins as
-  // quotes. the caller downloads it
-  function exportMarkdown(sessionName = 'Campaign') {
-    const lines = [`# ${sessionName} journal`, '']
+  // quotes, pages split by rules. pass pageIndex to export a single page.
+  // the caller downloads it
+  function exportMarkdown(sessionName = 'Campaign', { pageIndex = null } = {}) {
+    const page = pageIndex === null ? null : pages.value[pageIndex]
+    const pageTitle = page?.pageBreak?.body?.trim()
+    const heading = page
+      ? `# ${sessionName} journal, page ${pageIndex + 1}${pageTitle ? `: ${pageTitle}` : ''}`
+      : `# ${sessionName} journal`
+    const lines = [heading, '']
     let lastDate = null
-    for (const entry of entries.value) {
+    for (const entry of page ? page.entries : entries.value) {
       if (entry.kind === 'page_break') {
         lines.push('---', '')
+        const breakTitle = entry.body?.trim()
+        if (breakTitle) lines.push(`## ${breakTitle}`, '')
         continue
       }
       const date = entry.game_date
