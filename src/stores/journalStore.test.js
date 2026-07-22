@@ -130,6 +130,51 @@ describe('journalStore', () => {
     expect(store.entries.map(e => e.id)).toEqual(['b'])
   })
 
+  test('pages split at page_break entries', async () => {
+    kit.api['get /journal-entries?session_id=sess-1'] = [
+      entry({ id: 'p1' }),
+      entry({ id: 'br1', kind: 'page_break', body: '', created_at: '2026-07-07T02:00:00Z' }),
+      entry({ id: 'p2', created_at: '2026-07-07T03:00:00Z' }),
+      entry({ id: 'p3', created_at: '2026-07-07T04:00:00Z' }),
+    ]
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    expect(store.pages).toHaveLength(2)
+    expect(store.pages[0].pageBreak).toBeNull()
+    expect(store.pages[0].entries.map(e => e.id)).toEqual(['p1'])
+    expect(store.pages[1].pageBreak.id).toBe('br1')
+    expect(store.pages[1].entries.map(e => e.id)).toEqual(['p2', 'p3'])
+  })
+
+  test('addPageBreak writes a page_break entry', async () => {
+    kit.api['get /journal-entries?session_id=sess-1'] = []
+    const create = vi.fn(body => entry({ id: 'br1', kind: body.kind, body: '' }))
+    kit.api['post /journal-entries'] = create
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    await store.addPageBreak()
+
+    expect(create.mock.calls[0][0].kind).toBe('page_break')
+    expect(store.pages).toHaveLength(2)
+  })
+
+  test('exportMarkdown separates pages with a rule', async () => {
+    kit.api['get /journal-entries?session_id=sess-1'] = [
+      entry({ id: 'p1', body: 'we made camp' }),
+      entry({ id: 'br1', kind: 'page_break', body: '', created_at: '2026-07-07T02:00:00Z' }),
+      entry({ id: 'p2', body: 'crossed anyway', game_date: { year: 2, month: 3, day: 15 }, created_at: '2026-07-07T03:00:00Z' }),
+    ]
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    const md = store.exportMarkdown('The Sunken Keep')
+    expect(md).toContain('---')
+    expect(md.indexOf('we made camp')).toBeLessThan(md.indexOf('---'))
+    expect(md.indexOf('---')).toBeLessThan(md.indexOf('## day 2-3-15'))
+  })
+
   test('exportMarkdown groups by day and quotes pins', async () => {
     kit.api['get /journal-entries?session_id=sess-1'] = [
       entry({ id: 'p1', body: 'we made camp' }),

@@ -102,6 +102,8 @@ pub async fn create_entry(
                 return Err(AppError::BadRequest("pin payload is required".to_string()));
             }
         }
+        // a marker splitting the stream into pages; carries no content
+        "page_break" => {}
         _ => return Err(AppError::BadRequest("invalid entry kind".to_string())),
     }
     if body.chars().count() > MAX_BODY_LEN {

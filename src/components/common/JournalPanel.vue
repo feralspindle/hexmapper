@@ -2,16 +2,22 @@
   <div class="journal">
     <div class="journal-head">
       <div class="journal-summary">
-        <strong>{{ journalStore.entries.length }}</strong>
-        <span>{{ journalStore.entries.length === 1 ? 'entry' : 'entries' }}</span>
+        <strong>{{ recordCount }}</strong>
+        <span>{{ recordCount === 1 ? 'entry' : 'entries' }}</span>
         <span class="journal-summary-rule" />
         <span>{{ proseCount }} written</span>
         <span>{{ pinCount }} pinned</span>
       </div>
-      <button type="button" class="ds-btn tiny ghost" data-testid="journal-export" title="Download as markdown" @click="exportMd">
-        <i class="fa-solid fa-file-arrow-down" />
-        <span>Export</span>
-      </button>
+      <div class="journal-head-actions">
+        <button type="button" class="ds-btn tiny ghost" data-testid="journal-new-page" title="Turn to a fresh page" @click="newPage">
+          <i class="fa-solid fa-file-circle-plus" />
+          <span>New page</span>
+        </button>
+        <button type="button" class="ds-btn tiny ghost" data-testid="journal-export" title="Download as markdown" @click="exportMd">
+          <i class="fa-solid fa-file-arrow-down" />
+          <span>Export</span>
+        </button>
+      </div>
     </div>
 
     <label class="journal-search">
@@ -22,16 +28,34 @@
       </button>
     </label>
 
+    <div v-if="!searching && pages.length > 1" class="journal-pager">
+      <button type="button" class="hm-card-icon-btn" :disabled="activePageIndex === 0" title="Previous page" data-testid="journal-page-prev" @click="goToPage(activePageIndex - 1)">
+        <i class="fa-solid fa-chevron-left" />
+      </button>
+      <span class="journal-pager-label" data-testid="journal-page-label">page {{ activePageIndex + 1 }} of {{ pages.length }}</span>
+      <button type="button" class="hm-card-icon-btn" :disabled="activePageIndex === pages.length - 1" title="Next page" data-testid="journal-page-next" @click="goToPage(activePageIndex + 1)">
+        <i class="fa-solid fa-chevron-right" />
+      </button>
+    </div>
+
     <div ref="scrollEl" class="journal-scroll">
-      <div v-if="!journalStore.entries.length" class="journal-empty">
-        The record of play writes itself here. Prose below, pins from the oracle and dice history.
+      <div v-if="!searching && currentPage.pageBreak" class="journal-page-break" data-testid="journal-page-break">
+        <span>page {{ activePageIndex + 1 }} begins</span>
+        <button
+          v-if="canTouch(currentPage.pageBreak)"
+          type="button"
+          class="hm-card-icon-btn hm-card-icon-btn--danger"
+          title="Remove this page break, its entries join the previous page"
+          data-testid="journal-page-break-delete"
+          @click="confirmRemoveBreak"
+        >
+          <i class="fa-solid fa-trash" />
+        </button>
       </div>
 
-      <div v-else-if="!filteredEntries.length" class="journal-empty">
-        Nothing here matches “{{ query }}”
-      </div>
+      <div v-if="!visibleEntries.length" class="journal-empty">{{ emptyMessage }}</div>
 
-      <template v-for="(entry, i) in filteredEntries" :key="entry.id">
+      <template v-for="(entry, i) in visibleEntries" :key="entry.id">
         <div v-if="dayHeader(entry, i)" class="journal-day">{{ dayHeader(entry, i) }}</div>
 
         <div v-if="entry.kind === 'pin'" class="journal-pin" data-testid="journal-pin">
@@ -151,6 +175,7 @@ const speakerId = ref('')
 const scrollEl = ref(null)
 const textareaEl = ref(null)
 const query = ref('')
+const pageIndex = ref(null)
 const editingId = ref(null)
 const editDraft = ref('')
 const editSaving = ref(false)
@@ -167,12 +192,18 @@ const markdownTools = [
 const speaker = computed(() =>
   characterStore.characters.find(c => c.id === speakerId.value) ?? null)
 const speakerName = computed(() => speaker.value?.data?.name || (speaker.value ? 'Unnamed' : null))
-const proseCount = computed(() => journalStore.entries.filter(entry => entry.kind !== 'pin').length)
-const pinCount = computed(() => journalStore.entries.length - proseCount.value)
-const filteredEntries = computed(() => {
+const proseCount = computed(() => journalStore.entries.filter(entry => entry.kind === 'prose').length)
+const pinCount = computed(() => journalStore.entries.filter(entry => entry.kind === 'pin').length)
+const recordCount = computed(() => proseCount.value + pinCount.value)
+const searching = computed(() => Boolean(query.value.trim()))
+const pages = computed(() => journalStore.pages)
+const activePageIndex = computed(() =>
+  pageIndex.value === null ? pages.value.length - 1 : Math.min(pageIndex.value, pages.value.length - 1))
+const currentPage = computed(() => pages.value[activePageIndex.value])
+const visibleEntries = computed(() => {
+  if (!searching.value) return currentPage.value.entries
   const needle = query.value.trim().toLocaleLowerCase()
-  if (!needle) return journalStore.entries
-  return journalStore.entries.filter(entry => [
+  return journalStore.entries.filter(entry => entry.kind !== 'page_break' && [
     entry.body,
     entry.author_name,
     entry.character_name,
@@ -181,12 +212,24 @@ const filteredEntries = computed(() => {
     entry.pin?.detail,
   ].some(value => value?.toLocaleLowerCase().includes(needle)))
 })
+const emptyMessage = computed(() => {
+  if (searching.value) return `Nothing here matches “${query.value}”`
+  if (!recordCount.value) return 'The record of play writes itself here. Prose below, pins from the oracle and dice history.'
+  return 'A fresh page, nothing on it yet.'
+})
 
 onMounted(() => journalStore.init(props.sessionId))
 
 watch(() => journalStore.entries.length, async () => {
+  if (pageIndex.value !== null) return
   await nextTick()
   if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+})
+
+watch(activePageIndex, async (index) => {
+  await nextTick()
+  if (!scrollEl.value) return
+  scrollEl.value.scrollTop = index === pages.value.length - 1 ? scrollEl.value.scrollHeight : 0
 })
 
 function canTouch(entry) {
@@ -226,9 +269,33 @@ function dayHeader(entry, index) {
   const date = entry.game_date
   if (!date?.year) return null
   const label = `day ${date.year}-${date.month}-${date.day}`
-  const prev = filteredEntries.value[index - 1]?.game_date
+  const prev = visibleEntries.value[index - 1]?.game_date
   const prevLabel = prev?.year ? `day ${prev.year}-${prev.month}-${prev.day}` : null
   return label === prevLabel ? null : label
+}
+
+function goToPage(index) {
+  pageIndex.value = index >= pages.value.length - 1 ? null : Math.max(0, index)
+}
+
+async function newPage() {
+  if (!currentPage.value.entries.length && activePageIndex.value === pages.value.length - 1) return
+  if (!pages.value[pages.value.length - 1].entries.length) {
+    pageIndex.value = null
+    return
+  }
+  const saved = await journalStore.addPageBreak()
+  if (saved) pageIndex.value = null
+}
+
+function confirmRemoveBreak() {
+  const pageBreak = currentPage.value.pageBreak
+  if (!pageBreak) return
+  confirm('Remove this page break? Its entries join the previous page.', () => {
+    const target = activePageIndex.value - 1
+    journalStore.removeEntry(pageBreak.id)
+    goToPage(target)
+  })
 }
 
 function entryTime(entry) {
@@ -252,7 +319,10 @@ async function submit() {
   const body = draft.value.trim()
   if (!body) return
   const saved = await journalStore.addProse(body, { characterId: speaker.value?.id ?? null })
-  if (saved) draft.value = ''
+  if (saved) {
+    draft.value = ''
+    pageIndex.value = null
+  }
 }
 
 function exportMd() {
@@ -308,6 +378,50 @@ function exportMd() {
 .journal-summary-rule {
   width: 1px;
   height: 13px;
+  background: var(--rule-strong);
+}
+
+.journal-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.journal-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.journal-pager-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.journal-page-break {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.journal-page-break::before,
+.journal-page-break::after {
+  content: '';
+  flex: 1;
+  height: 1px;
   background: var(--rule-strong);
 }
 
