@@ -6,6 +6,7 @@ import InitiativeSection from './InitiativeSection.vue'
 import CrawlTracker from './CrawlTracker.vue'
 import LightsSection from './LightsSection.vue'
 import ImportKeysSection from './ImportKeysSection.vue'
+import SoloCombatPanel from './SoloCombatPanel.vue'
 import { useSoloToolkit } from '@/composables/useSoloToolkit.js'
 
 const mocks = vi.hoisted(() => ({
@@ -40,14 +41,21 @@ describe('SoloToolkitPanel', () => {
     expect(mountPanel().find('.stk-panel').exists()).toBe(false)
   })
 
-  test('shows oracle, codex, and trackers tabs in solo/co-op mode', () => {
+  test('shows combat, oracle, codex, and trackers tabs in solo/co-op mode', () => {
     const wrapper = mountPanel()
+    expect(wrapper.text()).toContain('Combat')
     expect(wrapper.text()).toContain('Oracle')
     expect(wrapper.text()).toContain('Codex')
     expect(wrapper.text()).toContain('Trackers')
     expect(wrapper.findComponent(InitiativeSection).exists()).toBe(true)
     expect(wrapper.findComponent(CrawlTracker).exists()).toBe(true)
     expect(wrapper.findComponent(LightsSection).exists()).toBe(true)
+    expect(wrapper.findComponent(SoloCombatPanel).exists()).toBe(true)
+  })
+
+  test('opens on the combat tab', () => {
+    const wrapper = mountPanel()
+    expect(wrapper.findComponent(SoloCombatPanel).element.parentElement.style.display).not.toBe('none')
   })
 
   test('travel tracker needs the show-travel prop', () => {
