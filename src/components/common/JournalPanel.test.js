@@ -72,8 +72,48 @@ describe('JournalPanel entry actions', () => {
     await input.setValue('We crossed the river.')
     await wrapper.get('[data-testid="journal-edit-save"]').trigger('click')
 
-    expect(mocks.journalStore.updateEntry).toHaveBeenCalledWith('entry-1', 'We crossed the river.')
+    expect(mocks.journalStore.updateEntry).toHaveBeenCalledWith('entry-1', 'We crossed the river.', { characterId: null })
     expect(wrapper.find('[data-testid="journal-edit-input"]').exists()).toBe(false)
+  })
+
+  test('editing can re-attribute the entry to another character', async () => {
+    mocks.characterStore.characters = [
+      { id: 'char-1', data: { name: 'Wren' } },
+      { id: 'char-2', data: { name: 'Toad' } },
+    ]
+    mocks.journalStore.entries = [entry({ character_id: 'char-1', character_name: 'Wren' })]
+    const wrapper = mountPanel()
+
+    await wrapper.get('[data-testid="journal-edit"]').trigger('click')
+    const speaker = wrapper.get('[data-testid="journal-edit-speaker"]')
+    expect(speaker.element.value).toBe('char-1')
+
+    await speaker.setValue('char-2')
+    await wrapper.get('[data-testid="journal-edit-save"]').trigger('click')
+
+    expect(mocks.journalStore.updateEntry).toHaveBeenCalledWith('entry-1', 'We made camp.', { characterId: 'char-2' })
+  })
+
+  test('editing can hand the entry back to the narrator', async () => {
+    mocks.characterStore.characters = [{ id: 'char-1', data: { name: 'Wren' } }]
+    mocks.journalStore.entries = [entry({ character_id: 'char-1', character_name: 'Wren' })]
+    const wrapper = mountPanel()
+
+    await wrapper.get('[data-testid="journal-edit"]').trigger('click')
+    await wrapper.get('[data-testid="journal-edit-speaker"]').setValue('')
+    await wrapper.get('[data-testid="journal-edit-save"]').trigger('click')
+
+    expect(mocks.journalStore.updateEntry).toHaveBeenCalledWith('entry-1', 'We made camp.', { characterId: null })
+  })
+
+  test('an attribution to a character that no longer exists falls back to narration', async () => {
+    mocks.characterStore.characters = [{ id: 'char-2', data: { name: 'Toad' } }]
+    mocks.journalStore.entries = [entry({ character_id: 'char-gone', character_name: 'Wren' })]
+    const wrapper = mountPanel()
+
+    await wrapper.get('[data-testid="journal-edit"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="journal-edit-speaker"]').element.value).toBe('')
   })
 
   test('delete asks for confirmation before removing the entry', async () => {

@@ -56,6 +56,17 @@ pub struct CreateEntryRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdateEntryRequest {
     pub body: String,
+    // absent = keep the current attribution, null = narration, uuid = that
+    // character (name re-snapshotted at edit time, same as create)
+    #[serde(default, deserialize_with = "field_present")]
+    pub character_id: Option<Option<Uuid>>,
+}
+
+fn field_present<'de, D>(deserializer: D) -> Result<Option<Option<Uuid>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<Uuid>::deserialize(deserializer).map(Some)
 }
 
 fn default_kind() -> String {
@@ -156,13 +167,28 @@ pub async fn update_entry(
             "entry must be 1-{MAX_BODY_LEN} characters"
         )));
     }
+    if req.character_id.is_some() && kind != "prose" {
+        return Err(AppError::BadRequest(
+            "only prose entries can be attributed".to_string(),
+        ));
+    }
+
+    let mut payload = json!({ "body": body });
+    if let Some(speaker) = req.character_id {
+        let character_name = match speaker {
+            Some(character_id) => json!(speaker_name(&state, character_id, session_id).await?),
+            None => Value::Null,
+        };
+        payload["character_id"] = json!(speaker);
+        payload["character_name"] = character_name;
+    }
 
     let event = NewEvent {
         aggregate_type: "journal_entry",
         aggregate_id: id,
         session_id: Some(session_id),
         event_type: "journal_entry.updated",
-        payload: json!({ "body": body }),
+        payload,
         metadata: auth.metadata(),
     };
 
