@@ -106,9 +106,13 @@ export const useJournalStore = defineStore('journal', () => {
     }
   }
 
-  async function updateEntry(id, body) {
+  // characterId: undefined leaves the attribution alone, null reverts to
+  // narration, an id re-attributes to that character
+  async function updateEntry(id, body, { characterId } = {}) {
     try {
-      const row = await apiClient.patch(`/journal-entries/${id}`, { body }, 'journal_update')
+      const payload = { body }
+      if (characterId !== undefined) payload.character_id = characterId
+      const row = await apiClient.patch(`/journal-entries/${id}`, payload, 'journal_update')
       _apply(row)
       return row
     } catch (err) {

@@ -52,6 +52,10 @@ pub async fn append_updated(
         {APPEND_EVENT_CTE}
         update journal_entries j set
             body = coalesce(evt.payload->>'body', j.body),
+            character_id = case when jsonb_exists(evt.payload, 'character_id')
+                then nullif(evt.payload->>'character_id', '')::uuid else j.character_id end,
+            character_name = case when jsonb_exists(evt.payload, 'character_id')
+                then evt.payload->>'character_name' else j.character_name end,
             updated_at = evt.created_at
         from evt
         where j.id = evt.aggregate_id

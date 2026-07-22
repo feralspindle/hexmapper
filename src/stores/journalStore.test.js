@@ -97,6 +97,23 @@ describe('journalStore', () => {
     expect(store.entries[0].character_name).toBe('Wren')
   })
 
+  test('updateEntry only sends the attribution when asked to change it', async () => {
+    kit.api['get /journal-entries?session_id=sess-1'] = [entry({ character_id: 'char-1', character_name: 'Wren' })]
+    const patch = vi.fn(body => entry({ body: body.body, ...body }))
+    kit.api['patch /journal-entries/e1'] = patch
+    const store = useJournalStore()
+    await store.init('sess-1')
+
+    await store.updateEntry('e1', 'edited')
+    expect(patch.mock.calls[0][0]).not.toHaveProperty('character_id')
+
+    await store.updateEntry('e1', 'edited', { characterId: null })
+    expect(patch.mock.calls[1][0].character_id).toBeNull()
+
+    await store.updateEntry('e1', 'edited', { characterId: 'char-2' })
+    expect(patch.mock.calls[2][0].character_id).toBe('char-2')
+  })
+
   test('a sparse realtime UPDATE merges into the existing entry', async () => {
     kit.api['get /journal-entries?session_id=sess-1'] = [entry()]
     const store = useJournalStore()
