@@ -588,6 +588,16 @@ fn apply_initiative_op(
                 }
             }
         }
+        "set_active" => {
+            let entry_id = req
+                .entry_id
+                .ok_or_else(|| AppError::BadRequest("entry_id is required".to_string()))?;
+            let target = json!(entry_id);
+            if !entries.iter().any(|entry| entry.get("id") == Some(&target)) {
+                return Err(AppError::BadRequest("initiative entry not found".to_string()));
+            }
+            active_id = target;
+        }
         "advance" => {
             if entries.is_empty() {
                 return Err(AppError::BadRequest("initiative order is empty".to_string()));
@@ -1033,6 +1043,21 @@ mod initiative_tests {
 
         assert!(state["entries"].as_array().unwrap().is_empty());
         assert_eq!(state["active_id"], Value::Null);
+    }
+
+    #[test]
+    fn set_active_jumps_to_an_entry_without_changing_the_round() {
+        let mut add = req("add");
+        add.name = Some("Ogre".into());
+        let state = apply_initiative_op(empty_state(), &add, &[9]).unwrap().0;
+        let entry_id = state["entries"][0]["id"].as_str().unwrap().to_string();
+
+        let mut set_active = req("set_active");
+        set_active.entry_id = Some(entry_id.parse().unwrap());
+        let state = apply_initiative_op(state, &set_active, &[]).unwrap().0;
+
+        assert_eq!(state["active_id"], entry_id);
+        assert_eq!(state["round"], 1);
     }
 
     #[test]
