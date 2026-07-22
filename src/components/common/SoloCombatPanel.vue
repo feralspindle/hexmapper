@@ -48,6 +48,7 @@
             </template>
             <span v-if="!attacksFor(character).length" class="combat-empty inline">No attacks</span>
           </div>
+          <CharacterSpells :character="character.data" compact />
           <div class="combat-conditions">
             <button v-for="condition in character.data?.conditions ?? []" :key="condition" class="condition-badge" :style="{ '--condition': conditionBadge(condition).color }" @click="removeCondition(character, condition)">
               <i :class="conditionBadge(condition).faClass" />{{ condition }}<i class="fa-solid fa-xmark" />
@@ -80,6 +81,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import HpControl from '@/components/common/SoloCombatHpControl.vue'
+import CharacterSpells from '@/components/common/CharacterSpells.vue'
 import { useCharacterStore, parseAttack, parseDamageDie, statMod } from '@/stores/characterStore.js'
 import { useStatBlockStore } from '@/stores/statBlockStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
