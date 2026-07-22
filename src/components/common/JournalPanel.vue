@@ -126,6 +126,18 @@
             </div>
           </div>
           <div v-if="editingId === entry.id" class="journal-edit-form">
+            <select
+              v-if="characterStore.characters.length"
+              v-model="editSpeakerId"
+              class="ds-input journal-speaker"
+              data-testid="journal-edit-speaker"
+              title="Who this entry belongs to"
+            >
+              <option value="">narration</option>
+              <option v-for="c in characterStore.characters" :key="c.id" :value="c.id">
+                {{ c.data?.name || 'Unnamed' }}
+              </option>
+            </select>
             <textarea v-model="editDraft" rows="3" class="ds-input" maxlength="8000" data-testid="journal-edit-input" @keydown.esc="cancelEdit" @keydown.enter.exact.prevent="saveEdit(entry.id)" />
             <div class="journal-edit-actions">
               <button type="button" class="ds-btn tiny ghost" @click="cancelEdit">Cancel</button>
@@ -218,6 +230,7 @@ const titleSaving = ref(false)
 const titleInputEl = ref(null)
 const editingId = ref(null)
 const editDraft = ref('')
+const editSpeakerId = ref('')
 const editSaving = ref(false)
 
 const markdownTools = [
@@ -282,18 +295,22 @@ function canTouch(entry) {
 function startEdit(entry) {
   editingId.value = entry.id
   editDraft.value = entry.body
+  editSpeakerId.value = characterStore.characters.some(c => c.id === entry.character_id)
+    ? entry.character_id
+    : ''
 }
 
 function cancelEdit() {
   editingId.value = null
   editDraft.value = ''
+  editSpeakerId.value = ''
 }
 
 async function saveEdit(id) {
   const body = editDraft.value.trim()
   if (!body || editSaving.value) return
   editSaving.value = true
-  const saved = await journalStore.updateEntry(id, body)
+  const saved = await journalStore.updateEntry(id, body, { characterId: editSpeakerId.value || null })
   editSaving.value = false
   if (saved) cancelEdit()
 }

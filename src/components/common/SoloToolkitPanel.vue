@@ -44,9 +44,14 @@
     </div>
 
     <div class="ds-panel-tabs">
+      <button class="ds-panel-tab" :class="{ active: tab === 'combat' }" @click="tab = 'combat'">Combat</button>
       <button class="ds-panel-tab" :class="{ active: tab === 'oracle' }" @click="tab = 'oracle'">Oracle</button>
       <button class="ds-panel-tab" :class="{ active: tab === 'codex' }" @click="tab = 'codex'">Codex</button>
       <button class="ds-panel-tab" :class="{ active: tab === 'trackers' }" @click="tab = 'trackers'">Trackers</button>
+    </div>
+
+    <div v-show="tab === 'combat'" class="ds-tab-pane">
+      <SoloCombatPanel />
     </div>
 
     <div v-show="tab === 'oracle'" class="ds-tab-pane">
@@ -78,6 +83,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import OraclePanel        from '@/components/common/OraclePanel.vue'
+import SoloCombatPanel    from '@/components/common/SoloCombatPanel.vue'
 import StatBlockPanel     from '@/components/common/StatBlockPanel.vue'
 import CompendiumPanel    from '@/components/common/CompendiumPanel.vue'
 import TravelSection      from '@/components/common/TravelSection.vue'
@@ -98,12 +104,12 @@ const sessionStore = useSessionStore()
 const { visible, close } = useSoloToolkit()
 const isSoloOrCoop = computed(() => sessionStore.playMode === 'gm_less')
 
-const tab = ref('oracle')
+const tab = ref('combat')
 
 const { pos, size, startDrag, startResize } = useFloatingPanel({
   storagePrefix: 'dm.soloToolkit',
   defaultPos: { x: 120, y: 96 },
-  defaultSize: { w: 360, h: Math.max(420, Math.min(680, window.innerHeight - 160)) },
+  defaultSize: { w: 460, h: Math.max(520, Math.min(760, window.innerHeight - 120)) },
   maxW: 720,
 })
 </script>
