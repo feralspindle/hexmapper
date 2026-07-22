@@ -102,6 +102,8 @@ pub async fn create_entry(
                 return Err(AppError::BadRequest("pin payload is required".to_string()));
             }
         }
+        // a marker splitting the stream into pages; carries no content
+        "page_break" => {}
         _ => return Err(AppError::BadRequest("invalid entry kind".to_string())),
     }
     if body.chars().count() > MAX_BODY_LEN {
@@ -145,10 +147,11 @@ pub async fn update_entry(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateEntryRequest>,
 ) -> Result<Json<JournalEntryRow>, AppError> {
-    let (author, session_id) = entry_scope(&state, id).await?.ok_or(AppError::NotFound)?;
+    let (author, session_id, kind) = entry_scope(&state, id).await?.ok_or(AppError::NotFound)?;
     require_author_or_gm(&state, auth.user_id, author, session_id).await?;
     let body = req.body.trim();
-    if body.is_empty() || body.chars().count() > MAX_BODY_LEN {
+    // a page break's body is its title, and clearing the title is fine
+    if (body.is_empty() && kind != "page_break") || body.chars().count() > MAX_BODY_LEN {
         return Err(AppError::BadRequest(format!(
             "entry must be 1-{MAX_BODY_LEN} characters"
         )));
@@ -175,7 +178,7 @@ pub async fn delete_entry(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let (author, session_id) = entry_scope(&state, id).await?.ok_or(AppError::NotFound)?;
+    let (author, session_id, _) = entry_scope(&state, id).await?.ok_or(AppError::NotFound)?;
     require_author_or_gm(&state, auth.user_id, author, session_id).await?;
 
     let event = NewEvent {
@@ -220,8 +223,8 @@ async fn speaker_name(
         .unwrap_or_else(|| "Unnamed".to_string()))
 }
 
-async fn entry_scope(state: &AppState, id: Uuid) -> Result<Option<(Uuid, Uuid)>, AppError> {
-    sqlx::query_as("select author_user_id, session_id from journal_entries where id = $1")
+async fn entry_scope(state: &AppState, id: Uuid) -> Result<Option<(Uuid, Uuid, String)>, AppError> {
+    sqlx::query_as("select author_user_id, session_id, kind from journal_entries where id = $1")
         .bind(id)
         .fetch_optional(state.pool())
         .await
