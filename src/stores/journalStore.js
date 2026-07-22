@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useCalendarStore } from '@/stores/calendarStore.js'
@@ -9,6 +9,17 @@ import { useCalendarStore } from '@/stores/calendarStore.js'
 export const useJournalStore = defineStore('journal', () => {
   const entries = ref([])
   const error = ref(null)
+
+  // page_break entries split the stream into pages; the break itself belongs
+  // to the page it opens (page one has none)
+  const pages = computed(() => {
+    const result = [{ pageBreak: null, entries: [] }]
+    for (const entry of entries.value) {
+      if (entry.kind === 'page_break') result.push({ pageBreak: entry, entries: [] })
+      else result[result.length - 1].entries.push(entry)
+    }
+    return result
+  })
 
   const session = createSessionChannel()
 
@@ -73,6 +84,11 @@ export const useJournalStore = defineStore('journal', () => {
     return _create({ kind: 'pin', pin: pinPayload })
   }
 
+  async function addPageBreak() {
+    if (!session.key) return null
+    return _create({ kind: 'page_break' })
+  }
+
   async function _create(payload) {
     try {
       const calendarStore = useCalendarStore()
@@ -112,11 +128,23 @@ export const useJournalStore = defineStore('journal', () => {
   }
 
   // one markdown document, day headers from the calendar stamps, pins as
-  // quotes. the caller downloads it
-  function exportMarkdown(sessionName = 'Campaign') {
-    const lines = [`# ${sessionName} journal`, '']
+  // quotes, pages split by rules. pass pageIndex to export a single page.
+  // the caller downloads it
+  function exportMarkdown(sessionName = 'Campaign', { pageIndex = null } = {}) {
+    const page = pageIndex === null ? null : pages.value[pageIndex]
+    const pageTitle = page?.pageBreak?.body?.trim()
+    const heading = page
+      ? `# ${sessionName} journal, page ${pageIndex + 1}${pageTitle ? `: ${pageTitle}` : ''}`
+      : `# ${sessionName} journal`
+    const lines = [heading, '']
     let lastDate = null
-    for (const entry of entries.value) {
+    for (const entry of page ? page.entries : entries.value) {
+      if (entry.kind === 'page_break') {
+        lines.push('---', '')
+        const breakTitle = entry.body?.trim()
+        if (breakTitle) lines.push(`## ${breakTitle}`, '')
+        continue
+      }
       const date = entry.game_date
         ? `${entry.game_date.year}-${entry.game_date.month}-${entry.game_date.day}`
         : null
@@ -162,12 +190,14 @@ export const useJournalStore = defineStore('journal', () => {
 
   return {
     entries,
+    pages,
     error,
     init,
     refresh,
     cleanup,
     addProse,
     pin,
+    addPageBreak,
     updateEntry,
     removeEntry,
     exportMarkdown,
