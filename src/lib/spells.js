@@ -30,6 +30,13 @@ export function findSpellEntry(entries, name) {
   return entries.find(entry => String(entry.name ?? '').trim().toLowerCase() === key) ?? null
 }
 
+export function findManualSpellDetails(character, name) {
+  const key = String(name ?? '').trim().toLowerCase()
+  const details = character?.spellDetails ?? {}
+  const match = Object.entries(details).find(([spellName]) => spellName.trim().toLowerCase() === key)
+  return match?.[1] && typeof match[1] === 'object' ? match[1] : null
+}
+
 export function spellSummaryFields(data = {}) {
   const aliases = {
     tier: ['tier'],

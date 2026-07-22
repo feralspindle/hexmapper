@@ -1225,7 +1225,13 @@
                                 gap: 6px;
                             "
                         >
-                            <CharacterSpells :character="char" show-empty style="flex: 1; min-width: 0" />
+                            <CharacterSpells
+                                :character="char"
+                                :editable="canEdit"
+                                show-empty
+                                style="flex: 1; min-width: 0"
+                                @save-details="saveSpellDetails"
+                            />
                             <button
                                 v-if="canEdit"
                                 class="cs-icon-btn"
@@ -2558,6 +2564,14 @@ function saveSpells() {
         spellsDraft.value.trim() || "None",
     );
     editingSpells.value = false;
+}
+function saveSpellDetails({ name, data }) {
+    const details = Object.fromEntries(
+        Object.entries(char.value.spellDetails ?? {}).filter(
+            ([spellName]) => spellName.toLowerCase() !== name.toLowerCase(),
+        ),
+    );
+    characterStore.updateField("spellDetails", { ...details, [name]: data });
 }
 
 function convertMoney(fromKey, fromAmt, toKey, toAmt) {

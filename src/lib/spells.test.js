@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { findSpellEntry, knownSpellNames, spellDescription, spellSummaryFields } from './spells.js'
+import { findManualSpellDetails, findSpellEntry, knownSpellNames, spellDescription, spellSummaryFields } from './spells.js'
 
 describe('spell helpers', () => {
   test('combines legacy spell text and spell-tagged bonuses without duplicates', () => {
@@ -16,6 +16,11 @@ describe('spell helpers', () => {
   test('matches compendium spell names without case sensitivity', () => {
     const spell = { name: 'Antimagic Shell', data: { tier: 5 } }
     expect(findSpellEntry([spell], 'ANTIMAGIC SHELL')).toBe(spell)
+  })
+
+  test('matches manual spell details without case sensitivity', () => {
+    const details = { description: 'A player-authored effect.' }
+    expect(findManualSpellDetails({ spellDetails: { Fireball: details } }, 'FIREBALL')).toBe(details)
   })
 
   test('extracts the standard facts and description', () => {
