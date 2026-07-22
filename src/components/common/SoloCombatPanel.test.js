@@ -17,6 +17,7 @@ vi.mock('@/stores/sessionStore.js', () => ({ useSessionStore: () => mocks.sessio
 vi.mock('@/stores/characterStore.js', async importOriginal => ({ ...(await importOriginal()), useCharacterStore: () => mocks.characters }))
 vi.mock('@/stores/statBlockStore.js', () => ({ useStatBlockStore: () => mocks.blocks }))
 vi.mock('@/stores/diceStore.js', () => ({ useDiceStore: () => mocks.dice }))
+vi.mock('@/stores/compendiumStore.js', () => ({ useCompendiumStore: () => ({ spells: [] }) }))
 
 describe('SoloCombatPanel', () => {
   beforeEach(() => {

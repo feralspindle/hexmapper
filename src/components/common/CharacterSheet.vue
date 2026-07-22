@@ -1090,13 +1090,13 @@
                 <div>
                     <span class="cs-section-label">Talents</span>
                     <div
-                        v-if="char.bonuses?.length"
+                        v-if="talentBonuses.length"
                         class="cs-list"
                         style="margin-top: 6px"
                     >
                         <div
-                            v-for="(b, i) in char.bonuses"
-                            :key="i"
+                            v-for="item in talentBonuses"
+                            :key="item.index"
                             class="cs-list-item"
                         >
                             <div
@@ -1110,7 +1110,7 @@
                             >
                                 <div>
                                     <span class="cs-list-title">{{
-                                        b.bonusName
+                                        item.bonus.bonusName
                                     }}</span>
                                     <span
                                         style="
@@ -1118,7 +1118,7 @@
                                             font-size: 11px;
                                             margin-left: 4px;
                                         "
-                                        >· {{ b.sourceCategory }}</span
+                                        >· {{ item.bonus.sourceCategory }}</span
                                     >
                                 </div>
                                 <button
@@ -1127,7 +1127,7 @@
                                     title="Remove"
                                     @click="
                                         confirm('Remove this talent?', () =>
-                                            removeTalent(i),
+                                            removeTalent(item.index),
                                         )
                                     "
                                 >
@@ -1225,20 +1225,7 @@
                                 gap: 6px;
                             "
                         >
-                            <span
-                                style="
-                                    font-family: var(--font-body);
-                                    font-size: 13px;
-                                    color: var(--ink-2);
-                                    flex: 1;
-                                "
-                                >{{
-                                    char.spellsKnown &&
-                                    char.spellsKnown !== "None"
-                                        ? char.spellsKnown
-                                        : "—"
-                                }}</span
-                            >
+                            <CharacterSpells :character="char" show-empty style="flex: 1; min-width: 0" />
                             <button
                                 v-if="canEdit"
                                 class="cs-icon-btn"
@@ -2201,6 +2188,8 @@ import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
 import { uploadTokenImage, tokenImageUrl } from "@/lib/tokenImage.js";
+import CharacterSpells from "@/components/common/CharacterSpells.vue";
+import { knownSpellNames } from "@/lib/spells.js";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
@@ -2212,6 +2201,9 @@ const { confirm } = useConfirmDialog();
 
 const canEdit = computed(() => characterStore.canEditActiveCharacter);
 const char = computed(() => characterStore.character);
+const talentBonuses = computed(() => (char.value?.bonuses ?? [])
+    .map((bonus, index) => ({ bonus, index }))
+    .filter(({ bonus }) => !knownSpellNames({ bonuses: [bonus] }).length));
 
 const isGM = computed(() => sessionStore.isGM);
 const isGmCharacter = computed(() => {
