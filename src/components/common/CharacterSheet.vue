@@ -1136,73 +1136,50 @@
 
                 <div>
                     <span class="cs-section-label">Spells</span>
-                    <template v-if="editingSpells && canEdit">
-                        <div class="cs-form-stack" style="margin-top: 6px">
-                            <textarea
-                                v-model="spellsDraft"
-                                rows="4"
-                                placeholder="Spells known…"
-                                class="cs-input cs-textarea"
+                    <CharacterSpells
+                        :character="char"
+                        :editable="canEdit"
+                        show-empty
+                        @save-details="saveSpellDetails"
+                        @remove="confirmRemoveSpell"
+                    />
+                    <div
+                        v-if="showAddSpell && canEdit"
+                        class="cs-list-item"
+                        style="margin-top: 6px"
+                    >
+                        <div class="cs-form-stack" style="padding: 8px">
+                            <input
+                                v-model="newSpellDraft"
+                                placeholder="Spell name"
+                                class="cs-input"
+                                @keyup.enter="submitAddSpell"
+                                @keyup.escape="showAddSpell = false"
                             />
                             <div class="cs-form-actions">
                                 <button
                                     class="cs-btn primary"
-                                    @click="saveSpells"
+                                    @click="submitAddSpell"
                                 >
-                                    Save
+                                    Add
                                 </button>
                                 <button
                                     class="cs-btn ghost"
-                                    @click="editingSpells = false"
+                                    @click="showAddSpell = false"
                                 >
                                     Cancel
                                 </button>
                             </div>
                         </div>
-                    </template>
-                    <template v-else>
-                        <div
-                            class="cs-info-block"
-                            style="
-                                margin-top: 6px;
-                                display: flex;
-                                align-items: flex-start;
-                                justify-content: space-between;
-                                gap: 6px;
-                            "
-                        >
-                            <CharacterSpells
-                                :character="char"
-                                :editable="canEdit"
-                                show-empty
-                                style="flex: 1; min-width: 0"
-                                @save-details="saveSpellDetails"
-                            />
-                            <button
-                                v-if="canEdit"
-                                class="cs-icon-btn"
-                                title="Edit spells"
-                                @click="startEditSpells"
-                            >
-                                <svg
-                                    width="11"
-                                    height="11"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                >
-                                    <path
-                                        d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
-                                    />
-                                    <path
-                                        d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
-                    </template>
+                    </div>
+                    <button
+                        v-if="canEdit && !showAddSpell"
+                        class="cs-add-btn"
+                        style="margin-top: 6px"
+                        @click="showAddSpell = true"
+                    >
+                        + Add Spell
+                    </button>
                 </div>
             </div>
 
@@ -2142,6 +2119,7 @@ import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
 import { uploadTokenImage, tokenImageUrl } from "@/lib/tokenImage.js";
 import CharacterSpells from "@/components/common/CharacterSpells.vue";
 import CharacterTalents from "@/components/common/CharacterTalents.vue";
+import { knownSpellNames } from "@/lib/spells.js";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
@@ -2498,18 +2476,58 @@ function confirmRemoveTalent(idx) {
     confirm("Remove this talent?", () => removeTalent(idx));
 }
 
-const editingSpells = ref(false);
-const spellsDraft = ref("");
-function startEditSpells() {
-    spellsDraft.value = char.value.spellsKnown ?? "";
-    editingSpells.value = true;
+const showAddSpell = ref(false);
+const newSpellDraft = ref("");
+function submitAddSpell() {
+    const name = newSpellDraft.value.trim();
+    if (!name) return;
+    const raw = char.value.spellsKnown;
+    if (Array.isArray(raw)) {
+        characterStore.updateField("spellsKnown", [...raw, name]);
+    } else {
+        const existing = String(raw ?? "").trim();
+        const base =
+            !existing || existing.toLowerCase() === "none" ? "" : existing;
+        characterStore.updateField(
+            "spellsKnown",
+            base ? `${base}, ${name}` : name,
+        );
+    }
+    newSpellDraft.value = "";
+    showAddSpell.value = false;
 }
-function saveSpells() {
-    characterStore.updateField(
-        "spellsKnown",
-        spellsDraft.value.trim() || "None",
+function removeSpell(name) {
+    const key = String(name ?? "").trim().toLowerCase();
+    const raw = char.value.spellsKnown;
+    if (Array.isArray(raw)) {
+        characterStore.updateField(
+            "spellsKnown",
+            raw.filter(
+                (spell) =>
+                    String(typeof spell === "string" ? spell : spell?.name ?? "")
+                        .trim()
+                        .toLowerCase() !== key,
+            ),
+        );
+    } else if (raw != null) {
+        const rest = String(raw)
+            .split(/[\n,;]+/)
+            .map((spell) => spell.trim())
+            .filter((spell) => spell && spell.toLowerCase() !== key);
+        characterStore.updateField("spellsKnown", rest.join(", ") || "None");
+    }
+    const bonuses = char.value.bonuses ?? [];
+    const kept = bonuses.filter(
+        (bonus) =>
+            !knownSpellNames({ bonuses: [bonus] }).some(
+                (spellName) => spellName.toLowerCase() === key,
+            ),
     );
-    editingSpells.value = false;
+    if (kept.length !== bonuses.length)
+        characterStore.updateField("bonuses", kept);
+}
+function confirmRemoveSpell(name) {
+    confirm("Remove this spell?", () => removeSpell(name));
 }
 function saveSpellDetails({ name, data }) {
     const details = Object.fromEntries(

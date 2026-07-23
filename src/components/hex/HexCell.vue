@@ -134,7 +134,7 @@
         text-anchor="middle"
         :y="markerR + size * 0.2"
         :font-size="10 * (size / 48)"
-        :fill="blankMode ? 'var(--ink, #1a0f06)' : 'var(--paper, #f4e8cc)'"
+        fill="var(--ink, #1a0f06)"
         style="font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 600;"
       >{{ firstMarker.label.slice(0, 16) }}</text>
     </g>
