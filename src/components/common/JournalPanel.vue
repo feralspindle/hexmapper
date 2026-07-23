@@ -96,7 +96,7 @@
         <div v-if="entry.kind === 'pin'" class="journal-pin" data-testid="journal-pin">
           <div class="journal-meta">
             <span class="journal-pin-label">
-              <i :class="entry.pin?.source === 'dice' ? 'fa-solid fa-dice' : 'fa-solid fa-wand-sparkles'" />
+              <i :class="pinIcon(entry)" />
               {{ entry.pin?.label ?? 'pinned' }}
             </span>
             <time :datetime="entry.created_at">{{ entryTime(entry) }}</time>
@@ -385,6 +385,12 @@ function confirmRemoveBreak() {
 function entryTime(entry) {
   if (!entry.created_at) return ''
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(entry.created_at))
+}
+
+function pinIcon(entry) {
+  if (entry.pin?.source === 'dice') return 'fa-solid fa-dice'
+  if (entry.pin?.source === 'travel') return 'fa-solid fa-compass'
+  return 'fa-solid fa-wand-sparkles'
 }
 
 async function applyMarkdown(tool) {
