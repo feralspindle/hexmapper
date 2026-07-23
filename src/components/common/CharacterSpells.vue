@@ -31,6 +31,7 @@
           <label class="spell-manual-description">Description<textarea :value="draftValue(spell, 'description')" rows="3" @input="setDraft(spell, 'description', $event.target.value)" /></label>
           <button type="submit">Save details</button>
         </form>
+        <button v-if="editable" type="button" class="spell-remove" @click="emit('remove', spell.name)">Remove spell</button>
       </div>
     </article>
   </div>
@@ -49,7 +50,7 @@ const props = defineProps({
   showEmpty: { type: Boolean, default: false },
   editable: { type: Boolean, default: false },
 })
-const emit = defineEmits(['save-details'])
+const emit = defineEmits(['save-details', 'remove'])
 
 const compendiumStore = useCompendiumStore()
 const sessionStore = useSessionStore()
@@ -117,5 +118,6 @@ function toggle(name) {
 .spell-extra { display: flex; flex-direction: column; gap: 5px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid var(--rule); }
 .spell-missing, .spell-empty { margin: 0; color: var(--ink-mute); font: italic 12px var(--font-body); }.spell-empty { margin-top: 6px; }
 .spell-manual { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }.spell-manual label { color: var(--ink-mute); font: 9px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }.spell-manual input, .spell-manual textarea { width: 100%; margin-top: 2px; border: 1px solid var(--rule-strong); background: var(--paper); color: var(--ink); padding: 5px 6px; font: 12px var(--font-body); text-transform: none; }.spell-manual-description { grid-column: 1 / -1; }.spell-manual textarea { resize: vertical; }.spell-manual button { justify-self: start; border: 1px solid #67508f; background: #67508f; color: white; padding: 5px 9px; font: 10px var(--font-mono); }
+.spell-remove { margin-top: 8px; border: 1px solid var(--rule-strong); background: transparent; color: #8a1c1c; padding: 4px 8px; font: 10px var(--font-mono); }
 .compact { margin: 0; padding: 0 8px 7px; }.compact .spell-head { padding: 5px 6px; }.compact .spell-head span { font-size: 12px; }.compact .spell-body { padding: 7px; }.compact .spell-description { font-size: 12px; }
 </style>

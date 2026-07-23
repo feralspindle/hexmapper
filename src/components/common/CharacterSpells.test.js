@@ -49,6 +49,13 @@ describe('CharacterSpells', () => {
     expect(wrapper.text()).toContain('No spell details recorded')
   })
 
+  test('emits the spell name when an editor removes a spell', async () => {
+    const wrapper = mount(CharacterSpells, { props: { character: { spellsKnown: 'ANTIMAGIC SHELL' }, editable: true } })
+    await wrapper.find('.spell-head').trigger('click')
+    await wrapper.find('.spell-remove').trigger('click')
+    expect(wrapper.emitted('remove')[0]).toEqual(['Antimagic Shell'])
+  })
+
   test('lets an editor save details for an unmatched spell', async () => {
     const wrapper = mount(CharacterSpells, { props: { character: { spellsKnown: 'Unknown Spell' }, editable: true } })
     await wrapper.find('.spell-head').trigger('click')
