@@ -19,7 +19,7 @@ describe('ConfirmDialog component', () => {
   const dialogText = () => document.body.textContent
 
   test('renders nothing until confirm() is called', async () => {
-    expect(document.body.querySelector('.fixed')).toBeNull()
+    expect(document.body.querySelector('.hm-modal-backdrop')).toBeNull()
 
     useConfirmDialog().confirm('Delete this map?', () => {})
     await wrapper.vm.$nextTick()
@@ -39,7 +39,7 @@ describe('ConfirmDialog component', () => {
     await wrapper.vm.$nextTick()
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
-    expect(document.body.querySelector('.fixed')).toBeNull()
+    expect(document.body.querySelector('.hm-modal-backdrop')).toBeNull()
   })
 
   test('cancel closes without running the callback', async () => {
@@ -52,7 +52,7 @@ describe('ConfirmDialog component', () => {
     await wrapper.vm.$nextTick()
 
     expect(onConfirm).not.toHaveBeenCalled()
-    expect(document.body.querySelector('.fixed')).toBeNull()
+    expect(document.body.querySelector('.hm-modal-backdrop')).toBeNull()
   })
 
   test('clicking the backdrop cancels', async () => {
@@ -60,10 +60,32 @@ describe('ConfirmDialog component', () => {
     useConfirmDialog().confirm('Sure?', onConfirm)
     await wrapper.vm.$nextTick()
 
-    document.body.querySelector('.bg-black\\/60').click()
+    document.body.querySelector('.hm-modal-backdrop').click()
     await wrapper.vm.$nextTick()
 
     expect(onConfirm).not.toHaveBeenCalled()
-    expect(document.body.querySelector('.fixed')).toBeNull()
+    expect(document.body.querySelector('.hm-modal-backdrop')).toBeNull()
+  })
+
+  test('escape cancels', async () => {
+    const onConfirm = vi.fn()
+    useConfirmDialog().confirm('Sure?', onConfirm)
+    await wrapper.vm.$nextTick()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.vm.$nextTick()
+
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(document.body.querySelector('.hm-modal-backdrop')).toBeNull()
+  })
+
+  test('the confirm button is danger-styled by default and neutral on request', async () => {
+    useConfirmDialog().confirm('Delete?', () => {})
+    await wrapper.vm.$nextTick()
+    expect(document.body.querySelector('[data-testid="confirm-accept"]').classList).toContain('danger')
+
+    useConfirmDialog().confirm('Reveal?', () => {}, { tone: 'neutral' })
+    await wrapper.vm.$nextTick()
+    expect(document.body.querySelector('[data-testid="confirm-accept"]').classList).not.toContain('danger')
   })
 })

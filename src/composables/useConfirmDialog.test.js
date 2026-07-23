@@ -15,13 +15,19 @@ describe('useConfirmDialog', () => {
     expect(state.confirmLabel).toBe('Delete')
   })
 
-  test('options override the label, class, and icon', () => {
+  test('options override the label, tone, and icon', () => {
     const { state, confirm } = useConfirmDialog()
-    confirm('Leave session?', () => {}, { confirmLabel: 'Leave', confirmClass: 'x', confirmIcon: 'y' })
+    confirm('Leave session?', () => {}, { confirmLabel: 'Leave', tone: 'neutral', confirmIcon: 'y' })
 
     expect(state.confirmLabel).toBe('Leave')
-    expect(state.confirmClass).toBe('x')
+    expect(state.tone).toBe('neutral')
     expect(state.confirmIcon).toBe('y')
+  })
+
+  test('the tone falls back to danger', () => {
+    const { state, confirm } = useConfirmDialog()
+    confirm('Delete this map?', () => {}, { confirmLabel: 'Delete' })
+    expect(state.tone).toBe('danger')
   })
 
   test('accept runs the callback and closes; cancel closes without running it', () => {

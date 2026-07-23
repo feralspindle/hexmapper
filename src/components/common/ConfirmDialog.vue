@@ -1,36 +1,42 @@
 <template>
-  <Teleport to="body">
-    <div
-      v-if="state.visible"
-      class="fixed inset-0 z-50 flex items-center justify-center"
-    >
-      <div class="absolute inset-0 bg-black/60" @click="cancel" />
-      <div class="relative bg-stone-950 border-2 border-stone-600 p-5 shadow-[4px_4px_0_rgba(0,0,0,0.6)] w-72 flex flex-col gap-4">
-        <p class="text-parchment-200 text-sm text-center font-body">{{ state.message }}</p>
-        <div class="flex gap-2 justify-center">
-          <button
-            class="px-4 py-1.5 border border-stone-600 text-sm text-stone-300 bg-stone-800 hover:bg-stone-700 transition-colors font-display tracking-wide"
-            data-testid="confirm-cancel"
-            @click="cancel"
-          >
-            Cancel
-          </button>
-          <button
-            class="px-4 py-1.5 border text-sm transition-colors font-display tracking-wide"
-            :class="state.confirmClass"
-            data-testid="confirm-accept"
-            @click="accept"
-          >
-            <i v-if="state.confirmIcon" :class="[state.confirmIcon, 'mr-1']" />{{ state.confirmLabel }}
-          </button>
-        </div>
+  <!-- rendered in place, not teleported: the design tokens live on each
+       view's root (.dungeon-scribe, HomeView's inline theme) and a teleport
+       to body would leave every var() in the card unresolved -->
+  <div v-if="state.visible" class="hm-modal-backdrop" @click.self="cancel">
+    <div class="hm-modal-card confirm-card" role="alertdialog" aria-modal="true">
+      <p>{{ state.message }}</p>
+      <div class="confirm-actions">
+        <button class="ds-btn ghost" data-testid="confirm-cancel" @click="cancel">Cancel</button>
+        <button class="ds-btn" :class="{ danger: state.tone === 'danger' }" data-testid="confirm-accept" @click="accept">
+          <i v-if="state.confirmIcon" :class="state.confirmIcon" />
+          <span>{{ state.confirmLabel }}</span>
+        </button>
       </div>
     </div>
-  </Teleport>
+  </div>
 </template>
 
 <script setup>
+import { watch } from 'vue'
 import { useConfirmDialog } from '@/composables/useConfirmDialog.js'
 
 const { state, accept, cancel } = useConfirmDialog()
+
+function onKeydown(event) {
+  if (event.key === 'Escape') cancel()
+}
+
+watch(
+  () => state.visible,
+  visible => {
+    if (visible) window.addEventListener('keydown', onKeydown)
+    else window.removeEventListener('keydown', onKeydown)
+  },
+)
 </script>
+
+<style scoped>
+.confirm-card { width: min(360px, calc(100% - 32px)); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.confirm-actions .ds-btn { display: inline-flex; align-items: center; gap: 6px; }
+</style>
