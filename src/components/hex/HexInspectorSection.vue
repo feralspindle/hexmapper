@@ -828,20 +828,44 @@ const isPartyHex = computed(
         hexStore.partyHex?.r === hexStore.selectedHex?.r,
 );
 
+function resetDrafts(cell) {
+    hexLabel.value = cell?.label ?? "";
+    hexTerrain.value = cell?.terrain_type ?? null;
+    hexMarkers.value = parseMarkers(cell?.marker_color);
+    hexGmMarkers.value = parseMarkers(cell?.gm_markers);
+}
+
 watch(
-    () => hexStore.selectedCell,
-    (cell) => {
-        hexLabel.value = cell?.label ?? "";
-        hexTerrain.value = cell?.terrain_type ?? null;
-        hexMarkers.value = parseMarkers(cell?.marker_color);
-        hexGmMarkers.value = parseMarkers(cell?.gm_markers);
+    () => hexStore.selectedHex,
+    () => {
+        const cell = hexStore.selectedCell;
+        resetDrafts(cell);
         addingDungeon.value = false;
         addingChildMap.value = false;
-        hexStore.fetchDungeonsForHex(cell?.id ?? null);
-        notesStore.initForHex(cell?.id ?? null, sessionStore.sessionId);
         if (cell) open.value = true;
     },
     { immediate: true },
+);
+
+watch(
+    () => hexStore.selectedCell?.id ?? null,
+    (id) => {
+        hexStore.fetchDungeonsForHex(id);
+        notesStore.initForHex(id, sessionStore.sessionId);
+    },
+    { immediate: true },
+);
+
+// the store replaces the selected cell object under us all the time - our
+// own save response, a note-count bump, another player's edit. syncing the
+// drafts then is fine, except while a local edit is typed or in flight:
+// that sync rewinds the input to the last saved value and eats keystrokes
+watch(
+    () => hexStore.selectedCell,
+    (cell) => {
+        if (hasPendingHexEdits()) return;
+        resetDrafts(cell);
+    },
 );
 
 watch(
@@ -859,21 +883,37 @@ watch(
 // the edit (the selection watch resets the drafts) or wrote it into the
 // newly selected hex
 let saveTimer = null;
+let pendingHexWrites = 0;
+
+function trackHexWrite(promise) {
+    pendingHexWrites += 1;
+    Promise.resolve(promise).finally(() => {
+        pendingHexWrites -= 1;
+    });
+}
+
+function hasPendingHexEdits() {
+    return !!saveTimer || !!markerLabelTimer || !!gmMarkerLabelTimer || pendingHexWrites > 0;
+}
+
 function debouncedSave() {
     clearTimeout(saveTimer);
     if (!hexStore.selectedHex) return;
     const { q, r } = hexStore.selectedHex;
     const patch = { label: hexLabel.value, terrain_type: hexTerrain.value };
-    saveTimer = setTimeout(() => hexStore.upsertHex(q, r, patch), 500);
+    saveTimer = setTimeout(() => {
+        saveTimer = null;
+        trackHexWrite(hexStore.upsertHex(q, r, patch));
+    }, 500);
 }
 
 function saveHex() {
     if (!hexStore.selectedHex) return;
     const { q, r } = hexStore.selectedHex;
-    hexStore.upsertHex(q, r, {
+    trackHexWrite(hexStore.upsertHex(q, r, {
         label: hexLabel.value,
         terrain_type: hexTerrain.value,
-    });
+    }));
 }
 
 function setTerrain(id) {
@@ -886,14 +926,14 @@ function doAddMarker(kind) {
     const { q, r } = hexStore.selectedHex;
     const newMarker = { id: crypto.randomUUID(), kind, label: "" };
     hexMarkers.value = [...hexMarkers.value, newMarker];
-    hexStore.addMarker(q, r, kind);
+    trackHexWrite(hexStore.addMarker(q, r, kind));
 }
 
 function doRemoveMarker(markerId) {
     if (!hexStore.selectedHex) return;
     const { q, r } = hexStore.selectedHex;
     hexMarkers.value = hexMarkers.value.filter((m) => m.id !== markerId);
-    hexStore.removeMarker(q, r, markerId);
+    trackHexWrite(hexStore.removeMarker(q, r, markerId));
 }
 
 let markerLabelTimer = null;
@@ -902,7 +942,10 @@ function debouncedUpdateMarker(marker) {
     if (!hexStore.selectedHex) return;
     const { q, r } = hexStore.selectedHex;
     const { id, label } = marker;
-    markerLabelTimer = setTimeout(() => hexStore.updateMarkerLabel(q, r, id, label), 500);
+    markerLabelTimer = setTimeout(() => {
+        markerLabelTimer = null;
+        trackHexWrite(hexStore.updateMarkerLabel(q, r, id, label));
+    }, 500);
 }
 
 function doAddGmMarker(kind) {
@@ -910,14 +953,14 @@ function doAddGmMarker(kind) {
     const { q, r } = hexStore.selectedHex;
     const newMarker = { id: crypto.randomUUID(), kind, label: "" };
     hexGmMarkers.value = [...hexGmMarkers.value, newMarker];
-    hexStore.addGmMarker(q, r, kind);
+    trackHexWrite(hexStore.addGmMarker(q, r, kind));
 }
 
 function doRemoveGmMarker(markerId) {
     if (!hexStore.selectedHex) return;
     const { q, r } = hexStore.selectedHex;
     hexGmMarkers.value = hexGmMarkers.value.filter((m) => m.id !== markerId);
-    hexStore.removeGmMarker(q, r, markerId);
+    trackHexWrite(hexStore.removeGmMarker(q, r, markerId));
 }
 
 let gmMarkerLabelTimer = null;
@@ -926,7 +969,10 @@ function debouncedUpdateGmMarker(marker) {
     if (!hexStore.selectedHex) return;
     const { q, r } = hexStore.selectedHex;
     const { id, label } = marker;
-    gmMarkerLabelTimer = setTimeout(() => hexStore.updateGmMarkerLabel(q, r, id, label), 500);
+    gmMarkerLabelTimer = setTimeout(() => {
+        gmMarkerLabelTimer = null;
+        trackHexWrite(hexStore.updateGmMarkerLabel(q, r, id, label));
+    }, 500);
 }
 
 function clearHex() {

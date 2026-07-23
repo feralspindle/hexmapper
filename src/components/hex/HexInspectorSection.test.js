@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/stores/hexStore.js', async (importOriginal) => {
   const actual = await importOriginal()
+  const { reactive } = await import('vue')
+  mocks.hexStore = reactive(mocks.hexStore)
   return { ...actual, useHexStore: () => mocks.hexStore }
 })
 
@@ -43,6 +45,7 @@ describe('HexInspectorSection', () => {
       partyHex: null,
       fetchDungeonsForHex: vi.fn(),
       deleteHex: vi.fn(),
+      upsertHex: vi.fn(() => Promise.resolve()),
     })
     Object.assign(mocks.mapStore, {
       childMapsByHexId: new Map(),
@@ -75,5 +78,45 @@ describe('HexInspectorSection', () => {
     mocks.sessionStore.isGM = false
     const wrapper = mount(HexInspectorSection)
     expect(has(wrapper, 'clear-hex')).toBe(false)
+  })
+
+  const labelInput = wrapper => wrapper.find('input[placeholder="e.g. Thornwood Village"]')
+
+  test('a store update cannot rewind the name while a save is in flight', async () => {
+    vi.useFakeTimers()
+    mocks.hexStore.upsertHex = vi.fn(() => new Promise(() => {}))
+    const wrapper = mount(HexInspectorSection)
+
+    await labelInput(wrapper).setValue('Thornw')
+    vi.advanceTimersByTime(600)
+    expect(mocks.hexStore.upsertHex).toHaveBeenCalledWith(1, 2, { label: 'Thornw', terrain_type: null })
+
+    mocks.hexStore.selectedCell = { id: 'cell-1', label: 'Thornw', revealed: true }
+    await wrapper.vm.$nextTick()
+    expect(labelInput(wrapper).element.value).toBe('Thornw')
+    vi.useRealTimers()
+  })
+
+  test('typing on while the previous save echoes back keeps every keystroke', async () => {
+    vi.useFakeTimers()
+    mocks.hexStore.upsertHex = vi.fn(() => new Promise(() => {}))
+    const wrapper = mount(HexInspectorSection)
+
+    await labelInput(wrapper).setValue('Thornw')
+    vi.advanceTimersByTime(600)
+    await labelInput(wrapper).setValue('Thornwood')
+
+    mocks.hexStore.selectedCell = { id: 'cell-1', label: 'Thornw', revealed: true }
+    await wrapper.vm.$nextTick()
+    expect(labelInput(wrapper).element.value).toBe('Thornwood')
+    vi.useRealTimers()
+  })
+
+  test('a remote edit refreshes the name when nothing is being typed', async () => {
+    const wrapper = mount(HexInspectorSection)
+
+    mocks.hexStore.selectedCell = { id: 'cell-1', label: 'Ruins of Vel', revealed: true }
+    await wrapper.vm.$nextTick()
+    expect(labelInput(wrapper).element.value).toBe('Ruins of Vel')
   })
 })
