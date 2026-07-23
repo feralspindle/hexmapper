@@ -22,7 +22,7 @@
           </dl>
           <p v-if="!spell.fields.length && !spell.description && !spell.extraFields.length" class="spell-missing">No spell details recorded</p>
         </template>
-        <p v-else class="spell-missing">No matching spell in the Codex</p>
+        <p v-else class="spell-missing">{{ codexAvailable ? 'No matching spell in the Codex' : 'No spell details recorded' }}</p>
         <form v-if="editable && !spell.entry" class="spell-manual" @submit.prevent="saveManual(spell)">
           <label>Tier<input :value="draftValue(spell, 'tier')" @input="setDraft(spell, 'tier', $event.target.value)" /></label>
           <label>Class<input :value="draftValue(spell, 'class')" @input="setDraft(spell, 'class', $event.target.value)" /></label>
@@ -40,6 +40,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useCompendiumStore } from '@/stores/compendiumStore.js'
+import { useSessionStore } from '@/stores/sessionStore.js'
 import { knownSpellNames, findManualSpellDetails, findSpellEntry, spellDescription, spellSummaryFields } from '@/lib/spells.js'
 
 const props = defineProps({
@@ -51,6 +52,10 @@ const props = defineProps({
 const emit = defineEmits(['save-details'])
 
 const compendiumStore = useCompendiumStore()
+const sessionStore = useSessionStore()
+// the Codex only ships with solo/co-op play so far; GM-led sessions get a
+// neutral message instead of a reference to a feature they don't have
+const codexAvailable = computed(() => sessionStore.playMode === 'gm_less')
 const expanded = ref(new Set())
 const SUMMARY_KEYS = new Set(['tier', 'class', 'classes', 'duration', 'range'])
 const DESCRIPTION_KEYS = new Set(['description', 'effect', 'text', 'details', 'body'])
