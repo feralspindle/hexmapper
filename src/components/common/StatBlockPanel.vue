@@ -193,9 +193,12 @@ function setStat(block, key, raw) {
 }
 
 function toInitiative(block) {
-  sessionStore.initiativeOp('add', {
-    kind: 'monster',
+  const maxHp = Number(block.data?.maxHp) || 0
+  sessionStore.addFoesToInitiative({
     name: block.data?.name || 'Unnamed',
+    statBlockId: block.id,
+    hp: maxHp,
+    maxHp,
   })
 }
 

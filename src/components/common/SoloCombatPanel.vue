@@ -37,7 +37,7 @@
         <article v-for="character in party" :key="character.id" class="combat-card" :class="{ active: isActiveCharacter(character) }">
           <div class="combat-card-head">
             <div class="combat-name"><i class="fa-solid fa-user" /><strong>{{ character.data?.name || 'Adventurer' }}</strong><small>AC {{ character.data?.armorClass ?? '?' }}</small></div>
-            <HpControl :current="character.data?.currentHp ?? character.data?.maxHitPoints ?? 0" :max="character.data?.maxHitPoints ?? 0" @adjust="characterStore.adjustHpForChar(character.id, $event)" />
+            <HpControl :current="character.data?.currentHp ?? character.data?.maxHitPoints ?? 0" :max="character.data?.maxHitPoints ?? 0" @adjust="characterStore.adjustHpForChar(character.id, $event)" @set="setCharacterHp(character, $event)" />
           </div>
           <div class="combat-actions">
             <template v-for="attack in attacksFor(character)" :key="attack.key">
@@ -63,15 +63,24 @@
 
       <section class="combat-side">
         <div class="combat-side-head"><span>Foes</span><small>{{ foes.length }}</small></div>
-        <p v-if="!foes.length" class="combat-empty">Add monsters in the Codex to track them here</p>
-        <article v-for="foe in foes" :key="foe.id" class="combat-card foe" :class="{ active: isActiveFoe(foe) }">
+        <p v-if="!foes.length" class="combat-empty">Add foes above or from the Codex to track them here</p>
+        <article v-for="foe in foes" :key="foe.entry.id" class="combat-card foe" :class="{ active: foe.entry.id === state.active_id, down: foe.entry.hp === 0 }">
           <div class="combat-card-head">
-            <div class="combat-name"><i class="fa-solid fa-skull" /><strong>{{ foe.data?.name || 'Unnamed' }}</strong><small>AC {{ foe.data?.ac ?? '?' }} · LV {{ foe.data?.level ?? '?' }}</small></div>
-            <HpControl :current="foe.data?.currentHp ?? 0" :max="foe.data?.maxHp ?? 0" @adjust="statBlockStore.adjustHp(foe.id, $event)" />
+            <div class="combat-name"><i class="fa-solid fa-skull" /><strong>{{ foe.entry.name }}</strong><small>AC {{ foe.block?.data?.ac ?? '?' }} · LV {{ foe.block?.data?.level ?? '?' }}</small></div>
+            <HpControl :current="foe.entry.hp ?? null" :max="foe.entry.max_hp ?? null" @adjust="sessionStore.initiativeOp('adjust_hp', { entry_id: foe.entry.id, delta: $event })" @set="sessionStore.initiativeOp('set_hp', { entry_id: foe.entry.id, hp: $event })" />
+            <button class="hm-card-icon-btn" title="Remove from combat" @click="sessionStore.initiativeOp('remove', { entry_id: foe.entry.id })"><i class="fa-solid fa-xmark" /></button>
           </div>
-          <div class="foe-attack"><span>ATK</span>{{ foe.data?.attacks || 'No attacks recorded' }}</div>
-          <div v-if="foe.data?.notes" class="foe-notes">{{ foe.data.notes }}</div>
-          <button v-if="!foeInOrder(foe)" class="combat-add-init" @click="addFoeToInitiative(foe)"><i class="fa-solid fa-bolt" /> add to initiative</button>
+          <div class="foe-attack"><span>ATK</span>{{ foe.block?.data?.attacks || 'No attacks recorded' }}</div>
+          <div v-if="foe.block?.data?.notes" class="foe-notes">{{ foe.block.data.notes }}</div>
+          <div class="combat-conditions">
+            <button v-for="condition in foeConditions(foe)" :key="condition" class="condition-badge" :style="{ '--condition': conditionBadge(condition).color }" @click="removeFoeCondition(foe, condition)">
+              <i :class="conditionBadge(condition).faClass" />{{ condition }}<i class="fa-solid fa-xmark" />
+            </button>
+            <select class="condition-add" aria-label="Add condition" @change="addFoeCondition(foe, $event)">
+              <option value="">+ condition</option>
+              <option v-for="condition in remainingConditions(foeConditions(foe))" :key="condition.name" :value="condition.name">{{ condition.name }}</option>
+            </select>
+          </div>
         </article>
       </section>
     </div>
@@ -99,13 +108,22 @@ const entries = computed(() => state.value.entries ?? [])
 const sortedEntries = computed(() => [...entries.value].sort((a, b) => (b.initiative - a.initiative) || a.name.localeCompare(b.name)))
 const activeEntry = computed(() => entries.value.find(entry => entry.id === state.value.active_id) ?? null)
 const party = computed(() => characterStore.characters)
-const foes = computed(() => statBlockStore.monsters)
+const foes = computed(() => sortedEntries.value.filter(entry => entry.kind === 'monster').map(entry => ({ entry, block: blockFor(entry) })))
 
 function signed(value) { return value >= 0 ? `+${value}` : String(value) }
 function normalizedName(value) { return String(value ?? '').trim().toLowerCase().replace(/\s+\d+$/, '') }
 function isActiveCharacter(character) { return activeEntry.value?.character_id === character.id }
-function isActiveFoe(foe) { return activeEntry.value?.kind === 'monster' && normalizedName(activeEntry.value.name) === normalizedName(foe.data?.name) }
-function foeInOrder(foe) { return entries.value.some(entry => entry.kind === 'monster' && normalizedName(entry.name) === normalizedName(foe.data?.name)) }
+function blockFor(entry) {
+  if (entry.stat_block_id) return statBlockStore.monsters.find(block => block.id === entry.stat_block_id) ?? null
+  return statBlockStore.monsters.find(block => normalizedName(block.data?.name) === normalizedName(entry.name)) ?? null
+}
+function matchingBlock(name) {
+  const wanted = normalizedName(name)
+  return statBlockStore.monsters.find(block => {
+    const blockName = normalizedName(block.data?.name)
+    return blockName === wanted || `${blockName}s` === wanted
+  }) ?? null
+}
 
 function attacksFor(character) {
   return (character.data?.attacks ?? []).map((source, index) => {
@@ -121,9 +139,12 @@ function rollDamage(character, attack) {
   const die = parseDamageDie(attack.damage)
   if (die) diceStore.rollDice({ [`d${die.sides}`]: die.count }, die.modifier, `${attack.label} damage`, character.id)
 }
+function remainingConditions(active) {
+  const taken = new Set(active)
+  return COMMON_CONDITIONS.filter(condition => !taken.has(condition.name))
+}
 function availableConditions(character) {
-  const active = new Set(character.data?.conditions ?? [])
-  return COMMON_CONDITIONS.filter(condition => !active.has(condition.name))
+  return remainingConditions(character.data?.conditions ?? [])
 }
 function addCondition(character, event) {
   const condition = event.target.value
@@ -134,6 +155,20 @@ function addCondition(character, event) {
 function removeCondition(character, condition) {
   characterStore.updateFieldForChar(character.id, 'conditions', (character.data?.conditions ?? []).filter(value => value !== condition))
 }
+function setCharacterHp(character, value) {
+  const max = character.data?.maxHitPoints ?? 0
+  characterStore.updateFieldForChar(character.id, 'currentHp', Math.min(max, value))
+}
+function foeConditions(foe) { return foe.entry.conditions ?? [] }
+function addFoeCondition(foe, event) {
+  const condition = event.target.value
+  event.target.value = ''
+  if (!condition) return
+  sessionStore.initiativeOp('set_conditions', { entry_id: foe.entry.id, conditions: [...foeConditions(foe), condition] })
+}
+function removeFoeCondition(foe, condition) {
+  sessionStore.initiativeOp('set_conditions', { entry_id: foe.entry.id, conditions: foeConditions(foe).filter(value => value !== condition) })
+}
 async function addParty() {
   const present = new Set(entries.value.map(entry => entry.character_id).filter(Boolean))
   for (const character of party.value) {
@@ -143,11 +178,19 @@ async function addParty() {
 async function addMonsters() {
   const raw = monsterInput.value.trim()
   if (!raw) return
-  const match = raw.match(/^(\d+)\s+(.+)$/)
-  await sessionStore.initiativeOp(match ? 'add_group' : 'add', match ? { name: match[2], count: Number(match[1]) } : { kind: 'monster', name: raw })
+  const counted = raw.match(/^(\d+)\s+(.+)$/)
+  const name = counted ? counted[2] : raw
+  const block = matchingBlock(name)
+  const maxHp = block ? Number(block.data?.maxHp) || 0 : null
+  await sessionStore.addFoesToInitiative({
+    name: block?.data?.name || name,
+    count: counted ? Number(counted[1]) : 1,
+    statBlockId: block?.id ?? null,
+    hp: maxHp,
+    maxHp,
+  })
   monsterInput.value = ''
 }
-function addFoeToInitiative(foe) { sessionStore.initiativeOp('add', { kind: 'monster', name: foe.data?.name || 'Unnamed' }) }
 </script>
 
 <style scoped>
@@ -170,6 +213,7 @@ function addFoeToInitiative(foe) { sessionStore.initiativeOp('add', { kind: 'mon
 .combat-side-head small { color: var(--ink-mute); }
 .combat-card { border: 1px solid var(--rule-strong); border-left: 3px solid var(--accent-2); background: var(--paper-2); }
 .combat-card.foe { border-left-color: #8a1c1c; }
+.combat-card.foe.down { opacity: .55; }.combat-card.foe.down .combat-name strong { text-decoration: line-through; }
 .combat-card.active { outline: 2px solid var(--accent); outline-offset: 1px; }
 .combat-card-head { display: flex; align-items: center; gap: 8px; padding: 7px 8px; }
 .combat-name { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 6px; }
@@ -183,7 +227,6 @@ function addFoeToInitiative(foe) { sessionStore.initiativeOp('add', { kind: 'mon
 .condition-badge { border: 1px solid var(--condition); border-radius: 10px; background: color-mix(in srgb, var(--condition) 15%, var(--paper)); color: var(--ink); padding: 2px 6px; font: 10px var(--font-body); }.condition-badge i { margin-right: 4px; }.condition-badge i:last-child { margin: 0 0 0 5px; opacity: .55; }
 .condition-add { max-width: 92px; border: 0; background: transparent; color: var(--ink-mute); font: 10px var(--font-body); }
 .foe-attack, .foe-notes { padding: 0 8px 7px; font-size: 12px; line-height: 1.35; }.foe-attack span { margin-right: 6px; }.foe-notes { color: var(--ink-mute); white-space: pre-line; }
-.combat-add-init { width: 100%; border: 0; border-top: 1px solid var(--rule); background: transparent; padding: 5px; color: var(--ink-mute); font: 10px var(--font-body); }
 .combat-empty { margin: 5px 2px; color: var(--ink-mute); font-size: 11px; font-style: italic; }.combat-empty.inline { align-self: center; }
 @media (max-width: 540px) { .combat-roster { grid-template-columns: 1fr; } }
 </style>

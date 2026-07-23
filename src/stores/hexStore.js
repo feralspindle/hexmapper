@@ -7,6 +7,7 @@ import { apiClient, ApiError } from "@/lib/apiClient.js";
 import router from "@/router/index.js";
 import { useMapStore } from "@/stores/mapStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
+import { useJournalStore } from "@/stores/journalStore.js";
 import { usePartyFollow } from "@/composables/usePartyFollow.js";
 
 export const MARKER_KINDS = [
@@ -404,6 +405,7 @@ export const useHexStore = defineStore("hex", () => {
   }
 
   async function setPartyHex(q, r) {
+    const previous = partyHex.value;
     partyHex.value = { q, r };
     _savePartyHex();
     try {
@@ -417,13 +419,34 @@ export const useHexStore = defineStore("hex", () => {
       payload: { q, r },
     });
     const sessionStore = useSessionStore();
-    if (sessionStore.playMode === "gm_less" && isCellUnexplored(q, r))
+    const wasUnexplored = isCellUnexplored(q, r);
+    if (sessionStore.playMode === "gm_less" && wasUnexplored)
       await exploreHex(q, r);
     // travel procedure: explore first so generated terrain sets the pace
     if (sessionStore.playMode === "gm_less" && sessionStore.travelState?.enabled) {
       const terrain = hexCells.value.get(cellKey(q, r))?.terrain_type ?? "plains";
       await sessionStore.travel("move", { terrain });
     }
+    const movedToNewHex = previous?.q !== q || previous?.r !== r;
+    if (sessionStore.playMode === "gm_less" && movedToNewHex)
+      await _journalPartyMove(q, r, wasUnexplored);
+  }
+
+  // the journal only initializes when its panel mounts, so init here or the
+  // pin is silently dropped on a session where the journal was never opened
+  async function _journalPartyMove(q, r, wasUnexplored) {
+    const journal = useJournalStore();
+    await journal.init(currentSessionId.value);
+    const cell = hexCells.value.get(cellKey(q, r));
+    const place = cell?.label?.trim() || cell?.terrain_type || null;
+    await journal.pin({
+      source: "travel",
+      label: "Travel",
+      text: `The party enters hex ${q},${r}`,
+      detail: [place, wasUnexplored ? "newly explored" : null]
+        .filter(Boolean)
+        .join(" · ") || null,
+    });
   }
 
   function isCellUnexplored(q, r) {
