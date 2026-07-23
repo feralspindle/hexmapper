@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CharacterSpells from './CharacterSpells.vue'
 
@@ -16,7 +16,13 @@ const spells = vi.hoisted(() => [{
 
 vi.mock('@/stores/compendiumStore.js', () => ({ useCompendiumStore: () => ({ spells }) }))
 
+const session = vi.hoisted(() => ({ playMode: 'gm_less' }))
+vi.mock('@/stores/sessionStore.js', () => ({ useSessionStore: () => session }))
+
 describe('CharacterSpells', () => {
+  beforeEach(() => {
+    session.playMode = 'gm_less'
+  })
   test('expands a known spell into its complete reference details', async () => {
     const wrapper = mount(CharacterSpells, { props: { character: { spellsKnown: 'ANTIMAGIC SHELL' } } })
     expect(wrapper.text()).toContain('Antimagic Shell')
@@ -33,6 +39,14 @@ describe('CharacterSpells', () => {
     await wrapper.find('.spell-head').trigger('click')
     expect(wrapper.text()).toContain('Unknown Spell')
     expect(wrapper.text()).toContain('No matching spell in the Codex')
+  })
+
+  test('never mentions the Codex in gm-led sessions', async () => {
+    session.playMode = 'gm'
+    const wrapper = mount(CharacterSpells, { props: { character: { spellsKnown: 'Unknown Spell' } } })
+    await wrapper.find('.spell-head').trigger('click')
+    expect(wrapper.text()).not.toContain('Codex')
+    expect(wrapper.text()).toContain('No spell details recorded')
   })
 
   test('lets an editor save details for an unmatched spell', async () => {

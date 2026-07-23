@@ -1089,66 +1089,12 @@
 
                 <div>
                     <span class="cs-section-label">Talents</span>
-                    <div
-                        v-if="talentBonuses.length"
-                        class="cs-list"
-                        style="margin-top: 6px"
-                    >
-                        <div
-                            v-for="item in talentBonuses"
-                            :key="item.index"
-                            class="cs-list-item"
-                        >
-                            <div
-                                style="
-                                    display: flex;
-                                    align-items: flex-start;
-                                    justify-content: space-between;
-                                    gap: 6px;
-                                    padding: 6px 8px;
-                                "
-                            >
-                                <div>
-                                    <span class="cs-list-title">{{
-                                        item.bonus.bonusName
-                                    }}</span>
-                                    <span
-                                        style="
-                                            color: var(--ink-mute);
-                                            font-size: 11px;
-                                            margin-left: 4px;
-                                        "
-                                        >· {{ item.bonus.sourceCategory }}</span
-                                    >
-                                </div>
-                                <button
-                                    v-if="canEdit"
-                                    class="cs-icon-btn danger"
-                                    title="Remove"
-                                    @click="
-                                        confirm('Remove this talent?', () =>
-                                            removeTalent(item.index),
-                                        )
-                                    "
-                                >
-                                    <svg
-                                        width="10"
-                                        height="10"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                    >
-                                        <polyline points="3 6 5 6 21 6" />
-                                        <path
-                                            d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
-                                        />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <CharacterTalents
+                        :character="char"
+                        :editable="canEdit"
+                        show-empty
+                        @remove="confirmRemoveTalent"
+                    />
                     <div
                         v-if="showAddTalent && canEdit"
                         class="cs-list-item"
@@ -2195,7 +2141,7 @@ import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
 import { uploadTokenImage, tokenImageUrl } from "@/lib/tokenImage.js";
 import CharacterSpells from "@/components/common/CharacterSpells.vue";
-import { knownSpellNames } from "@/lib/spells.js";
+import CharacterTalents from "@/components/common/CharacterTalents.vue";
 
 const characterStore = useCharacterStore();
 const diceStore = useDiceStore();
@@ -2207,9 +2153,6 @@ const { confirm } = useConfirmDialog();
 
 const canEdit = computed(() => characterStore.canEditActiveCharacter);
 const char = computed(() => characterStore.character);
-const talentBonuses = computed(() => (char.value?.bonuses ?? [])
-    .map((bonus, index) => ({ bonus, index }))
-    .filter(({ bonus }) => !knownSpellNames({ bonuses: [bonus] }).length));
 
 const isGM = computed(() => sessionStore.isGM);
 const isGmCharacter = computed(() => {
@@ -2550,6 +2493,9 @@ function removeTalent(idx) {
         "bonuses",
         (char.value.bonuses ?? []).filter((_, i) => i !== idx),
     );
+}
+function confirmRemoveTalent(idx) {
+    confirm("Remove this talent?", () => removeTalent(idx));
 }
 
 const editingSpells = ref(false);
