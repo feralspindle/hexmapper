@@ -183,7 +183,7 @@ function broadcast(photo) {
     {
       confirmLabel: 'Reveal',
       confirmIcon:  'fa-solid fa-tower-broadcast fa-xs',
-      confirmClass: 'border-parchment-600 text-parchment-200 bg-parchment-800 hover:bg-parchment-700',
+      tone:         'neutral',
     },
   )
 }
