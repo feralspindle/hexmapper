@@ -89,7 +89,7 @@ describe('HexCell', () => {
     expect(wrapper.attributes('data-marker-count')).toBe('1')
     expect(wrapper.text()).toContain('Old Tower')
     const label = wrapper.findAll('text').find(t => t.text() === 'Old Tower')
-    expect(label.attributes('fill')).toBe('var(--paper, #f4e8cc)')
+    expect(label.attributes('fill')).toBe('var(--ink, #1a0f06)')
   })
 
   test('markers stay hidden from players on an unrevealed fog hex', () => {
