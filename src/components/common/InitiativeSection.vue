@@ -113,9 +113,11 @@
 import { computed, ref } from 'vue'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
+import { useStatBlockStore } from '@/stores/statBlockStore.js'
 
 const sessionStore = useSessionStore()
 const characterStore = useCharacterStore()
+const statBlockStore = useStatBlockStore()
 
 const open = ref(false)
 const monsterInput = ref('')
@@ -155,16 +157,26 @@ function dropEntry(entry) {
   sessionStore.initiativeOp('death_start', { entry_id: entry.id, rounds })
 }
 
-// "3 goblins" -> add_group of 3, "ogre" -> one entry
+// "3 goblins" -> three entries, "ogre" -> one. a name that matches a codex
+// monster (singular or plural) links the entries to it and starts hp full
 async function addMonsters() {
   const raw = monsterInput.value.trim()
   if (!raw) return
-  const match = raw.match(/^(\d+)\s+(.+)$/)
-  if (match) {
-    await sessionStore.initiativeOp('add_group', { name: match[2], count: Number(match[1]) })
-  } else {
-    await sessionStore.initiativeOp('add', { kind: 'monster', name: raw })
-  }
+  const counted = raw.match(/^(\d+)\s+(.+)$/)
+  const name = counted ? counted[2] : raw
+  const wanted = name.trim().toLowerCase().replace(/\s+\d+$/, '')
+  const block = statBlockStore.monsters.find(b => {
+    const blockName = String(b.data?.name ?? '').trim().toLowerCase()
+    return blockName === wanted || `${blockName}s` === wanted
+  })
+  const maxHp = block ? Number(block.data?.maxHp) || 0 : null
+  await sessionStore.addFoesToInitiative({
+    name: block?.data?.name || name,
+    count: counted ? Number(counted[1]) : 1,
+    statBlockId: block?.id ?? null,
+    hp: maxHp,
+    maxHp,
+  })
   monsterInput.value = ''
 }
 </script>

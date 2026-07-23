@@ -321,6 +321,22 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // shared by every "add foe" entry point so instances number themselves:
+  // first "Goblin" keeps its name, the next becomes "Goblin 2", and a batch
+  // continues counting from whatever is already in the order
+  async function addFoesToInitiative({ name, count = 1, statBlockId = null, hp = null, maxHp = null }) {
+    const strip = value => String(value ?? '').trim().toLowerCase().replace(/\s+\d+$/, '')
+    const entries = initiativeState.value?.entries ?? []
+    const existing = entries.filter(e => e.kind === 'monster' && strip(e.name) === strip(name)).length
+    const total = Math.min(Math.max(1, count), 20)
+    const names = existing === 0 && total === 1
+      ? [name]
+      : Array.from({ length: total }, (_, i) => `${name} ${existing + i + 1}`)
+    for (const entryName of names) {
+      await initiativeOp('add', { kind: 'monster', name: entryName, stat_block_id: statBlockId, hp, max_hp: maxHp })
+    }
+  }
+
   async function advanceCrawlRound() {
     crawlRound.value += 1
     try {
@@ -412,6 +428,7 @@ export const useSessionStore = defineStore('session', () => {
     travel,
     initiativeState,
     initiativeOp,
+    addFoesToInitiative,
     crawlRound,
     crawlCheckEvery,
     advanceCrawlRound,

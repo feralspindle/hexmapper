@@ -25,6 +25,9 @@ vi.mock('@/stores/sessionStore.js', () => ({
 vi.mock('@/stores/mapStore.js', () => ({
   useMapStore: () => kit.mapStore,
 }))
+vi.mock('@/stores/journalStore.js', () => ({
+  useJournalStore: () => kit.journal,
+}))
 vi.mock('@/router/index.js', () => ({
   default: { push: vi.fn(), currentRoute: { value: { params: {} } } },
 }))
@@ -57,6 +60,7 @@ describe('hexStore behavior', () => {
     resetKit(kit)
     kit.session = { isGM: true, hexMode: 'fow' }
     kit.mapStore = { setFogRevealAll: vi.fn(() => Promise.resolve()) }
+    kit.journal = { init: vi.fn(() => Promise.resolve()), pin: vi.fn(() => Promise.resolve()) }
     kit.responses.maps = { data: { party_hex_q: null, party_hex_r: null }, error: null }
     vi.mocked(router.push).mockClear()
     localStorage.clear()
@@ -309,6 +313,57 @@ describe('hexStore behavior', () => {
     await store.setPartyHex(1, 1)
 
     expect(kit.session.travel).not.toHaveBeenCalled()
+  })
+
+  test('a solo party move writes a travel pin to the journal', async () => {
+    kit.session.playMode = 'gm_less'
+    kit.mapStore.mapExplorationMode = true
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = []
+    kit.api['post /hex-cells/explore'] = () => ({
+      generated: true,
+      cell: cell(4, 4, { explored: true, terrain_type: 'forest' }),
+    })
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(4, 4)
+
+    expect(kit.journal.init).toHaveBeenCalledWith('s1')
+    expect(kit.journal.pin).toHaveBeenCalledWith({
+      source: 'travel',
+      label: 'Travel',
+      text: 'The party enters hex 4,4',
+      detail: 'forest · newly explored',
+    })
+  })
+
+  test('re-setting the same party hex does not journal again', async () => {
+    kit.session.playMode = 'gm_less'
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(1, 1, { explored: true, terrain_type: 'swamp' })]
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(1, 1)
+    await store.setPartyHex(1, 1)
+
+    expect(kit.journal.pin).toHaveBeenCalledTimes(1)
+    expect(kit.journal.pin).toHaveBeenCalledWith({
+      source: 'travel',
+      label: 'Travel',
+      text: 'The party enters hex 1,1',
+      detail: 'swamp',
+    })
+  })
+
+  test('GM-led party moves stay out of the journal', async () => {
+    kit.session.playMode = 'gm'
+    kit.api['get /hex-cells?session_id=s1&map_id=m1'] = [cell(2, 2, { explored: true })]
+    const store = useHexStore()
+    await store.init('s1', 'm1')
+
+    await store.setPartyHex(2, 2)
+
+    expect(kit.journal.pin).not.toHaveBeenCalled()
   })
 
   test('GM-led sessions never trigger generation on party movement', async () => {

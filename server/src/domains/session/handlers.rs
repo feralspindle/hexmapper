@@ -470,9 +470,24 @@ pub struct InitiativeRequest {
     pub initiative: Option<i32>,
     pub count: Option<i32>,
     pub rounds: Option<i32>,
+    pub stat_block_id: Option<Uuid>,
+    pub hp: Option<i32>,
+    pub max_hp: Option<i32>,
+    pub delta: Option<i32>,
+    pub conditions: Option<Vec<String>>,
 }
 
 const MAX_INITIATIVE_ENTRIES: usize = 60;
+const MAX_ENTRY_HP: i64 = 9999;
+
+/// hp/max_hp for a new entry; hp can't start above max when both are given
+fn clamped_hp(req: &InitiativeRequest) -> (Option<i64>, Option<i64>) {
+    let max_hp = req.max_hp.map(|v| (v as i64).clamp(0, MAX_ENTRY_HP));
+    let hp = req
+        .hp
+        .map(|v| (v as i64).clamp(0, max_hp.unwrap_or(MAX_ENTRY_HP)));
+    (hp, max_hp)
+}
 
 /// shared initiative tracker (#52). the whole order lives in one jsonb blob on
 /// sessions ({entries, active_id, round}); every op reads it with a row lock,
@@ -539,11 +554,15 @@ fn apply_initiative_op(
                 k @ ("pc" | "monster") => k,
                 _ => return Err(AppError::BadRequest("invalid entry kind".to_string())),
             };
+            let (hp, max_hp) = clamped_hp(req);
             entries.push(json!({
                 "id": Uuid::new_v4(),
                 "kind": kind,
                 "name": name,
                 "character_id": req.character_id,
+                "stat_block_id": req.stat_block_id,
+                "hp": hp,
+                "max_hp": max_hp,
                 "initiative": req.initiative.unwrap_or(rolled[0]).clamp(-20, 50),
             }));
         }
@@ -553,12 +572,16 @@ fn apply_initiative_op(
             if entries.len() + count > MAX_INITIATIVE_ENTRIES {
                 return Err(AppError::BadRequest("initiative order is full".to_string()));
             }
+            let (hp, max_hp) = clamped_hp(req);
             for (i, roll) in rolled.iter().enumerate().take(count) {
                 entries.push(json!({
                     "id": Uuid::new_v4(),
                     "kind": "monster",
                     "name": format!("{name} {}", i + 1),
                     "character_id": Value::Null,
+                    "stat_block_id": req.stat_block_id,
+                    "hp": hp,
+                    "max_hp": max_hp,
                     "initiative": roll,
                 }));
             }
@@ -652,6 +675,71 @@ fn apply_initiative_op(
                     if let Some(obj) = entry.as_object_mut() {
                         obj.remove("death");
                     }
+                }
+            }
+        }
+        "adjust_hp" => {
+            let entry_id = req
+                .entry_id
+                .ok_or_else(|| AppError::BadRequest("entry_id is required".to_string()))?;
+            let delta = req
+                .delta
+                .ok_or_else(|| AppError::BadRequest("delta is required".to_string()))?
+                as i64;
+            let target = json!(entry_id);
+            for entry in entries.iter_mut() {
+                if entry.get("id") == Some(&target) {
+                    let max = entry
+                        .get("max_hp")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(MAX_ENTRY_HP);
+                    let current = entry.get("hp").and_then(Value::as_i64).unwrap_or(0);
+                    entry["hp"] = json!((current + delta).clamp(0, max));
+                }
+            }
+        }
+        "set_hp" => {
+            let entry_id = req
+                .entry_id
+                .ok_or_else(|| AppError::BadRequest("entry_id is required".to_string()))?;
+            let hp = req
+                .hp
+                .ok_or_else(|| AppError::BadRequest("hp is required".to_string()))?
+                .clamp(0, MAX_ENTRY_HP as i32) as i64;
+            let target = json!(entry_id);
+            for entry in entries.iter_mut() {
+                if entry.get("id") == Some(&target) {
+                    // entries added without stats (free-typed foes) get a max
+                    // the first time someone sets their hp
+                    match entry.get("max_hp").and_then(Value::as_i64) {
+                        Some(max) => entry["hp"] = json!(hp.min(max)),
+                        None => {
+                            entry["hp"] = json!(hp);
+                            entry["max_hp"] = json!(hp);
+                        }
+                    }
+                }
+            }
+        }
+        "set_conditions" => {
+            let entry_id = req
+                .entry_id
+                .ok_or_else(|| AppError::BadRequest("entry_id is required".to_string()))?;
+            // same shape the client's normalizeCondition produces: trimmed,
+            // lowercased, 40 chars, deduped, capped
+            let mut clean: Vec<String> = Vec::new();
+            for raw in req.conditions.clone().unwrap_or_default() {
+                let condition: String =
+                    raw.trim().to_lowercase().chars().take(40).collect();
+                if !condition.is_empty() && !clean.contains(&condition) {
+                    clean.push(condition);
+                }
+            }
+            clean.truncate(20);
+            let target = json!(entry_id);
+            for entry in entries.iter_mut() {
+                if entry.get("id") == Some(&target) {
+                    entry["conditions"] = json!(clean);
                 }
             }
         }
@@ -982,6 +1070,11 @@ mod initiative_tests {
             initiative: None,
             count: None,
             rounds: None,
+            stat_block_id: None,
+            hp: None,
+            max_hp: None,
+            delta: None,
+            conditions: None,
         }
     }
 
@@ -1121,6 +1214,99 @@ mod initiative_tests {
         let (next, dead) = apply_initiative_op(state, &req("advance"), &[]).unwrap();
         assert!(dead.is_empty());
         assert_eq!(next["entries"][0]["death"]["left"], 0);
+    }
+
+    #[test]
+    fn add_carries_stat_block_link_and_hp() {
+        let block_id = Uuid::new_v4();
+        let mut r = req("add");
+        r.name = Some("Goblin".into());
+        r.stat_block_id = Some(block_id);
+        r.hp = Some(12);
+        r.max_hp = Some(7);
+        let (state, _) = apply_initiative_op(empty_state(), &r, &[10]).unwrap();
+
+        let entry = &state["entries"][0];
+        assert_eq!(entry["stat_block_id"], json!(block_id));
+        // hp can't start above max
+        assert_eq!(entry["hp"], 7);
+        assert_eq!(entry["max_hp"], 7);
+    }
+
+    #[test]
+    fn add_group_gives_every_instance_its_own_hp() {
+        let mut r = req("add_group");
+        r.name = Some("Goblin".into());
+        r.count = Some(2);
+        r.hp = Some(5);
+        r.max_hp = Some(5);
+        let (mut state, _) = apply_initiative_op(empty_state(), &r, &[12, 7]).unwrap();
+        let first_id = state["entries"][0]["id"].as_str().unwrap().to_string();
+
+        let mut hit = req("adjust_hp");
+        hit.entry_id = Some(first_id.parse().unwrap());
+        hit.delta = Some(-3);
+        state = apply_initiative_op(state, &hit, &[]).unwrap().0;
+
+        assert_eq!(state["entries"][0]["hp"], 2);
+        assert_eq!(state["entries"][1]["hp"], 5);
+    }
+
+    #[test]
+    fn adjust_hp_clamps_to_zero_and_max() {
+        let mut r = req("add");
+        r.name = Some("Ogre".into());
+        r.hp = Some(3);
+        r.max_hp = Some(10);
+        let mut state = apply_initiative_op(empty_state(), &r, &[10]).unwrap().0;
+        let entry_id: Uuid = state["entries"][0]["id"].as_str().unwrap().parse().unwrap();
+
+        let mut hit = req("adjust_hp");
+        hit.entry_id = Some(entry_id);
+        hit.delta = Some(-99);
+        state = apply_initiative_op(state, &hit, &[]).unwrap().0;
+        assert_eq!(state["entries"][0]["hp"], 0);
+
+        let mut heal = req("adjust_hp");
+        heal.entry_id = Some(entry_id);
+        heal.delta = Some(99);
+        state = apply_initiative_op(state, &heal, &[]).unwrap().0;
+        assert_eq!(state["entries"][0]["hp"], 10);
+    }
+
+    #[test]
+    fn set_hp_backfills_max_for_statless_entries() {
+        let mut r = req("add");
+        r.name = Some("Wolf".into());
+        let mut state = apply_initiative_op(empty_state(), &r, &[10]).unwrap().0;
+        let entry_id: Uuid = state["entries"][0]["id"].as_str().unwrap().parse().unwrap();
+        assert_eq!(state["entries"][0]["hp"], Value::Null);
+
+        let mut set = req("set_hp");
+        set.entry_id = Some(entry_id);
+        set.hp = Some(7);
+        state = apply_initiative_op(state, &set, &[]).unwrap().0;
+        assert_eq!(state["entries"][0]["hp"], 7);
+        assert_eq!(state["entries"][0]["max_hp"], 7);
+    }
+
+    #[test]
+    fn set_conditions_normalizes_and_dedupes() {
+        let mut r = req("add");
+        r.name = Some("Goblin".into());
+        let mut state = apply_initiative_op(empty_state(), &r, &[10]).unwrap().0;
+        let entry_id: Uuid = state["entries"][0]["id"].as_str().unwrap().parse().unwrap();
+
+        let mut set = req("set_conditions");
+        set.entry_id = Some(entry_id);
+        set.conditions = Some(vec![
+            "  Poisoned ".into(),
+            "poisoned".into(),
+            "".into(),
+            "stunned".into(),
+        ]);
+        state = apply_initiative_op(state, &set, &[]).unwrap().0;
+        assert_eq!(state["entries"][0]["conditions"], json!(["poisoned", "stunned"]));
     }
 
     #[test]
