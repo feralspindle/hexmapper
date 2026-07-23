@@ -6,9 +6,13 @@ const mocks = vi.hoisted(() => ({
   sessionStore: {
     initiativeState: { entries: [], active_id: null, round: 1 },
     initiativeOp: vi.fn(),
+    addFoesToInitiative: vi.fn(),
   },
   characterStore: {
     characters: [],
+  },
+  statBlockStore: {
+    monsters: [],
   },
 }))
 
@@ -17,6 +21,9 @@ vi.mock('@/stores/sessionStore.js', () => ({
 }))
 vi.mock('@/stores/characterStore.js', () => ({
   useCharacterStore: () => mocks.characterStore,
+}))
+vi.mock('@/stores/statBlockStore.js', () => ({
+  useStatBlockStore: () => mocks.statBlockStore,
 }))
 
 const entry = (overrides = {}) => ({
@@ -32,7 +39,9 @@ describe('InitiativeSection', () => {
   beforeEach(() => {
     mocks.sessionStore.initiativeState = { entries: [], active_id: null, round: 1 }
     mocks.characterStore.characters = []
+    mocks.statBlockStore.monsters = []
     mocks.sessionStore.initiativeOp.mockReset()
+    mocks.sessionStore.addFoesToInitiative.mockReset()
   })
 
   test('renders the order sorted by initiative, active row highlighted', () => {
@@ -53,22 +62,50 @@ describe('InitiativeSection', () => {
     expect(wrapper.text()).toContain('round 2')
   })
 
-  test('"3 goblins" becomes an add_group op', async () => {
+  test('"3 goblins" adds three foes', async () => {
     const wrapper = mount(InitiativeSection)
 
     await wrapper.get('[data-testid="initiative-monster-input"]').setValue('3 goblins')
     await wrapper.get('[data-testid="initiative-add-monsters"]').trigger('click')
 
-    expect(mocks.sessionStore.initiativeOp).toHaveBeenCalledWith('add_group', { name: 'goblins', count: 3 })
+    expect(mocks.sessionStore.addFoesToInitiative).toHaveBeenCalledWith({
+      name: 'goblins',
+      count: 3,
+      statBlockId: null,
+      hp: null,
+      maxHp: null,
+    })
   })
 
-  test('a bare name becomes a single monster add', async () => {
+  test('a bare name becomes a single foe', async () => {
     const wrapper = mount(InitiativeSection)
 
     await wrapper.get('[data-testid="initiative-monster-input"]').setValue('ogre')
     await wrapper.get('[data-testid="initiative-add-monsters"]').trigger('click')
 
-    expect(mocks.sessionStore.initiativeOp).toHaveBeenCalledWith('add', { kind: 'monster', name: 'ogre' })
+    expect(mocks.sessionStore.addFoesToInitiative).toHaveBeenCalledWith({
+      name: 'ogre',
+      count: 1,
+      statBlockId: null,
+      hp: null,
+      maxHp: null,
+    })
+  })
+
+  test('a name matching a codex monster links it and starts hp full', async () => {
+    mocks.statBlockStore.monsters = [{ id: 'b1', data: { name: 'Goblin', maxHp: 4 } }]
+    const wrapper = mount(InitiativeSection)
+
+    await wrapper.get('[data-testid="initiative-monster-input"]').setValue('2 goblins')
+    await wrapper.get('[data-testid="initiative-add-monsters"]').trigger('click')
+
+    expect(mocks.sessionStore.addFoesToInitiative).toHaveBeenCalledWith({
+      name: 'Goblin',
+      count: 2,
+      statBlockId: 'b1',
+      hp: 4,
+      maxHp: 4,
+    })
   })
 
   test('add party skips characters already in the order', async () => {

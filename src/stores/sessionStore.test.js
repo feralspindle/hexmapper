@@ -286,6 +286,33 @@ describe('sessionStore', () => {
     expect(store.initiativeState.entries).toHaveLength(0)
   })
 
+  test('addFoesToInitiative numbers instances past what is already in the order', async () => {
+    kit.api['post /sessions/sess-1/join'] = sessionRow()
+    const store = useSessionStore()
+    await store.joinSession('sess-1')
+
+    const sent = []
+    kit.api['post /sessions/sess-1/initiative'] = body => {
+      sent.push(body)
+      return { entries: [], active_id: null, round: 1 }
+    }
+
+    await store.addFoesToInitiative({ name: 'Goblin', statBlockId: 'b1', hp: 4, maxHp: 4 })
+    expect(sent.at(-1)).toMatchObject({ op: 'add', kind: 'monster', name: 'Goblin', stat_block_id: 'b1', hp: 4, max_hp: 4 })
+
+    store.initiativeState = {
+      entries: [
+        { id: 'e1', kind: 'monster', name: 'Goblin' },
+        { id: 'e2', kind: 'monster', name: 'Goblin 2' },
+        { id: 'e3', kind: 'pc', name: 'Ranna' },
+      ],
+      active_id: null,
+      round: 1,
+    }
+    await store.addFoesToInitiative({ name: 'Goblin', count: 2, statBlockId: 'b1', hp: 4, maxHp: 4 })
+    expect(sent.slice(-2).map(body => body.name)).toEqual(['Goblin 3', 'Goblin 4'])
+  })
+
   test('advanceCrawlRound is optimistic and reverts on failure', async () => {
     kit.api['post /sessions/sess-1/join'] = sessionRow({ crawl_round: 4 })
     const store = useSessionStore()
