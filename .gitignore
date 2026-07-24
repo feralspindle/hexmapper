@@ -57,3 +57,4 @@ deploy/environment-overhaul-plan.md
 deploy/reconcile-drift.md
 deploy/staging-provisioning.md
 .dev-stack/*
+.session-logs/
