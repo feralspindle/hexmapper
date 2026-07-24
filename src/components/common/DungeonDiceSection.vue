@@ -685,7 +685,7 @@ watch(
 }
 
 .ds-roll-streak {
-    display: inline-flex;
+    display: none;
     align-items: center;
     gap: 3px;
     padding: 1px 5px;
