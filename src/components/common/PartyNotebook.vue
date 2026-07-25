@@ -2,7 +2,8 @@
   <div
     v-if="visible"
     class="pn-panel"
-    :style="{ left: pos.x + 'px', top: pos.y + 'px', width: size.w + 'px', height: size.h + 'px' }"
+    :style="{ left: pos.x + 'px', top: pos.y + 'px', width: size.w + 'px', height: size.h + 'px', zIndex }"
+    @mousedown.capture="bringToFront"
   >
     <div class="pn-head" @mousedown="startDrag">
       <div class="ds-grip">
@@ -745,6 +746,7 @@ import { useVaultStore } from '@/stores/vaultStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
+import { usePanelStack } from '@/composables/useFloatingPanel.js'
 import { createPatchDebouncer } from '@/composables/usePatchDebounce.js'
 import { playerTextColorFor } from '@/composables/usePlayerColor.js'
 import { useQuestToast } from '@/composables/useQuestToast.js'
@@ -766,6 +768,7 @@ const POS_KEY  = 'dm.partyNotebook.pos'
 const SIZE_KEY = 'dm.partyNotebook.size'
 const pos  = ref({ x: 80, y: 140 })
 const size = ref({ w: 640, h: 600 })
+const { zIndex, bringToFront } = usePanelStack()
 
 onMounted(async () => {
   try {

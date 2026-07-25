@@ -3,7 +3,8 @@
     v-if="visible && isSoloOrCoop"
     class="stk-panel"
     data-testid="solo-toolkit-panel"
-    :style="{ left: `${pos.x}px`, top: `${pos.y}px`, width: `${size.w}px`, height: `${size.h}px` }"
+    :style="{ left: `${pos.x}px`, top: `${pos.y}px`, width: `${size.w}px`, height: `${size.h}px`, zIndex }"
+    @mousedown.capture="bringToFront"
   >
     <div class="ds-party-head" @mousedown="startDrag">
       <div class="ds-grip">
@@ -106,7 +107,7 @@ const isSoloOrCoop = computed(() => sessionStore.playMode === 'gm_less')
 
 const tab = ref('combat')
 
-const { pos, size, startDrag, startResize } = useFloatingPanel({
+const { pos, size, zIndex, bringToFront, startDrag, startResize } = useFloatingPanel({
   storagePrefix: 'dm.soloToolkit',
   defaultPos: { x: 120, y: 96 },
   defaultSize: { w: 460, h: Math.max(520, Math.min(760, window.innerHeight - 120)) },
