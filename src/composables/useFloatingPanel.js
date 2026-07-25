@@ -1,10 +1,43 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
+// shared z-order for every floating panel. ranks are reassigned on each
+// change so panels stay inside 90..(90+n-1), below the mobile full-bleed
+// override (95 !important) and live cursors (100)
+const PANEL_Z_BASE = 90
+const panelStack = []
+
+function restackPanels() {
+  panelStack.forEach((z, i) => { z.value = PANEL_Z_BASE + i })
+}
+
+export function usePanelStack() {
+  const zIndex = ref(PANEL_Z_BASE)
+  panelStack.push(zIndex)
+  restackPanels()
+
+  function bringToFront() {
+    const i = panelStack.indexOf(zIndex)
+    if (i === -1 || i === panelStack.length - 1) return
+    panelStack.splice(i, 1)
+    panelStack.push(zIndex)
+    restackPanels()
+  }
+
+  onUnmounted(() => {
+    const i = panelStack.indexOf(zIndex)
+    if (i !== -1) panelStack.splice(i, 1)
+    restackPanels()
+  })
+
+  return { zIndex, bringToFront }
+}
+
 export function useFloatingPanel({ storagePrefix, defaultPos, defaultSize, minW = 280, maxW = 600, minH = 200 }) {
   const posKey = `${storagePrefix}.pos`
   const sizeKey = `${storagePrefix}.size`
   const pos = ref({ ...defaultPos })
   const size = ref({ ...defaultSize })
+  const { zIndex, bringToFront } = usePanelStack()
 
   onMounted(() => {
     try {
@@ -62,5 +95,5 @@ export function useFloatingPanel({ storagePrefix, defaultPos, defaultSize, minW 
     window.removeEventListener('mouseup', onResizeUp)
   })
 
-  return { pos, size, startDrag, startResize }
+  return { pos, size, zIndex, bringToFront, startDrag, startResize }
 }
