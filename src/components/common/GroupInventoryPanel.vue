@@ -1,5 +1,5 @@
 <template>
-    <div v-if="visible" class="ds-party-panel ds-inv-panel" :style="{ left: pos.x + 'px', top: pos.y + 'px' }">
+    <div v-if="visible" class="ds-party-panel ds-inv-panel" :style="{ left: pos.x + 'px', top: pos.y + 'px', zIndex }" @mousedown.capture="bringToFront">
         <div class="ds-party-head" @mousedown="startDrag">
             <div class="ds-grip">
                 <span v-for="i in 6" :key="i" />
@@ -99,6 +99,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useGroupInventory } from '@/composables/useGroupInventory.js'
+import { usePanelStack } from '@/composables/useFloatingPanel.js'
 
 const characterStore = useCharacterStore()
 const { visible, close } = useGroupInventory()
@@ -110,6 +111,7 @@ const DEFAULT_POS = { x: 80, y: 240 }
 
 const pos = ref({ ...DEFAULT_POS })
 const collapsed = ref(false)
+const { zIndex, bringToFront } = usePanelStack()
 
 onMounted(() => {
     try {

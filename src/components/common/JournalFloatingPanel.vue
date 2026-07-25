@@ -3,7 +3,8 @@
     v-if="visible && isSoloOrCoop"
     class="journal-window"
     data-testid="journal-panel"
-    :style="{ left: `${pos.x}px`, top: `${pos.y}px`, width: `${size.w}px`, height: `${size.h}px` }"
+    :style="{ left: `${pos.x}px`, top: `${pos.y}px`, width: `${size.w}px`, height: `${size.h}px`, zIndex }"
+    @mousedown.capture="bringToFront"
   >
     <div class="ds-party-head" @mousedown="startDrag">
       <div class="ds-grip">
@@ -43,7 +44,7 @@ const sessionStore = useSessionStore()
 const { visible, close } = useJournalPanel()
 const isSoloOrCoop = computed(() => sessionStore.playMode === 'gm_less')
 
-const { pos, size, startDrag, startResize } = useFloatingPanel({
+const { pos, size, zIndex, bringToFront, startDrag, startResize } = useFloatingPanel({
   storagePrefix: 'dm.journal',
   defaultPos: { x: 112, y: 88 },
   defaultSize: { w: 560, h: Math.max(500, Math.min(760, window.innerHeight - 128)) },
