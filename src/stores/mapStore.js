@@ -211,6 +211,8 @@ export const useMapStore = defineStore('map', () => {
     const dbPatch = assignDbFields({}, patch, MAP_IMAGE_FIELD_MAP)
     assignDbFields(dbPatch, patch, {
       mapGridRotation: 'map_grid_rotation',
+      mapGridOffsetX:  'map_grid_offset_x',
+      mapGridOffsetY:  'map_grid_offset_y',
       mapHexWidth:     'map_hex_width',
       mapHexHeight:    'map_hex_height',
       mapGridCols:     'map_grid_cols',
