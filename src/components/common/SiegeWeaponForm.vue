@@ -60,8 +60,8 @@
     </label>
 
     <div class="sw-form-actions">
-      <button class="ds-btn tiny" type="submit" data-testid="siege-form-save">{{ submitLabel }}</button>
-      <button class="ds-btn tiny ghost" type="button" @click="$emit('cancel')">Cancel</button>
+      <button class="sw-submit-btn" type="submit" data-testid="siege-form-save">{{ submitLabel }}</button>
+      <button class="sw-cancel-btn" type="button" title="Cancel" @click="$emit('cancel')">&times;</button>
     </div>
   </form>
 </template>
@@ -119,14 +119,14 @@ function submit() {
 </script>
 
 <style scoped>
+/* mirrors the vault tab's pv-add-form / pv-input conventions */
 .sw-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--rule);
-  background: var(--surface-2, #ece0c4);
-  margin-bottom: 8px;
+  gap: 6px;
+  padding: 8px 2px 2px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--rule);
 }
 .sw-form-grid {
   display: grid;
@@ -137,52 +137,71 @@ function submit() {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-mute, #8a7a68);
+  min-width: 0;
 }
 .sw-field--name {
   grid-column: 1 / -1;
 }
+.sw-field > span {
+  font-family: var(--font-zine);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
 .sw-field input,
 .sw-field textarea {
-  background: var(--paper-2, #e3d4b3);
-  border: 1px solid var(--rule);
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
   border-radius: 2px;
-  padding: 3px 6px;
-  font-family: var(--font-body, serif);
-  font-size: 12px;
-  color: var(--ink, #1a1410);
+  padding: 5px 8px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--ink);
   outline: none;
 }
 .sw-field input:focus,
 .sw-field textarea:focus {
-  border-color: var(--gold, #c8a827);
+  border-color: var(--ink-soft);
+}
+.sw-field textarea {
+  resize: vertical;
+  min-height: 38px;
 }
 .sw-mono {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-family: var(--font-mono);
 }
 .sw-check {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
-  letter-spacing: 0.12em;
+  font-family: var(--font-zine);
+  font-size: 13px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-mute, #8a7a68);
+  color: var(--ink-soft);
+  cursor: default;
+}
+.sw-check input[type='checkbox'] {
+  accent-color: var(--accent-2);
 }
 .sw-ammo-input {
-  width: 52px;
-  background: var(--paper-2, #e3d4b3);
-  border: 1px solid var(--rule);
+  width: 60px;
+  flex: 0 0 60px;
+  text-align: center;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
   border-radius: 2px;
-  padding: 2px 4px;
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  color: var(--ink, #1a1410);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink);
+  outline: none;
+}
+.sw-ammo-input:focus {
+  border-color: var(--ink-soft);
 }
 .sw-crew-edit {
   display: flex;
@@ -191,30 +210,64 @@ function submit() {
   gap: 4px;
 }
 .sw-crew-edit-label {
-  font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
-  letter-spacing: 0.12em;
+  font-family: var(--font-zine);
+  font-size: 13px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-mute, #8a7a68);
+  color: var(--ink-soft);
   margin-right: 2px;
 }
 .sw-crew-opt {
-  background: var(--paper-2, #e3d4b3);
-  border: 1px solid var(--rule);
-  border-radius: 3px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
   padding: 2px 7px;
-  font-family: var(--font-body, serif);
-  font-size: 11px;
-  color: var(--ink-mute, #8a7a68);
-  cursor: pointer;
+  border-radius: 2px;
+  cursor: default;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sw-crew-opt.picked {
-  border-color: var(--gold, #c8a827);
-  color: var(--ink, #1a1410);
-  background: color-mix(in srgb, var(--gold, #c8a827) 18%, transparent);
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
 .sw-form-actions {
   display: flex;
   gap: 6px;
 }
+.sw-submit-btn {
+  flex: 1;
+  background: var(--ink);
+  color: var(--paper);
+  border: none;
+  font-family: var(--font-zine);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 8px;
+  cursor: default;
+  border-radius: 2px;
+  transition: opacity 0.12s;
+}
+.sw-submit-btn:hover { opacity: 0.8; }
+.sw-cancel-btn {
+  background: none;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-mute);
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  cursor: default;
+  border-radius: 2px;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+.sw-cancel-btn:hover { color: var(--accent); border-color: var(--accent); }
 </style>

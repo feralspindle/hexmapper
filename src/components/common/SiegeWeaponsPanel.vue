@@ -1,9 +1,9 @@
 <template>
   <div class="sw-root" data-testid="siege-panel">
     <div class="sw-bar">
-      <span class="sw-count">{{ siegeStore.weapons.length }} siege weapon{{ siegeStore.weapons.length === 1 ? '' : 's' }}</span>
+      <span class="sw-title">{{ siegeStore.weapons.length }} siege weapon{{ siegeStore.weapons.length === 1 ? '' : 's' }}</span>
       <button
-        class="ds-btn tiny ghost"
+        class="sw-add-btn"
         data-testid="siege-new"
         @click="showNew = !showNew"
       >
@@ -15,6 +15,7 @@
 
       <SiegeWeaponForm
         v-if="showNew"
+        class="sw-form--top"
         submit-label="Add"
         @save="create"
         @cancel="showNew = false"
@@ -69,7 +70,7 @@
         </button>
         <button
           v-else-if="myCharacter && isCrewed(w, myCharacter.id)"
-          class="ds-btn tiny ghost sw-crew-btn"
+          class="sw-crew-btn"
           data-testid="siege-leave"
           @click="siegeStore.leaveCrew(w.id, myCharacter.id)"
         >
@@ -81,7 +82,7 @@
 
       <div class="sw-actions">
         <button
-          class="ds-btn tiny sw-fire"
+          class="sw-fire"
           :disabled="!canFire(w) || siegeStore.firingId !== null"
           :title="fireTitle(w)"
           data-testid="siege-fire"
@@ -90,7 +91,7 @@
           <i class="fa-solid fa-explosion" /> FIRE
         </button>
         <button
-          class="ds-btn tiny ghost"
+          class="sw-action"
           :disabled="!canReload(w)"
           :title="reloadTitle(w)"
           data-testid="siege-reload"
@@ -99,13 +100,13 @@
           Reload
         </button>
         <div class="sw-hp-controls">
-          <button class="ds-btn tiny ghost" title="Deal 5 damage" @click="siegeStore.damage(w.id, 5)">−5</button>
-          <button class="ds-btn tiny ghost" title="Deal 1 damage" @click="siegeStore.damage(w.id, 1)">−1</button>
-          <button class="ds-btn tiny ghost" title="Repair 1" @click="siegeStore.damage(w.id, -1)">+1</button>
-          <button class="ds-btn tiny ghost" title="Repair 5" @click="siegeStore.damage(w.id, -5)">+5</button>
+          <button class="sw-action sw-action--hp" title="Deal 5 damage" @click="siegeStore.damage(w.id, 5)">−5</button>
+          <button class="sw-action sw-action--hp" title="Deal 1 damage" @click="siegeStore.damage(w.id, 1)">−1</button>
+          <button class="sw-action sw-action--hp" title="Repair 1" @click="siegeStore.damage(w.id, -1)">+1</button>
+          <button class="sw-action sw-action--hp" title="Repair 5" @click="siegeStore.damage(w.id, -5)">+5</button>
         </div>
-        <button class="ds-btn tiny ghost" data-testid="siege-edit" @click="startEdit(w)">Edit</button>
-        <button class="ds-btn tiny danger" title="Remove weapon" data-testid="siege-delete" @click="siegeStore.deleteWeapon(w.id)">
+        <button class="sw-action" data-testid="siege-edit" @click="startEdit(w)">Edit</button>
+        <button class="sw-action sw-action--danger" title="Remove weapon" data-testid="siege-delete" @click="siegeStore.deleteWeapon(w.id)">
           <i class="fa-solid fa-trash-can" />
         </button>
       </div>
@@ -167,7 +168,7 @@ function canReload(w) {
   return !w.is_loaded && (w.hp ?? 0) > 0 && crewCount(w) >= (w.crew_required ?? 0)
 }
 function fireTitle(w) {
-  if ((w.hp ?? 0) <= 0) return 'Wrecked — repair it first'
+  if ((w.hp ?? 0) <= 0) return 'Wrecked: repair it first'
   if (!w.is_loaded) return 'Not loaded'
   if (w.ammo === 0) return 'Out of ammo'
   return `Attack 1d20${fmtBonus(w.attack_bonus ?? 0)} then ${w.damage_notation}`
@@ -199,50 +200,66 @@ async function saveEdit(w, patch) {
 </script>
 
 <style scoped>
+/* mirrors the vault tab's pv-* conventions in PartyNotebook.vue so the siege
+   tab reads as part of the same notebook */
 .sw-root {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 .sw-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 7px 12px 6px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--paper-2);
 }
-.sw-count {
-  font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
+.sw-title {
+  font-family: var(--font-zine);
+  font-size: 14px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--ink-mute, #8a7a68);
+  color: var(--ink-soft);
 }
+.sw-add-btn {
+  font-family: var(--font-zine);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  background: none;
+  border: none;
+  cursor: default;
+  padding: 2px 0;
+}
+.sw-add-btn:hover { color: var(--accent); }
 .sw-error {
-  font-family: var(--font-body, serif);
-  font-size: 12px;
-  color: var(--accent, #8a1c1c);
-  border: 1px solid color-mix(in srgb, var(--accent, #8a1c1c) 35%, transparent);
-  background: color-mix(in srgb, var(--accent, #8a1c1c) 8%, transparent);
-  padding: 4px 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--accent);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--rule);
 }
 .sw-empty {
-  font-family: var(--font-body, serif);
+  font-family: var(--font-body);
   font-style: italic;
-  font-size: 13px;
-  color: var(--ink-mute, #8a7a68);
+  font-size: 18px;
+  color: var(--ink-soft);
   text-align: center;
-  padding: 12px 0;
+  padding: 12px 12px;
 }
 .sw-card {
-  border: 1px solid var(--rule);
-  background: var(--paper-2, #e3d4b3);
-  padding: 8px 10px;
+  margin: 8px 10px 0;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper);
+  padding: 10px 10px 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .sw-card--destroyed {
-  opacity: 0.6;
-  filter: grayscale(0.5);
+  opacity: 0.55;
 }
 .sw-title-row {
   display: flex;
@@ -251,49 +268,50 @@ async function saveEdit(w, patch) {
   flex-wrap: wrap;
 }
 .sw-name {
-  font-family: var(--font-display, 'IM Fell English', serif);
-  font-size: 15px;
-  color: var(--ink, #1a1410);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 19px;
+  color: var(--ink);
 }
 .sw-notation {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 11px;
-  color: #b8541c;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--accent-2);
+  flex: 0 0 auto;
 }
 .sw-atk {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 10px;
-  color: var(--ink-mute, #8a7a68);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink-soft);
+  flex: 0 0 auto;
 }
 .sw-status-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 2px;
 }
 .sw-loaded {
-  font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
-  letter-spacing: 0.12em;
+  font-family: var(--font-zine);
+  font-size: 13px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-mute, #8a7a68);
-  border: 1px solid var(--rule);
-  padding: 1px 6px;
-  border-radius: 3px;
+  color: var(--ink-mute);
+  border: 1px solid var(--ink-mute);
+  border-radius: 2px;
+  padding: 1px 4px;
 }
 .sw-loaded.is-loaded {
-  color: #2c5e2e;
-  border-color: color-mix(in srgb, #2c5e2e 45%, transparent);
+  color: var(--accent-3);
+  border-color: var(--accent-3);
 }
 .sw-card--destroyed .sw-loaded.is-loaded {
-  color: var(--ink-mute, #8a7a68);
-  border-color: var(--rule);
+  color: var(--ink-mute);
+  border-color: var(--ink-mute);
 }
 .sw-ammo {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 10px;
-  color: var(--ink-mute, #8a7a68);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink-soft);
 }
 .sw-hp-row {
   display: flex;
@@ -303,73 +321,125 @@ async function saveEdit(w, patch) {
 .sw-hp-bar {
   flex: 1;
   height: 6px;
-  background: var(--surface-2, #ece0c4);
-  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
   overflow: hidden;
 }
 .sw-hp-fill {
   height: 100%;
-  background: #2c5e2e;
-  transition: width 0.2s ease;
+  background: var(--accent-3);
+  transition: width 0.2s ease-out;
 }
 .sw-hp-fill.low {
-  background: var(--accent, #8a1c1c);
+  background: var(--accent);
 }
 .sw-hp-label {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 9px;
-  color: var(--ink-mute, #8a7a68);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink-soft);
   flex-shrink: 0;
 }
 .sw-crew-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 .sw-crew-label {
-  font-family: var(--font-zine, 'Special Elite', serif);
-  font-size: 9px;
-  letter-spacing: 0.12em;
+  font-family: var(--font-zine);
+  font-size: 13px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-mute, #8a7a68);
+  color: var(--ink-soft);
 }
 .sw-crew-label.is-short {
-  color: #b8541c;
+  color: var(--accent-2);
 }
 .sw-crew-chip {
-  font-family: var(--font-body, serif);
-  font-size: 11px;
-  color: var(--ink, #1a1410);
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  padding: 0 6px;
-  background: var(--surface-2, #ece0c4);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sw-crew-btn {
-  margin-left: 2px;
+  background: none;
+  border: none;
+  color: var(--ink-mute);
+  font-family: var(--font-zine);
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: default;
+  padding: 2px 4px;
+  flex: 0 0 auto;
 }
+.sw-crew-btn:hover { color: var(--accent); }
 .sw-notes {
-  font-family: var(--font-body, serif);
-  font-size: 12px;
-  color: var(--ink-soft, #5a4a3a);
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--ink-soft);
   margin: 0;
-  font-style: italic;
 }
 .sw-actions {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex-wrap: wrap;
+  padding-top: 3px;
 }
 .sw-fire {
-  font-family: var(--font-zine, 'Special Elite', serif);
-  letter-spacing: 0.14em;
-  color: var(--accent, #8a1c1c) !important;
-  border-color: color-mix(in srgb, var(--accent, #8a1c1c) 55%, transparent) !important;
+  background: var(--accent, #a0392a);
+  color: white;
+  border: none;
+  font-family: var(--font-zine);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 2px;
+  cursor: default;
+  transition: opacity 0.12s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
-.sw-fire:not(:disabled):hover {
-  background: color-mix(in srgb, var(--accent, #8a1c1c) 16%, transparent) !important;
+.sw-fire:disabled { opacity: 0.4; cursor: not-allowed; }
+.sw-fire:not(:disabled):hover { opacity: 0.8; }
+.sw-action {
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font-family: var(--font-zine);
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: default;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+.sw-action:not(:disabled):hover {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.sw-action:disabled { opacity: 0.35; cursor: not-allowed; }
+.sw-action--danger:not(:disabled):hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.sw-action--hp {
+  padding: 4px 6px;
 }
 .sw-hp-controls {
   display: flex;
@@ -377,5 +447,13 @@ async function saveEdit(w, patch) {
   padding: 0 4px;
   border-left: 1px solid var(--rule);
   border-right: 1px solid var(--rule);
+}
+/* the create form sits directly under the section bar like pv-add-form; the
+   edit form lives inside a card and gets the dashed divider instead */
+.sw-form--top {
+  margin: 0;
+  padding: 8px 12px 6px;
+  border-top: none;
+  border-bottom: 1px solid var(--rule);
 }
 </style>
