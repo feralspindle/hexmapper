@@ -121,6 +121,9 @@ values ('10000000-0000-0000-0000-000000000001', 'Deposit');
 insert into public.party_vault_activity (session_id, user_id, verb, what)
 values ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'stored', 'Rope in Chest');
 
+insert into public.siege_weapons (session_id, name, damage_notation, attack_bonus, hp, max_hp, crew_required)
+values ('10000000-0000-0000-0000-000000000001', 'Ballista', '3d6!', 3, 10, 10, 1);
+
 insert into public.party_calendar_settings (session_id)
 values ('10000000-0000-0000-0000-000000000001');
 
