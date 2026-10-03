@@ -850,7 +850,12 @@
                                         </div>
                                         <div class="cs-list-sub">
                                             <template v-if="atk.statKey || atk.modifiers.length">
-                                                <span v-if="atk.statKey" class="cs-atk-stat-badge">{{ atk.statKey }} {{ fmtSigned(atkStatBonus(atk)) }}</span>
+                                                <span
+                                                    v-if="atk.statKey"
+                                                    class="cs-atk-mod-chip"
+                                                    :class="{ negative: atkStatBonus(atk) < 0 }"
+                                                    :title="`Linked stat (${atk.statKey})`"
+                                                >{{ atk.statKey }} {{ fmtSigned(atkStatBonus(atk)) }}</span>
                                                 <span
                                                     v-for="m in atk.modifiers"
                                                     :key="m.id"
@@ -858,7 +863,7 @@
                                                     :class="{ negative: (Number(m.value) || 0) < 0 }"
                                                     :title="`Labeled modifier: ${m.label}`"
                                                 >{{ m.label }} {{ fmtSigned(m.value) }}</span>
-                                                <span class="cs-atk-mod-total">{{ fmtSigned(atkEffectiveBonus(atk)) }}</span>
+                                                <span class="cs-atk-mod-total">= {{ fmtSigned(atkEffectiveBonus(atk)) }}</span>
                                             </template>
                                             <span v-else>{{ atk.raw.split(":").slice(1).join(":").trim() }}</span>
                                         </div>
@@ -3517,12 +3522,17 @@ button.cs-stat-val:hover {
     align-items: center;
     gap: 2px 5px;
 }
-.cs-atk-stat-badge {
+.cs-atk-mod-total {
     font-family: var(--font-mono, monospace);
     font-size: 11px;
-    color: var(--accent, #8a1c1c);
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.03em;
+    color: var(--paper, #ede1c7);
+    background: var(--ink, #1a1410);
+    border-radius: 2px;
+    padding: 1px 5px;
+    line-height: 1.4;
+    white-space: nowrap;
 }
 .cs-atk-mod-chip {
     font-family: var(--font-mono, monospace);
@@ -3540,13 +3550,6 @@ button.cs-stat-val:hover {
 .cs-atk-mod-chip.negative {
     color: var(--accent, #8a1c1c);
     border-color: color-mix(in srgb, var(--accent, #8a1c1c) 35%, transparent);
-}
-.cs-atk-mod-total {
-    font-family: var(--font-mono, monospace);
-    font-size: 11px;
-    color: var(--accent, #8a1c1c);
-    font-weight: 700;
-    letter-spacing: 0.03em;
 }
 .cs-atk-mod-editor {
     display: flex;

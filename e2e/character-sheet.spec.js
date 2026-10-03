@@ -115,7 +115,7 @@ test.describe.serial('character sheet', () => {
       await expect(crossbow).toContainText('STR +1')
       await expect(crossbow).toContainText('talent +2')
       await expect(crossbow).toContainText('debuff -1')
-      await expect(crossbow.locator('.cs-atk-mod-total')).toHaveText('+3')
+      await expect(crossbow.locator('.cs-atk-mod-total')).toHaveText('= +3')
 
       // chips wrap instead of pushing the action columns out of the sheet
       const sheetBox = await page.getByTestId('char-sheet').boundingBox()
