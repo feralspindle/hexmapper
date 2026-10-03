@@ -77,4 +77,54 @@ test.describe.serial('character sheet', () => {
       await room.close()
     }
   })
+
+  test('attack modifiers stack with the linked stat and the roll uses the total', async ({ browser }) => {
+    const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
+      mode: 'fow',
+      name: uniqueCampaignName('E2E Attack Mods'),
+      contextOptions,
+    })
+
+    try {
+      const page = room.player1.page
+      await importCharacterJson(page, sampleCharacterJson, 'Shazkhag')
+      await openCharacterSheet(page)
+      await page.getByTestId('char-tab-combat').click()
+
+      const crossbow = page.locator('.cs-list-item').filter({ hasText: 'CROSSBOW' })
+      await crossbow.getByTitle('Edit').click()
+
+      // in edit mode the label becomes an input value, so the text filter no
+      // longer matches - target the (single) open edit form instead
+      const editForm = page.locator('.cs-list-item .cs-form-stack')
+
+      // link STR (13 -> +1) and stack a talent +2 and a debuff -1
+      await editForm.locator('select').selectOption('STR')
+      await page.getByTestId('atk-mod-add').click()
+      await page.getByTestId('atk-mod-label').last().fill('talent')
+      await page.getByTestId('atk-mod-value').last().fill('2')
+      await page.getByTestId('atk-mod-add').click()
+      await page.getByTestId('atk-mod-label').last().fill('debuff')
+      await page.getByTestId('atk-mod-value').last().fill('-1')
+      await editForm.getByRole('button', { name: 'Save' }).click()
+
+      // +1 stat, +2 talent, -1 debuff = +2
+      await expect(crossbow).toContainText('STR +1')
+      await expect(crossbow).toContainText('talent +2')
+      await expect(crossbow).toContainText('debuff -1')
+      await expect(crossbow.locator('.cs-atk-mod-total')).toHaveText('+2')
+
+      // the attack roll carries the stacked total
+      await crossbow.locator('.cs-list-main').first().click()
+      await expect(page.getByTestId('dice-roll-row').first()).toContainText('1d20+2')
+
+      // untouched attacks keep using the description bonus (+2 from "+2/+1")
+      const dagger = page.locator('.cs-list-item').filter({ hasText: 'DAGGER' })
+      await dagger.locator('.cs-list-main').first().click()
+      await expect(page.getByTestId('dice-roll-row').first()).toContainText('DAGGER (OBSIDIAN)')
+      await expect(page.getByTestId('dice-roll-row').first()).toContainText('1d20+2')
+    } finally {
+      await room.close()
+    }
+  })
 })

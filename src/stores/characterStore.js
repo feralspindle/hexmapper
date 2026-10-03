@@ -30,6 +30,23 @@ export function parseAttack(str) {
   return { label, bonus, raw: str }
 }
 
+// labeled attack modifiers stack on top of the linked stat (if any). the
+// description-parsed bonus is only used when there is no stat AND no labeled
+// modifiers - the description stays visible either way
+export function effectiveAttackBonus(atk, stats) {
+  const statLinked = !!atk.statKey && stats?.[atk.statKey] !== undefined
+  const modifiers = Array.isArray(atk.modifiers) ? atk.modifiers : []
+  const labeledSum = modifiers.reduce((sum, m) => sum + (Number(m?.value) || 0), 0)
+  if (statLinked) return statMod(stats[atk.statKey]) + labeledSum
+  if (modifiers.length) return labeledSum
+  return atk.bonus ?? 0
+}
+
+export function fmtSigned(n) {
+  const value = Math.round(Number(n) || 0)
+  return value >= 0 ? `+${value}` : String(value)
+}
+
 const CLIENT_ID = crypto.randomUUID()
 
 const SHEET_LOG_EXCLUDED_FIELDS = new Set(['gear', 'attacks', 'renown', 'renownLog', 'ledger'])
