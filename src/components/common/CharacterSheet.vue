@@ -3483,6 +3483,7 @@ button.cs-stat-val:hover {
 }
 .cs-list-main {
     flex: 1;
+    min-width: 0;
     text-align: left;
     padding: 6px 8px;
     background: transparent;
@@ -3511,6 +3512,10 @@ button.cs-stat-val:hover {
     font-size: 12px;
     color: var(--ink-soft, #6b5e4e);
     margin-top: 1px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 5px;
 }
 .cs-atk-stat-badge {
     font-family: var(--font-mono, monospace);

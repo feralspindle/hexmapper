@@ -98,7 +98,7 @@ test.describe.serial('character sheet', () => {
       // longer matches - target the (single) open edit form instead
       const editForm = page.locator('.cs-list-item .cs-form-stack')
 
-      // link STR (13 -> +1) and stack a talent +2 and a debuff -1
+      // link STR (13 -> +1) and stack a talent +2, a debuff -1, and a long one
       await editForm.locator('select').selectOption('STR')
       await page.getByTestId('atk-mod-add').click()
       await page.getByTestId('atk-mod-label').last().fill('talent')
@@ -106,17 +106,26 @@ test.describe.serial('character sheet', () => {
       await page.getByTestId('atk-mod-add').click()
       await page.getByTestId('atk-mod-label').last().fill('debuff')
       await page.getByTestId('atk-mod-value').last().fill('-1')
+      await page.getByTestId('atk-mod-add').click()
+      await page.getByTestId('atk-mod-label').last().fill('blessing of the war priest')
+      await page.getByTestId('atk-mod-value').last().fill('1')
       await editForm.getByRole('button', { name: 'Save' }).click()
 
-      // +1 stat, +2 talent, -1 debuff = +2
+      // +1 stat, +2 talent, -1 debuff, +1 blessing = +3
       await expect(crossbow).toContainText('STR +1')
       await expect(crossbow).toContainText('talent +2')
       await expect(crossbow).toContainText('debuff -1')
-      await expect(crossbow.locator('.cs-atk-mod-total')).toHaveText('+2')
+      await expect(crossbow.locator('.cs-atk-mod-total')).toHaveText('+3')
+
+      // chips wrap instead of pushing the action columns out of the sheet
+      const sheetBox = await page.getByTestId('char-sheet').boundingBox()
+      const editBox = await crossbow.getByTitle('Edit').boundingBox()
+      expect(editBox.x + editBox.width).toBeLessThanOrEqual(sheetBox.x + sheetBox.width + 1)
+      expect(editBox.x).toBeGreaterThanOrEqual(sheetBox.x - 1)
 
       // the attack roll carries the stacked total
       await crossbow.locator('.cs-list-main').first().click()
-      await expect(page.getByTestId('dice-roll-row').first()).toContainText('1d20+2')
+      await expect(page.getByTestId('dice-roll-row').first()).toContainText('1d20+3')
 
       // untouched attacks keep using the description bonus (+2 from "+2/+1")
       const dagger = page.locator('.cs-list-item').filter({ hasText: 'DAGGER' })
