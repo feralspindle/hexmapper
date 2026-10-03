@@ -109,7 +109,14 @@ test.describe.serial('character sheet', () => {
       await page.getByTestId('atk-mod-add').click()
       await page.getByTestId('atk-mod-label').last().fill('blessing of the war priest')
       await page.getByTestId('atk-mod-value').last().fill('1')
+      await editForm.getByTestId('atk-description').fill('2H, skips move to reload')
       await editForm.getByRole('button', { name: 'Save' }).click()
+
+      // description sits above the chips, the chips carry the math
+      await expect(crossbow.locator('.cs-atk-desc')).toHaveText('2H, skips move to reload')
+      const descBox = await crossbow.locator('.cs-atk-desc').boundingBox()
+      const modsBox = await crossbow.locator('.cs-atk-mods').boundingBox()
+      expect(descBox.y).toBeLessThan(modsBox.y)
 
       // +1 stat, +2 talent, -1 debuff, +1 blessing = +3
       await expect(crossbow).toContainText('STR +1')

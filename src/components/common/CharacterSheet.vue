@@ -848,8 +848,14 @@
                                         >
                                             {{ atk.label }}
                                         </div>
-                                        <div class="cs-list-sub">
-                                            <template v-if="atk.statKey || atk.modifiers.length">
+                                        <div class="cs-list-sub cs-atk-sub">
+                                            <div
+                                                v-if="atk.description"
+                                                class="cs-atk-desc"
+                                                :title="atk.description"
+                                            >{{ atk.description }}</div>
+                                            <div v-else-if="!atk.statKey && !atk.modifiers.length" class="cs-atk-desc">{{ atk.raw.split(":").slice(1).join(":").trim() }}</div>
+                                            <div v-if="atk.statKey || atk.modifiers.length" class="cs-atk-mods">
                                                 <span
                                                     v-if="atk.statKey"
                                                     class="cs-atk-mod-chip"
@@ -864,8 +870,7 @@
                                                     :title="`Labeled modifier: ${m.label}`"
                                                 >{{ m.label }} {{ fmtSigned(m.value) }}</span>
                                                 <span class="cs-atk-mod-total">= {{ fmtSigned(atkEffectiveBonus(atk)) }}</span>
-                                            </template>
-                                            <span v-else>{{ atk.raw.split(":").slice(1).join(":").trim() }}</span>
+                                            </div>
                                         </div>
                                     </button>
                                     <button
@@ -1016,6 +1021,15 @@
                                         v-model="editAtkDraft.raw"
                                         class="cs-input"
                                         placeholder="Name: description…"
+                                        @keyup.enter="saveAtkEdit(atk.idx)"
+                                        @keyup.escape="editingAtkIdx = null"
+                                    />
+                                    <input
+                                        v-model="editAtkDraft.description"
+                                        class="cs-input"
+                                        placeholder="Weapon description (shown above the modifiers)…"
+                                        maxlength="200"
+                                        data-testid="atk-description"
                                         @keyup.enter="saveAtkEdit(atk.idx)"
                                         @keyup.escape="editingAtkIdx = null"
                                     />
@@ -2292,11 +2306,12 @@ const parsedAttacks = computed(() => {
         const disabled = typeof a === "object" ? (a.disabled ?? false) : false;
         const damageDie = typeof a === "object" ? (a.damageDie ?? null) : null;
         const statKey = typeof a === "object" ? (a.statKey ?? null) : null;
+        const description = typeof a === "object" ? (a.description ?? null) : null;
         const modifiers =
             typeof a === "object" && Array.isArray(a.modifiers)
                 ? a.modifiers
                 : [];
-        return { ...parseAttack(raw), idx, disabled, damageDie, statKey, modifiers };
+        return { ...parseAttack(raw), idx, disabled, damageDie, statKey, description, modifiers };
     });
 });
 
@@ -2500,13 +2515,14 @@ function handleSpendLuck() {
 }
 
 const editingAtkIdx = ref(null);
-const editAtkDraft = ref({ raw: "", damageDie: "", statKey: "", modifiers: [] });
+const editAtkDraft = ref({ raw: "", damageDie: "", statKey: "", description: "", modifiers: [] });
 function startAtkEdit(atk) {
     editingAtkIdx.value = atk.idx;
     editAtkDraft.value = {
         raw: atk.raw,
         damageDie: atk.damageDie ?? "",
         statKey: atk.statKey ?? "",
+        description: atk.description ?? "",
         modifiers: (atk.modifiers ?? []).map((m) => ({ ...m })),
     };
 }
@@ -2532,6 +2548,7 @@ function saveAtkEdit(idx) {
         raw: editAtkDraft.value.raw.trim(),
         damageDie: editAtkDraft.value.damageDie.trim() || null,
         statKey: editAtkDraft.value.statKey || null,
+        description: editAtkDraft.value.description.trim() || null,
         modifiers,
     });
     editingAtkIdx.value = null;
@@ -3517,6 +3534,22 @@ button.cs-stat-val:hover {
     font-size: 12px;
     color: var(--ink-soft, #6b5e4e);
     margin-top: 1px;
+}
+.cs-atk-sub {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.cs-atk-desc {
+    font-family: var(--font-body, serif);
+    font-size: 12px;
+    font-style: italic;
+    color: var(--ink-soft, #6b5e4e);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cs-atk-mods {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
