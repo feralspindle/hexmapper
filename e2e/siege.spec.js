@@ -14,7 +14,7 @@ test.describe.serial('siege weapons and exploding dice', () => {
     `Set seeded E2E account env vars to run siege tests: ${missingEnv.join(', ')}`,
   )
 
-  test('GM arms a weapon, crew fires it, rolls sync and reload needs crew', async ({ browser }) => {
+  test('a player arms a weapon, crew fires it, rolls sync and reload needs crew', async ({ browser }) => {
     const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
       mode: 'fow',
       name: uniqueCampaignName('E2E Siege'),
@@ -24,25 +24,27 @@ test.describe.serial('siege weapons and exploding dice', () => {
       const gm = room.gm.page
       await openNotebook(gm, 'siege')
 
-      await gm.getByTestId('siege-new').click()
-      await gm.getByTestId('siege-field-name').fill('Ballista')
-      await gm.getByTestId('siege-field-notation').fill('3d6!')
-      await gm.getByTestId('siege-field-hp').fill('12')
-      await gm.getByTestId('siege-field-ammo-tracked').check()
-      await gm.getByTestId('siege-field-max-ammo').fill('5')
-      await gm.getByTestId('siege-form-save').click()
-
-      await expect(gm.getByTestId('siege-card')).toHaveCount(1)
-      await expect(gm.getByTestId('siege-card')).toContainText('Ballista')
-      await expect(gm.getByTestId('siege-card')).toContainText('3d6!')
-      await expect(gm.getByTestId('siege-card')).toContainText('5/5 ammo')
-
-      // weapon appears for players via realtime; player 1 crewing it with
-      // their active character
+      // any player can arm weapons, not just the GM
       await createCharacter(room.player1.page, 'Gunner')
       await openNotebook(room.player1.page, 'siege')
-      await expect(room.player1.page.getByTestId('siege-card')).toHaveCount(1)
 
+      await room.player1.page.getByTestId('siege-new').click()
+      await room.player1.page.getByTestId('siege-field-name').fill('Ballista')
+      await room.player1.page.getByTestId('siege-field-notation').fill('3d6!')
+      await room.player1.page.getByTestId('siege-field-hp').fill('12')
+      await room.player1.page.getByTestId('siege-field-ammo-tracked').check()
+      await room.player1.page.getByTestId('siege-field-max-ammo').fill('5')
+      await room.player1.page.getByTestId('siege-form-save').click()
+
+      await expect(room.player1.page.getByTestId('siege-card')).toHaveCount(1)
+      await expect(room.player1.page.getByTestId('siege-card')).toContainText('Ballista')
+      await expect(room.player1.page.getByTestId('siege-card')).toContainText('3d6!')
+      await expect(room.player1.page.getByTestId('siege-card')).toContainText('5/5 ammo')
+
+      // weapon appears for the GM via realtime
+      await expect(gm.getByTestId('siege-card')).toHaveCount(1)
+
+      // player 1 crews it with their active character, then fires
       await room.player1.page.getByTestId('siege-join').click()
       await expect(room.player1.page.getByTestId('siege-card')).toContainText('Gunner')
 
@@ -66,7 +68,7 @@ test.describe.serial('siege weapons and exploding dice', () => {
       await expect(room.player1.page.getByTestId('siege-card')).toContainText('loaded')
       await expect(room.gm.page.getByTestId('siege-card')).toContainText('loaded')
 
-      // damage buttons are GM-only, right on the card
+      // damage buttons are on the card for anyone
       await room.gm.page.getByTestId('siege-card').getByTitle('Deal 5 damage').click()
       await expect(room.gm.page.getByTestId('siege-card')).toContainText('7/12 hp')
     } finally {

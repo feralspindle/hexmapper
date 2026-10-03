@@ -133,7 +133,7 @@ pub async fn create_weapon(
     auth: AuthUser,
     Json(req): Json<CreateWeaponRequest>,
 ) -> Result<Json<Value>, AppError> {
-    if !authz::is_session_gm(state.pool(), auth.user_id, req.session_id).await? {
+    if !authz::is_session_member(state.pool(), auth.user_id, req.session_id).await? {
         return Err(AppError::Forbidden);
     }
 
@@ -184,7 +184,7 @@ pub async fn update_weapon(
     let session_id = authz::row_session_id(state.pool(), authz::SessionTable::SiegeWeapons, id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
+    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
 
@@ -213,7 +213,7 @@ pub async fn delete_weapon(
     let session_id = authz::row_session_id(state.pool(), authz::SessionTable::SiegeWeapons, id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !authz::is_session_gm(state.pool(), auth.user_id, session_id).await? {
+    if !authz::is_session_member(state.pool(), auth.user_id, session_id).await? {
         return Err(AppError::Forbidden);
     }
 

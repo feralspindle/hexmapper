@@ -3,7 +3,6 @@
     <div class="sw-bar">
       <span class="sw-count">{{ siegeStore.weapons.length }} siege weapon{{ siegeStore.weapons.length === 1 ? '' : 's' }}</span>
       <button
-        v-if="isGm"
         class="ds-btn tiny ghost"
         data-testid="siege-new"
         @click="showNew = !showNew"
@@ -14,12 +13,12 @@
 
     <div v-if="siegeStore.lastError" class="sw-error" data-testid="siege-error">{{ siegeStore.lastError }}</div>
 
-    <SiegeWeaponForm
-      v-if="showNew && isGm"
-      submit-label="Add"
-      @save="create"
-      @cancel="showNew = false"
-    />
+      <SiegeWeaponForm
+        v-if="showNew"
+        submit-label="Add"
+        @save="create"
+        @cancel="showNew = false"
+      />
 
     <div v-if="!siegeStore.weapons.length" class="sw-empty">
       No siege weapons yet
@@ -99,18 +98,16 @@
         >
           Reload
         </button>
-        <template v-if="isGm">
-          <div class="sw-hp-controls">
-            <button class="ds-btn tiny ghost" title="Deal 5 damage" @click="siegeStore.damage(w.id, 5)">−5</button>
-            <button class="ds-btn tiny ghost" title="Deal 1 damage" @click="siegeStore.damage(w.id, 1)">−1</button>
-            <button class="ds-btn tiny ghost" title="Repair 1" @click="siegeStore.damage(w.id, -1)">+1</button>
-            <button class="ds-btn tiny ghost" title="Repair 5" @click="siegeStore.damage(w.id, -5)">+5</button>
-          </div>
-          <button class="ds-btn tiny ghost" data-testid="siege-edit" @click="startEdit(w)">Edit</button>
-          <button class="ds-btn tiny danger" title="Remove weapon" data-testid="siege-delete" @click="siegeStore.deleteWeapon(w.id)">
-            <i class="fa-solid fa-trash-can" />
-          </button>
-        </template>
+        <div class="sw-hp-controls">
+          <button class="ds-btn tiny ghost" title="Deal 5 damage" @click="siegeStore.damage(w.id, 5)">−5</button>
+          <button class="ds-btn tiny ghost" title="Deal 1 damage" @click="siegeStore.damage(w.id, 1)">−1</button>
+          <button class="ds-btn tiny ghost" title="Repair 1" @click="siegeStore.damage(w.id, -1)">+1</button>
+          <button class="ds-btn tiny ghost" title="Repair 5" @click="siegeStore.damage(w.id, -5)">+5</button>
+        </div>
+        <button class="ds-btn tiny ghost" data-testid="siege-edit" @click="startEdit(w)">Edit</button>
+        <button class="ds-btn tiny danger" title="Remove weapon" data-testid="siege-delete" @click="siegeStore.deleteWeapon(w.id)">
+          <i class="fa-solid fa-trash-can" />
+        </button>
       </div>
 
       <SiegeWeaponForm
@@ -131,14 +128,11 @@ import SiegeWeaponForm from '@/components/common/SiegeWeaponForm.vue'
 import { useSiegeStore } from '@/stores/siegeStore.js'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
-import { useAuthStore } from '@/stores/authStore.js'
 
 const siegeStore = useSiegeStore()
 const characterStore = useCharacterStore()
 const sessionStore = useSessionStore()
-const authStore = useAuthStore()
 
-const isGm = computed(() => !!authStore.user?.id && authStore.user.id === sessionStore.sessionOwnerId)
 const myCharacter = computed(() => characterStore.activeCharacter)
 const crewOptions = computed(() =>
   characterStore.characters

@@ -42,7 +42,7 @@
 - [x] 3.4 Fire: require loaded + ammo (if tracked), emit attack and damage rolls into `dice_rolls` (labels `"{name} attack"` / `"{name} damage"`), decrement ammo, set `is_loaded = false`, all in one transaction
 - [x] 3.5 Reload: require crew count >= crew_required
 - [x] 3.6 Validate `damage_notation` with engine parse on create/update
-- [x] 3.7 Authz: members can read, fire, reload, and join crew; GM (session owner) creates, edits, deletes
+- [x] 3.7 Authz: any session member can create, edit, fire, reload, damage, and crew weapons (matches the vault's shared-resource model)
 
 ### Phase 4: siege weapons panel (frontend)
 
