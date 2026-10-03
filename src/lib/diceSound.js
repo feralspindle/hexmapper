@@ -88,3 +88,37 @@ export function playDiceSound() {
     osc.stop(ctx.currentTime + 0.18);
   } catch {}
 }
+
+// a die exploded — layered low thump + descending sweep reads as a boom next
+// to the plain dice blip
+export function playExplosionSound() {
+  if (!soundEnabled.value) return;
+  try {
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+
+    const thump = ctx.createOscillator();
+    const thumpGain = ctx.createGain();
+    thump.connect(thumpGain);
+    thumpGain.connect(ctx.destination);
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(110, t);
+    thump.frequency.exponentialRampToValueAtTime(38, t + 0.3);
+    thumpGain.gain.setValueAtTime(0.32, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+    thump.start(t);
+    thump.stop(t + 0.34);
+
+    const sweep = ctx.createOscillator();
+    const sweepGain = ctx.createGain();
+    sweep.connect(sweepGain);
+    sweepGain.connect(ctx.destination);
+    sweep.type = "triangle";
+    sweep.frequency.setValueAtTime(520, t + 0.02);
+    sweep.frequency.exponentialRampToValueAtTime(90, t + 0.22);
+    sweepGain.gain.setValueAtTime(0.12, t + 0.02);
+    sweepGain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+    sweep.start(t + 0.02);
+    sweep.stop(t + 0.24);
+  } catch {}
+}

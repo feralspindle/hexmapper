@@ -35,6 +35,7 @@ fn projection_columns(src: &str, reconcile_character_fk: bool) -> String {
         ({src}.metadata->>'user_id')::uuid,
         {src}.payload->'pending',
         ({src}.payload->>'modifier')::int,
+        {src}.payload->>'notation',
         {src}.payload->'results',
         ({src}.payload->>'total')::int,
         {src}.payload->>'label',
@@ -46,7 +47,7 @@ fn projection_columns(src: &str, reconcile_character_fk: bool) -> String {
 }
 
 const PROJECTION_TARGET: &str = r#"
-    dice_rolls (id, session_id, user_id, pending, modifier, results, total, label, character_id, stats, created_at)
+    dice_rolls (id, session_id, user_id, pending, modifier, notation, results, total, label, character_id, stats, created_at)
 "#;
 
 /// Appends a `dice_roll.rolled` event and folds it into `dice_rolls` in a single
@@ -61,7 +62,7 @@ pub async fn append_and_project(
         insert into {PROJECTION_TARGET}
         select {cols}
         from evt
-        returning id, session_id, user_id, display_name, pending, modifier, results, total, created_at, label, character_id, stats
+        returning id, session_id, user_id, display_name, pending, modifier, notation, results, total, created_at, label, character_id, stats
         "#,
         cols = projection_columns("evt", false),
     );
@@ -85,7 +86,7 @@ pub async fn append_and_project(
 pub fn replay_select(target_table: &str) -> String {
     format!(
         r#"
-        insert into {target_table} (id, session_id, user_id, pending, modifier, results, total, label, character_id, stats, created_at)
+        insert into {target_table} (id, session_id, user_id, pending, modifier, notation, results, total, label, character_id, stats, created_at)
         select {cols}
         from events
         where aggregate_type = 'dice_roll' and event_type = 'dice_roll.rolled'

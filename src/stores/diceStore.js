@@ -5,10 +5,19 @@ import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { mergeRealtimeSnapshot } from '@/lib/realtimeProtocol.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
-import { playDiceSound } from '@/lib/diceSound.js'
+import { playDiceSound, playExplosionSound } from '@/lib/diceSound.js'
 import { withRollStreaks } from '@/lib/diceStreaks.js'
 
 const HISTORY_LIMIT = 60
+
+function hasExplosion(roll) {
+  return (roll?.results ?? []).some(r => r.exploded_from != null)
+}
+
+function announceRoll(roll) {
+  playDiceSound()
+  if (hasExplosion(roll)) playExplosionSound()
+}
 
 export const useDiceStore = defineStore('dice', () => {
   const rolls       = ref([])
@@ -67,7 +76,7 @@ export const useDiceStore = defineStore('dice', () => {
           if (row.user_id === authStore.user?.id || rolls.value.some(roll => roll.id === row.id)) return
           rolls.value = [row, ...rolls.value].slice(0, HISTORY_LIMIT)
           latestRoll.value = row
-          playDiceSound()
+          announceRoll(row)
         },
       )
       .on(
@@ -86,11 +95,13 @@ export const useDiceStore = defineStore('dice', () => {
     return refreshHistory(generation)
   }
 
-  async function rollDice(pending, modifier, label = null, characterId = null) {
+  async function rollDice(pendingOrNotation, modifier, label = null, characterId = null) {
     if (pendingRoll.value) return
 
+    const isNotation = typeof pendingOrNotation === 'string'
+
     pendingRoll.value = {
-      pending: { ...pending },
+      ...(isNotation ? { notation: pendingOrNotation } : { pending: { ...pendingOrNotation } }),
       modifier,
       label,
     }
@@ -98,7 +109,7 @@ export const useDiceStore = defineStore('dice', () => {
     try {
       const data = await apiClient.post('/dice-rolls', {
         session_id:   session.key,
-        pending,
+        ...(isNotation ? { notation: pendingOrNotation } : { pending: pendingOrNotation }),
         modifier:     modifier ?? 0,
         label:        label ?? null,
         character_id: characterId ?? null,
@@ -106,7 +117,7 @@ export const useDiceStore = defineStore('dice', () => {
 
       rolls.value = [data, ...rolls.value].slice(0, HISTORY_LIMIT)
       latestRoll.value = data
-      playDiceSound()
+      announceRoll(data)
       return data
     } catch (error) {
       console.error('rollDice:', error instanceof ApiError ? error.message : error)
@@ -114,6 +125,17 @@ export const useDiceStore = defineStore('dice', () => {
     } finally {
       pendingRoll.value = null
     }
+  }
+
+  // rolls created server-side by other domains (siege fire) never come through
+  // rollDice, so the realtime echo guard would swallow them for the actor.
+  // this injects them directly (dedup by id, oldest first)
+  function ingestRolls(rows) {
+    const fresh = (rows ?? []).filter(r => r && !rolls.value.some(roll => roll.id === r.id))
+    if (!fresh.length) return
+    rolls.value = [...fresh.slice().reverse(), ...rolls.value].slice(0, HISTORY_LIMIT)
+    latestRoll.value = fresh[fresh.length - 1]
+    announceRoll(fresh[fresh.length - 1])
   }
 
   async function addAnnotation(rollId, body) {
@@ -161,5 +183,5 @@ export const useDiceStore = defineStore('dice', () => {
     latestRoll.value  = null
   }
 
-  return { rolls, rollsWithStreaks, annotations, pendingRoll, latestRoll, init, rollDice, addAnnotation, cleanup }
+  return { rolls, rollsWithStreaks, annotations, pendingRoll, latestRoll, init, rollDice, ingestRolls, addAnnotation, cleanup }
 })
