@@ -624,14 +624,16 @@ function rollColor(userId) {
 }
 
 function dieClass(r, next) {
-    if (r.dropped) return "result-dropped";
-    if (r.value === 20 && r.die === "d20") return "result-crit";
-    if (r.value === 1 && r.die === "d20") return "result-fumble";
-    // the die that spawned the next one (chains sit adjacently)
+    if (r.dropped) return ["result-dropped"];
+    if (r.value === 20 && r.die === "d20") return ["result-crit"];
+    if (r.value === 1 && r.die === "d20") return ["result-fumble"];
+    // a chained die is both exploded and the trigger of the next one - the
+    // classes stack, so intermediates in a chain keep their ember
+    const classes = [];
     if (next?.exploded_from != null && next.exploded_from === r.value)
-        return "result-explode-trigger";
-    if (r.exploded_from != null) return "result-exploded";
-    return "";
+        classes.push("result-explode-trigger");
+    if (r.exploded_from != null) classes.push("result-exploded");
+    return classes;
 }
 
 function dieTitle(r) {
@@ -754,6 +756,9 @@ onUnmounted(() => {
     color: #b8541c;
     font-weight: 700;
 }
+.result-explode-trigger {
+    color: #b8541c;
+}
 .result-dropped {
     color: var(--ink-mute, #8a7a68);
     text-decoration: line-through;
@@ -783,7 +788,7 @@ onUnmounted(() => {
     animation: ds-explode-ring 460ms ease-out both;
     animation-delay: calc(140ms + var(--i, 0) * 90ms);
 }
-.ds-roll-burst .result-explode-trigger {
+.ds-roll-burst .result-explode-trigger:not(.result-exploded) {
     display: inline-block;
     animation: ds-explode-trigger-pulse 560ms ease-out both;
     animation-delay: 60ms;
@@ -834,7 +839,7 @@ onUnmounted(() => {
 @media (prefers-reduced-motion: reduce) {
     .ds-roll-burst .result-exploded,
     .ds-roll-burst .result-exploded::after,
-    .ds-roll-burst .result-explode-trigger {
+    .ds-roll-burst .result-explode-trigger:not(.result-exploded) {
         animation: none;
     }
 }

@@ -126,6 +126,10 @@ test.describe.serial('siege weapons and exploding dice', () => {
       await expect(damageRow.locator('.result-explode-trigger').first()).toBeVisible()
       await expect(damageRow.locator('.result-exploded').first()).toBeVisible()
       await expect(damageRow.locator('.result-exploded')).not.toHaveCount(0)
+      // every die in a 1d1!>=1 chain is exploded; all but the tail also trigger
+      // the next one - intermediates must keep both classes (regression: they
+      // used to lose their ember to the trigger classification)
+      await expect(damageRow.locator('.result-exploded.result-explode-trigger')).not.toHaveCount(0)
     } finally {
       await room.close()
     }
