@@ -1540,6 +1540,87 @@ textarea.ds-input {
     min-width: 0;
     overflow: hidden;
 }
+
+/* ---- amulet hell: dimmed card, rising hellfire, round stamp ---- */
+.ds-player-card.in-hell {
+    border-color: #8a2c10;
+    border-left-color: #b8541c;
+}
+.ds-pc-hell-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(
+        180deg,
+        rgba(24, 8, 4, 0.38) 0%,
+        rgba(46, 10, 4, 0.45) 55%,
+        rgba(90, 20, 6, 0.62) 100%
+    );
+    animation: ds-hell-breathe 3.2s ease-in-out infinite alternate;
+}
+.ds-pc-hell-flames {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -6px;
+    height: 34px;
+    z-index: 3;
+    pointer-events: none;
+}
+.ds-pc-hell-flames i {
+    position: absolute;
+    bottom: 0;
+    transform-origin: 50% 100%;
+    animation-name: ds-hell-flicker;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+    animation-direction: alternate;
+    filter: drop-shadow(0 0 3px rgba(240, 120, 30, 0.8));
+}
+.ds-pc-hell-stamp {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    z-index: 4;
+    transform: rotate(4deg);
+    background: #8a1c1c;
+    color: #fff5e8;
+    font-family: var(--font-zine, "Special Elite", serif);
+    font-size: 8.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(184, 84, 28, 0.55);
+    animation: ds-hell-stamp-wobble 2.6s ease-in-out infinite alternate;
+}
+@keyframes ds-hell-flicker {
+    0% {
+        opacity: 0.75;
+        transform: scaleY(0.85) scaleX(1.05) rotate(-3deg);
+    }
+    100% {
+        opacity: 1;
+        transform: scaleY(1.2) scaleX(0.92) rotate(3deg);
+    }
+}
+@keyframes ds-hell-breathe {
+    from {
+        opacity: 0.85;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes ds-hell-stamp-wobble {
+    from {
+        transform: rotate(4deg) scale(1);
+    }
+    to {
+        transform: rotate(2deg) scale(1.04);
+    }
+}
 .ds-pc-header-row {
     display: flex;
     align-items: center;

@@ -1169,6 +1169,59 @@
                     </button>
                 </div>
 
+                <div class="cs-hell-block">
+                    <template v-if="hellActive">
+                        <div class="cs-hell-active">
+                            <i class="fa-solid fa-fire cs-hell-flame" />
+                            <span class="cs-hell-active-text">
+                                in hell · {{ hellRoundsLeft }} round{{ hellRoundsLeft === 1 ? "" : "s" }} left
+                            </span>
+                            <button
+                                v-if="canEdit"
+                                class="cs-hell-return"
+                                data-testid="hell-burn-round"
+                                title="Count down one round"
+                                @click="characterStore.burnHellSentenceRound()"
+                            >
+                                burn a round
+                            </button>
+                            <button
+                                v-if="canEdit"
+                                class="cs-hell-return"
+                                data-testid="hell-return"
+                                @click="characterStore.returnFromHell()"
+                            >
+                                claw back out
+                            </button>
+                        </div>
+                    </template>
+                    <template v-else-if="canEdit">
+                        <div v-if="hellPickerOpen" class="cs-hell-picker">
+                            <span class="cs-hell-picker-label">rounds in hell</span>
+                            <button class="cs-adj-btn" data-testid="hell-rounds-minus" @click="hellDraft = Math.max(1, hellDraft - 1)">−</button>
+                            <span class="cs-hell-picker-count" data-testid="hell-rounds-count">{{ hellDraft }}</span>
+                            <button class="cs-adj-btn" data-testid="hell-rounds-plus" @click="hellDraft = Math.min(20, hellDraft + 1)">+</button>
+                            <button
+                                class="cs-hell-descend"
+                                data-testid="hell-descend"
+                                @click="descendToHell"
+                            >
+                                descend
+                            </button>
+                            <button class="cs-btn ghost" @click="hellPickerOpen = false">cancel</button>
+                        </div>
+                        <button
+                            v-else
+                            class="cs-hell-btn"
+                            data-testid="go-to-hell"
+                            title="Amulet: descend to hell for a few combat rounds"
+                            @click="openHellPicker"
+                        >
+                            <i class="fa-solid fa-fire" /> go to hell
+                        </button>
+                    </template>
+                </div>
+
                 <div>
                     <span class="cs-section-label">Talents</span>
                     <CharacterTalents
@@ -2183,7 +2236,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from "vue";
+import { ref, computed, nextTick, watch } from "vue";
 import {
     useCharacterStore,
     statMod,
@@ -2200,6 +2253,7 @@ import { useD } from "@/stores/dungeonStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
+import { isInHell as isInHellFn, hellRoundsLeft as hellRoundsLeftFn } from "@/lib/hellState.js";
 import { uploadTokenImage, tokenImageUrl } from "@/lib/tokenImage.js";
 import CharacterSpells from "@/components/common/CharacterSpells.vue";
 import CharacterTalents from "@/components/common/CharacterTalents.vue";
@@ -2568,6 +2622,24 @@ function saveAtkEdit(idx) {
 const showAddAtk = ref(false);
 const newAtkDraft = ref({ raw: "", damageDie: "", statKey: "" });
 const newAtkInputRef = ref(null);
+
+// ---- amulet hell -----------------------------------------------------------
+const hellPickerOpen = ref(false);
+const hellDraft = ref(3);
+const hellActive = computed(() => isInHellFn(char.value));
+const hellRoundsLeft = computed(() => hellRoundsLeftFn(char.value));
+
+function openHellPicker() {
+    hellDraft.value = 3;
+    hellPickerOpen.value = true;
+}
+function descendToHell() {
+    characterStore.goToHell(hellDraft.value);
+    hellPickerOpen.value = false;
+}
+
+// stale zero-round states clear once the owner is looking at the sheet
+watch(() => characterStore.activeId, () => characterStore.reapExpiredHell());
 function submitAddAtk() {
     if (!newAtkDraft.value.raw.trim()) return;
     characterStore.addAttack(
@@ -3576,6 +3648,124 @@ button.cs-stat-val:hover {
     padding: 1px 5px;
     line-height: 1.4;
     white-space: nowrap;
+}
+
+.cs-hell-block {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0 2px;
+    max-width: 100%;
+}
+.cs-hell-btn {
+    background: transparent;
+    border: 1px dashed color-mix(in srgb, var(--accent, #8a1c1c) 45%, transparent);
+    color: var(--accent, #8a1c1c);
+    font-family: var(--font-zine, 'Special Elite', serif);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.12s, color 0.12s;
+}
+.cs-hell-btn:hover {
+    background: color-mix(in srgb, var(--accent, #8a1c1c) 10%, transparent);
+}
+.cs-hell-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 1px solid var(--rule-strong, #c8baa0);
+    border-radius: 2px;
+    padding: 5px 6px;
+    background: var(--paper-3, #d8ccb4);
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.cs-hell-picker-label {
+    font-family: var(--font-zine, 'Special Elite', serif);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #9e8e7e);
+    margin-right: 2px;
+    flex-basis: 100%;
+    text-align: center;
+}
+.cs-hell-picker-count {
+    font-family: var(--font-mono, monospace);
+    font-size: 13px;
+    font-weight: 700;
+    min-width: 18px;
+    text-align: center;
+    color: var(--ink, #1a1410);
+}
+.cs-hell-descend {
+    background: var(--accent, #8a1c1c);
+    color: #fff5e8;
+    border: none;
+    font-family: var(--font-zine, 'Special Elite', serif);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-left: 2px;
+}
+.cs-hell-descend:hover {
+    opacity: 0.85;
+}
+.cs-hell-active {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px 6px;
+    border: 1px solid color-mix(in srgb, #b8541c 45%, transparent);
+    background: color-mix(in srgb, #b8541c 10%, transparent);
+    border-radius: 2px;
+    padding: 4px 8px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.cs-hell-flame {
+    color: #b8541c;
+    animation: cs-hell-flicker 1.1s ease-in-out infinite alternate;
+}
+.cs-hell-active-text {
+    font-family: var(--font-zine, 'Special Elite', serif);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8a2c10;
+}
+.cs-hell-return {
+    background: none;
+    border: 1px solid var(--rule-strong, #c8baa0);
+    color: var(--ink-soft, #6b5e4e);
+    font-family: var(--font-zine, 'Special Elite', serif);
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-left: 4px;
+}
+.cs-hell-return:hover {
+    color: var(--accent, #8a1c1c);
+    border-color: var(--accent, #8a1c1c);
+}
+@keyframes cs-hell-flicker {
+    from { opacity: 1; transform: scale(1) rotate(-3deg); }
+    to   { opacity: 0.7; transform: scale(1.15) rotate(4deg); }
 }
 .cs-atk-mod-chip {
     font-family: var(--font-mono, monospace);

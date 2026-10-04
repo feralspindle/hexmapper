@@ -516,6 +516,7 @@ fn allowed_broadcast(event: &str) -> bool {
             | "done"
             | "loot_toast"
             | "luck_spent"
+            | "hell_descended"
             | "character_updated"
             | "initiative_cleared"
             | "gm_initiative_set"
@@ -540,6 +541,13 @@ mod tests {
     fn broadcast_allowlist_covers_the_party_follow_event() {
         assert!(allowed_broadcast("dungeon_entered"));
         assert!(!allowed_broadcast("made_up_event"));
+    }
+
+    #[test]
+    fn broadcast_allowlist_covers_hell_descent() {
+        // local dev runs the supabase transport (no allowlist), so a missing
+        // entry here only shows up on staging/prod - caught by the staging e2e
+        assert!(allowed_broadcast("hell_descended"));
     }
 
     #[test]

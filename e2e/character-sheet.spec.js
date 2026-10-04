@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 import {
+  createCharacter,
   createThreeRoleCampaign,
   importCharacterJson,
   openCharacterSheet,
@@ -146,6 +147,56 @@ test.describe.serial('character sheet', () => {
       await dagger.locator('.cs-list-main').first().click()
       await expect(page.getByTestId('dice-roll-row').first()).toContainText('DAGGER (OBSIDIAN)')
       await expect(page.getByTestId('dice-roll-row').first()).toContainText('1d20+2')
+    } finally {
+      await room.close()
+    }
+  })
+
+  test('go to hell dims the party card with flames and a round tracker', async ({ browser }) => {
+    const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
+      mode: 'fow',
+      name: uniqueCampaignName('E2E Hell'),
+      contextOptions,
+    })
+
+    try {
+      const gm = room.gm.page
+      const page = room.player1.page
+
+      await createCharacter(page, 'Gunner')
+      await openCharacterSheet(page)
+      await page.getByTestId('char-tab-combat').click()
+
+      // the amulet button opens a rounds picker defaulting to 3
+      await page.getByTestId('go-to-hell').click()
+      await expect(page.getByTestId('hell-rounds-count')).toHaveText('3')
+      await page.getByTestId('hell-rounds-plus').click()
+      await page.getByTestId('hell-descend').click()
+
+      // own sheet tracks the sentence
+      await expect(page.locator('.cs-hell-active')).toContainText('in hell · 4 rounds left')
+
+      // everyone sees the descent toast
+      await expect(gm.getByTestId('hell-toast')).toContainText('Gunner')
+      await expect(gm.getByTestId('hell-toast')).toContainText('descending')
+
+      // the GM sees the dimmed card, flames, and the round stamp
+      await gm.getByTestId('hex-party-toggle').click()
+      const hellCard = gm.locator('.ds-player-card.in-hell')
+      await expect(hellCard).toHaveCount(1)
+      await expect(hellCard).toContainText('Gunner')
+      await expect(hellCard).toContainText('hell · 4 rounds')
+      await expect(hellCard.locator('.ds-pc-hell-flames i')).toHaveCount(8)
+
+      // the condemned burns rounds off manually
+      await page.getByTestId('hell-burn-round').click()
+      await expect(page.locator('.cs-hell-active')).toContainText('in hell · 3 rounds left')
+      await expect(hellCard).toContainText('hell · 3 rounds')
+
+      // clawing back out clears it everywhere
+      await page.getByTestId('hell-return').click()
+      await expect(page.locator('.cs-hell-active')).toHaveCount(0)
+      await expect(gm.locator('.ds-player-card.in-hell')).toHaveCount(0)
     } finally {
       await room.close()
     }
