@@ -110,6 +110,8 @@ test.describe.serial('character sheet', () => {
       await page.getByTestId('atk-mod-label').last().fill('blessing of the war priest')
       await page.getByTestId('atk-mod-value').last().fill('1')
       await editForm.getByTestId('atk-description').fill('2H, skips move to reload')
+      // the preview spells out what each source contributes
+      await expect(editForm.locator('.cs-atk-mod-editor-total')).toContainText('roll +3 (STR +1 + modifiers +2)')
       await editForm.getByRole('button', { name: 'Save' }).click()
 
       // description sits above the chips, the chips carry the math

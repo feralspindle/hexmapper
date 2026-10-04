@@ -1043,7 +1043,7 @@
                                             <span
                                                 v-if="editAtkDraft.statKey || editAtkDraft.modifiers.length"
                                                 class="cs-atk-mod-editor-total"
-                                            >roll {{ fmtSigned(editAtkBonusPreview()) }}</span>
+                                            >roll {{ fmtSigned(editAtkBonusPreview()) }}<span v-if="editAtkBreakdown()" class="cs-atk-mod-editor-breakdown"> ({{ editAtkBreakdown() }})</span></span>
                                             <span v-else class="cs-atk-mod-editor-hint">description bonus used</span>
                                         </span>
                                         <div
@@ -2540,6 +2540,18 @@ function editAtkBonusPreview() {
     if (d.modifiers.length) return sum;
     return 0;
 }
+function editAtkBreakdown() {
+    const d = editAtkDraft.value;
+    const parts = [];
+    if (d.statKey && char.value?.stats?.[d.statKey] !== undefined) {
+        parts.push(`${d.statKey} ${fmtSigned(statMod(char.value.stats[d.statKey]))}`);
+    }
+    if (d.modifiers.length) {
+        const sum = d.modifiers.reduce((s, m) => s + (Number(m.value) || 0), 0);
+        parts.push(`modifiers ${fmtSigned(sum)}`);
+    }
+    return parts.join(" + ");
+}
 function saveAtkEdit(idx) {
     const modifiers = editAtkDraft.value.modifiers
         .map((m) => ({ id: m.id, label: String(m.label ?? "").trim(), value: Math.round(Number(m.value) || 0) }))
@@ -3610,6 +3622,10 @@ button.cs-stat-val:hover {
     font-weight: 700;
     text-transform: none;
     letter-spacing: 0.03em;
+}
+.cs-atk-mod-editor-breakdown {
+    font-weight: 400;
+    color: var(--ink-mute, #8a7a68);
 }
 .cs-atk-mod-editor-hint {
     font-family: var(--font-body, serif);
