@@ -109,14 +109,19 @@ test.describe.serial('character sheet', () => {
       await page.getByTestId('atk-mod-add').click()
       await page.getByTestId('atk-mod-label').last().fill('blessing of the war priest')
       await page.getByTestId('atk-mod-value').last().fill('1')
-      await editForm.getByTestId('atk-description').fill('2H, skips move to reload')
+      const longDescription = 'Repeating heavy crossbow, 2H, skips move to reload, cold iron bolts, sighted against the eastern wind by a very picky dwarf'
+      await editForm.getByTestId('atk-description').fill(longDescription)
       // the preview spells out what each source contributes
       await expect(editForm.locator('.cs-atk-mod-editor-total')).toContainText('roll +3 (STR +1 + modifiers +2)')
       await editForm.getByRole('button', { name: 'Save' }).click()
 
       // description sits above the chips, the chips carry the math
-      await expect(crossbow.locator('.cs-atk-desc')).toHaveText('2H, skips move to reload')
-      const descBox = await crossbow.locator('.cs-atk-desc').boundingBox()
+      const descEl = crossbow.locator('.cs-atk-desc')
+      await expect(descEl).toHaveText(longDescription)
+      // long descriptions wrap onto extra lines instead of clipping
+      expect(await descEl.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+      expect(await descEl.evaluate(el => el.scrollHeight > 18)).toBe(true)
+      const descBox = await descEl.boundingBox()
       const modsBox = await crossbow.locator('.cs-atk-mods').boundingBox()
       expect(descBox.y).toBeLessThan(modsBox.y)
 

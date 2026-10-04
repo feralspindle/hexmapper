@@ -852,7 +852,6 @@
                                             <div
                                                 v-if="atk.description"
                                                 class="cs-atk-desc"
-                                                :title="atk.description"
                                             >{{ atk.description }}</div>
                                             <div v-else-if="!atk.statKey && !atk.modifiers.length" class="cs-atk-desc">{{ atk.raw.split(":").slice(1).join(":").trim() }}</div>
                                             <div v-if="atk.statKey || atk.modifiers.length" class="cs-atk-mods">
@@ -3557,9 +3556,8 @@ button.cs-stat-val:hover {
     font-size: 12px;
     font-style: italic;
     color: var(--ink-soft, #6b5e4e);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 .cs-atk-mods {
     display: flex;
