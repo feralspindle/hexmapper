@@ -367,11 +367,16 @@
                         </span>
                     </div>
                     <div class="ds-roll-expr">{{ formatExpr(entry) }}</div>
-                    <div v-if="entry.results?.length" class="ds-roll-breakdown">
+                    <div
+                        v-if="entry.results?.length"
+                        class="ds-roll-breakdown"
+                        :class="{ 'ds-roll-burst': entry.id === burstingRollId }"
+                    >
                         [<template v-for="(r, i) in entry.results" :key="i"
                             ><span
-                                :class="dieClass(r)"
+                                :class="dieClass(r, entry.results[i + 1])"
                                 :title="dieTitle(r)"
+                                :style="r.exploded_from != null ? { '--i': i } : undefined"
                                 >{{ r.value }}</span
                             ><span
                                 v-if="i < entry.results.length - 1"
@@ -436,7 +441,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { DIE_ICONS } from "@/composables/useDiceIcons.js";
 import { useJournalStore } from "@/stores/journalStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
@@ -618,10 +623,13 @@ function rollColor(userId) {
     return playerColorFor(userId);
 }
 
-function dieClass(r) {
+function dieClass(r, next) {
     if (r.dropped) return "result-dropped";
     if (r.value === 20 && r.die === "d20") return "result-crit";
     if (r.value === 1 && r.die === "d20") return "result-fumble";
+    // the die that spawned the next one (chains sit adjacently)
+    if (next?.exploded_from != null && next.exploded_from === r.value)
+        return "result-explode-trigger";
     if (r.exploded_from != null) return "result-exploded";
     return "";
 }
@@ -680,6 +688,29 @@ watch(
         if (!isAtTop.value) hasUnseen.value = true;
     },
 );
+
+// a roll with explosions gets one choreographed burst in the history - the
+// class lands when the row arrives (own roll or realtime) and clears itself,
+// so initial history load never animates
+const burstingRollId = ref(null);
+let burstTimer = null;
+
+watch(
+    () => diceStore.latestRoll,
+    (roll) => {
+        if (!roll?.results?.some((r) => r.exploded_from != null)) return;
+        if (burstTimer) clearTimeout(burstTimer);
+        burstingRollId.value = roll.id;
+        burstTimer = setTimeout(() => {
+            burstingRollId.value = null;
+            burstTimer = null;
+        }, 1600 + roll.results.length * 90);
+    },
+);
+
+onUnmounted(() => {
+    if (burstTimer) clearTimeout(burstTimer);
+});
 </script>
 
 <style scoped>
@@ -727,6 +758,85 @@ watch(
     color: var(--ink-mute, #8a7a68);
     text-decoration: line-through;
     opacity: 0.55;
+}
+
+/* one-shot burst choreography when an exploding roll lands in history: each
+   extra die ignites in chain order (staggered by --i), popping in with an
+   ember flare and an expanding ring; the triggering die gets a quick pulse */
+.ds-roll-burst .result-exploded {
+    display: inline-block;
+    position: relative;
+    animation: ds-exploded-ignite 540ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: calc(120ms + var(--i, 0) * 90ms);
+}
+.ds-roll-burst .result-exploded::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    border-radius: 50%;
+    border: 1.5px solid #d84c1e;
+    pointer-events: none;
+    animation: ds-explode-ring 460ms ease-out both;
+    animation-delay: calc(140ms + var(--i, 0) * 90ms);
+}
+.ds-roll-burst .result-explode-trigger {
+    display: inline-block;
+    animation: ds-explode-trigger-pulse 560ms ease-out both;
+    animation-delay: 60ms;
+}
+@keyframes ds-exploded-ignite {
+    0% {
+        transform: scale(0.2) rotate(-14deg);
+        opacity: 0;
+    }
+    55% {
+        transform: scale(1.45) rotate(3deg);
+        opacity: 1;
+        text-shadow: 0 0 8px rgba(216, 76, 30, 0.95);
+    }
+    75% {
+        transform: scale(0.9) rotate(-2deg);
+        text-shadow: 0 0 4px rgba(216, 76, 30, 0.4);
+    }
+    100% {
+        transform: scale(1) rotate(0deg);
+        text-shadow: none;
+    }
+}
+@keyframes ds-explode-ring {
+    0% {
+        transform: scale(0.3);
+        opacity: 0.9;
+    }
+    100% {
+        transform: scale(2.4);
+        opacity: 0;
+    }
+}
+@keyframes ds-explode-trigger-pulse {
+    0% {
+        transform: scale(1);
+    }
+    40% {
+        transform: scale(1.3);
+        text-shadow: 0 0 6px rgba(216, 76, 30, 0.85);
+    }
+    100% {
+        transform: scale(1);
+        text-shadow: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-roll-burst .result-exploded,
+    .ds-roll-burst .result-exploded::after,
+    .ds-roll-burst .result-explode-trigger {
+        animation: none;
+    }
 }
 .result-sep {
     color: var(--ink-mute, #8a7a68);
