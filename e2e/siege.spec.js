@@ -96,4 +96,42 @@ test.describe.serial('siege weapons and exploding dice', () => {
       await room.close()
     }
   })
+
+  test('a guaranteed explosion plays the burst animation in dice history', async ({ browser }) => {
+    const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
+      mode: 'fow',
+      name: uniqueCampaignName('E2E Burst'),
+    })
+
+    try {
+      const gm = room.gm.page
+      await openNotebook(gm, 'siege')
+
+      // 1d1!>=1 explodes on every roll - deterministic firework
+      await gm.getByTestId('siege-new').click()
+      await gm.getByTestId('siege-field-name').fill('Firework')
+      await gm.getByTestId('siege-field-notation').fill('1d1!>=1')
+      await gm.getByTestId('siege-form-save').click()
+      await expect(gm.getByTestId('siege-card')).toHaveCount(1)
+
+      await gm.getByTestId('siege-card').getByTitle(/Attack 1d20/).waitFor()
+      await gm.getByTestId('siege-fire').click()
+
+      // the damage row arrives with the burst class and a chain of ignited dice.
+      // the class clears itself after the choreography, so pin the row and
+      // catch the transient bits inside their window
+      const damageRow = rollRows(gm).first()
+      await expect(damageRow).toContainText('1d1!>=1')
+      await expect(damageRow.locator('.ds-roll-burst')).toHaveCount(1)
+      await expect(damageRow.locator('.result-explode-trigger').first()).toBeVisible()
+      await expect(damageRow.locator('.result-exploded').first()).toBeVisible()
+      await expect(damageRow.locator('.result-exploded')).not.toHaveCount(0)
+      // every die in a 1d1!>=1 chain is exploded; all but the tail also trigger
+      // the next one - intermediates must keep both classes (regression: they
+      // used to lose their ember to the trigger classification)
+      await expect(damageRow.locator('.result-exploded.result-explode-trigger')).not.toHaveCount(0)
+    } finally {
+      await room.close()
+    }
+  })
 })
