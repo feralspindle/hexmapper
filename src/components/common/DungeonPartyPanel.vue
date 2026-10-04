@@ -86,9 +86,23 @@
                     v-for="card in sortedPartyCards"
                     :key="card.userId"
                     class="ds-player-card"
-                    :class="{ me: card.userId === authStore.user?.id }"
+                    :class="{ me: card.userId === authStore.user?.id, 'in-hell': hellRoundsFor(card) > 0 }"
                     :style="{ '--player-color': charColor(card.userId) }"
                 >
+                    <template v-if="hellRoundsFor(card) > 0">
+                        <div class="ds-pc-hell-overlay" />
+                        <div class="ds-pc-hell-flames" aria-hidden="true">
+                            <i
+                                v-for="(f, i) in hellFlames"
+                                :key="i"
+                                class="fa-solid fa-fire"
+                                :style="f"
+                            />
+                        </div>
+                        <div class="ds-pc-hell-stamp" title="Can't take actions while in hell">
+                            hell · {{ hellRoundsFor(card) }} round{{ hellRoundsFor(card) === 1 ? "" : "s" }}
+                        </div>
+                    </template>
                     <div class="ds-pc-header-row">
                         <div v-if="isOnline(card.userId)" class="ds-online-dot" title="Online" />
                         <span class="ds-pc-name">{{ card.displayName }}</span>
@@ -152,6 +166,7 @@ import { useSessionStore } from "@/stores/sessionStore.js";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
 import { playerColorFor } from "@/composables/usePlayerColor.js";
+import { hellRoundsLeft } from "@/lib/hellState.js";
 import { usePartyPanel } from "@/composables/usePartyPanel.js";
 import { useFloatingPanel } from "@/composables/useFloatingPanel.js";
 import DiceStatsPanel from "@/components/common/DiceStatsPanel.vue";
@@ -267,6 +282,24 @@ const partyCards = computed(() => {
 function isOnline(userId) {
     return userId && onlineUserIds.value.has(userId);
 }
+
+function hellRoundsFor(card) {
+    if (!card.char?.data) return 0;
+    return hellRoundsLeft(card.char.data, sessionStore.initiativeState?.round ?? 1);
+}
+
+// deterministic flame variants so the fire doesn't reshuffle on every render:
+// size, color, and an out-of-phase flicker for each tongue
+const hellFlames = [
+    { fontSize: "13px", color: "#d84c1e", left: "4%",  animationDelay: "0s",    animationDuration: "0.9s" },
+    { fontSize: "18px", color: "#f28c28", left: "14%", animationDelay: "0.35s", animationDuration: "1.2s" },
+    { fontSize: "12px", color: "#a82810", left: "27%", animationDelay: "0.7s",  animationDuration: "0.8s" },
+    { fontSize: "21px", color: "#e06018", left: "38%", animationDelay: "0.15s", animationDuration: "1.35s" },
+    { fontSize: "14px", color: "#f28c28", left: "54%", animationDelay: "0.55s", animationDuration: "1.0s" },
+    { fontSize: "19px", color: "#d84c1e", left: "65%", animationDelay: "0.9s",  animationDuration: "0.85s" },
+    { fontSize: "12px", color: "#a82810", left: "79%", animationDelay: "0.25s", animationDuration: "1.15s" },
+    { fontSize: "16px", color: "#f28c28", left: "89%", animationDelay: "0.6s",  animationDuration: "0.95s" },
+];
 
 function charColor(userId) {
     if (!userId) return "var(--ink-mute)";

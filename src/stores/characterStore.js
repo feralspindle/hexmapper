@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase'
 import { createSessionChannel } from '@/lib/sessionChannel.js'
 import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
-import { playLuckSound } from '@/lib/diceSound.js'
+import { playLuckSound, playHellSound } from '@/lib/diceSound.js'
 import { calcGearItemSlots } from '@/lib/gearSlots.js'
+import { HELL_CONDITION, enterHellPayload, isInHell } from '@/lib/hellState.js'
 
 export function statMod(value) {
   return Math.floor((value - 10) / 2)
@@ -520,6 +521,43 @@ export const useCharacterStore = defineStore('character', () => {
     _logSheet(`${charName} deleted attack: ${raw}`)
   }
 
+  // amulet hell: a derived combat-round sentence. writes the hell state and
+  // keeps the 'in hell' condition in sync so tokens/combat panels pick it up
+  function goToHell(rounds, currentRound = 1) {
+    if (!character.value) return
+    const payload = enterHellPayload(rounds, currentRound)
+    const conditions = character.value.conditions ?? []
+    if (!conditions.includes(HELL_CONDITION)) {
+      updateField('conditions', [...conditions, HELL_CONDITION])
+    }
+    updateField('hell', payload.hell)
+    _logSheet(`${character.value?.name ?? 'character'} used their amulet and descended for ${payload.hell.rounds} round${payload.hell.rounds !== 1 ? 's' : ''}`)
+    playHellSound()
+  }
+
+  function returnFromHell() {
+    if (!character.value?.hell) return
+    updateField('hell', null)
+    if ((character.value.conditions ?? []).includes(HELL_CONDITION)) {
+      updateField('conditions', character.value.conditions.filter(c => c !== HELL_CONDITION))
+    }
+    _logSheet(`${character.value?.name ?? 'character'} clawed their way back out of hell`)
+  }
+
+  // cosmetic cleanup for expired sentences (the derived check already reads
+  // as "not in hell"; this just stops stale data lingering on the sheet)
+  function reapExpiredHell(currentRound) {
+    const id = activeId.value
+    const data = character.value
+    if (!id || !data?.hell || isInHell(data, currentRound)) return
+    characters.value = characters.value.map(c =>
+      c.id === id ? { ...c, data: { ...c.data, hell: null } } : c,
+    )
+    if ((character.value.conditions ?? []).includes(HELL_CONDITION)) {
+      updateField('conditions', character.value.conditions.filter(c => c !== HELL_CONDITION))
+    }
+  }
+
   function spendLuckToken() {
     if (!character.value) return
     const luck = character.value.luckTokens ?? { current: 1, max: 3 }
@@ -816,6 +854,7 @@ export const useCharacterStore = defineStore('character', () => {
     renownValue, adjustRenown, setRenown, deleteRenownEntry, awardHaul,
     addGearItem, grantGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,
+    goToHell, returnFromHell, reapExpiredHell,
     cleanup,
   }
 })

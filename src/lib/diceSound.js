@@ -89,6 +89,41 @@ export function playDiceSound() {
   } catch {}
 }
 
+// descending into the pit: low sawtooth rumble that falls off a cliff
+export function playHellSound() {
+  if (!soundEnabled.value) return;
+  try {
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+
+    const rumble = ctx.createOscillator();
+    const rumbleGain = ctx.createGain();
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(ctx.destination);
+    rumble.type = "sawtooth";
+    rumble.frequency.setValueAtTime(150, t);
+    rumble.frequency.exponentialRampToValueAtTime(28, t + 0.9);
+    rumbleGain.gain.setValueAtTime(0.001, t);
+    rumbleGain.gain.linearRampToValueAtTime(0.14, t + 0.08);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.95);
+    rumble.start(t);
+    rumble.stop(t + 0.95);
+
+    const shriek = ctx.createOscillator();
+    const shriekGain = ctx.createGain();
+    shriek.connect(shriekGain);
+    shriekGain.connect(ctx.destination);
+    shriek.type = "triangle";
+    shriek.frequency.setValueAtTime(660, t + 0.05);
+    shriek.frequency.exponentialRampToValueAtTime(160, t + 0.5);
+    shriekGain.gain.setValueAtTime(0.001, t + 0.05);
+    shriekGain.gain.linearRampToValueAtTime(0.07, t + 0.12);
+    shriekGain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    shriek.start(t + 0.05);
+    shriek.stop(t + 0.55);
+  } catch {}
+}
+
 // a die exploded — layered low thump + descending sweep reads as a boom next
 // to the plain dice blip
 export function playExplosionSound() {
