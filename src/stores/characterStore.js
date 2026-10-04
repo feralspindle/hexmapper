@@ -6,7 +6,7 @@ import { apiClient, ApiError } from '@/lib/apiClient.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { playLuckSound, playHellSound } from '@/lib/diceSound.js'
 import { calcGearItemSlots } from '@/lib/gearSlots.js'
-import { HELL_CONDITION, enterHellPayload, isInHell } from '@/lib/hellState.js'
+import { HELL_CONDITION, burnHellRound, enterHellPayload, isInHell } from '@/lib/hellState.js'
 
 export function statMod(value) {
   return Math.floor((value - 10) / 2)
@@ -67,6 +67,7 @@ export const useCharacterStore = defineStore('character', () => {
   const currentSessionId = ref(null)
   const memberSelections = ref([])
   const luckEvents = ref([])
+  const hellEvents = ref([])
   const gmInitiative = ref(null)
 
   const activeCharacter = computed(() =>
@@ -521,18 +522,39 @@ export const useCharacterStore = defineStore('character', () => {
     _logSheet(`${charName} deleted attack: ${raw}`)
   }
 
-  // amulet hell: a derived combat-round sentence. writes the hell state and
-  // keeps the 'in hell' condition in sync so tokens/combat panels pick it up
-  function goToHell(rounds, currentRound = 1) {
+  // amulet hell: a manual countdown the condemned burns down themselves.
+  // writes the hell state and keeps the 'in hell' condition in sync so
+  // tokens/combat panels pick it up, and tells the whole party
+  function goToHell(rounds) {
     if (!character.value) return
-    const payload = enterHellPayload(rounds, currentRound)
+    const payload = enterHellPayload(rounds)
     const conditions = character.value.conditions ?? []
     if (!conditions.includes(HELL_CONDITION)) {
       updateField('conditions', [...conditions, HELL_CONDITION])
     }
     updateField('hell', payload.hell)
     _logSheet(`${character.value?.name ?? 'character'} used their amulet and descended for ${payload.hell.rounds} round${payload.hell.rounds !== 1 ? 's' : ''}`)
+    const characterName = character.value?.name ?? 'Adventurer'
+    _pushHellEvent({ characterName, characterId: activeId.value })
     playHellSound()
+    _realtimeChannel?.send({
+      type: 'broadcast',
+      event: 'hell_descended',
+      payload: { characterName, characterId: activeId.value },
+    })
+  }
+
+  // burn one round off the sentence; hitting zero serves it and clears hell
+  function burnHellSentenceRound() {
+    if (!character.value?.hell) return
+    const next = burnHellRound(character.value)
+    if (!next) return
+    if (next.rounds_left <= 0) {
+      returnFromHell()
+      _logSheet(`${character.value?.name ?? 'character'} served their sentence in hell`)
+      return
+    }
+    updateField('hell', next)
   }
 
   function returnFromHell() {
@@ -541,21 +563,18 @@ export const useCharacterStore = defineStore('character', () => {
     if ((character.value.conditions ?? []).includes(HELL_CONDITION)) {
       updateField('conditions', character.value.conditions.filter(c => c !== HELL_CONDITION))
     }
-    _logSheet(`${character.value?.name ?? 'character'} clawed their way back out of hell`)
   }
 
-  // cosmetic cleanup for expired sentences (the derived check already reads
-  // as "not in hell"; this just stops stale data lingering on the sheet)
-  function reapExpiredHell(currentRound) {
-    const id = activeId.value
+  // cosmetic cleanup for stale zero-round states (the derived check already
+  // reads as "not in hell"; this just stops the field lingering on the sheet)
+  function reapExpiredHell() {
     const data = character.value
-    if (!id || !data?.hell || isInHell(data, currentRound)) return
-    characters.value = characters.value.map(c =>
-      c.id === id ? { ...c, data: { ...c.data, hell: null } } : c,
-    )
-    if ((character.value.conditions ?? []).includes(HELL_CONDITION)) {
-      updateField('conditions', character.value.conditions.filter(c => c !== HELL_CONDITION))
-    }
+    if (!data?.hell || isInHell(data)) return
+    returnFromHell()
+  }
+
+  function _pushHellEvent(payload) {
+    hellEvents.value = [...hellEvents.value, { id: crypto.randomUUID(), ...payload }]
   }
 
   function spendLuckToken() {
@@ -744,6 +763,10 @@ export const useCharacterStore = defineStore('character', () => {
         _pushLuckEvent(payload)
         playLuckSound()
       })
+      .on('broadcast', { event: 'hell_descended' }, ({ payload }) => {
+        _pushHellEvent(payload)
+        playHellSound()
+      })
       .on('broadcast', { event: 'character_updated' }, ({ payload }) => {
         const { characterId, data, sourceClient } = payload
         if (sourceClient === CLIENT_ID) return
@@ -854,7 +877,7 @@ export const useCharacterStore = defineStore('character', () => {
     renownValue, adjustRenown, setRenown, deleteRenownEntry, awardHaul,
     addGearItem, grantGearItemToChar, moveGearItem, updateGearItem, deleteGearItem, addAttack, updateAttack, deleteAttack,
     spendLuckToken, adjustLuck, clearAllInitiative, setGmInitiative,
-    goToHell, returnFromHell, reapExpiredHell,
+    goToHell, burnHellSentenceRound, returnFromHell, reapExpiredHell, hellEvents,
     cleanup,
   }
 })

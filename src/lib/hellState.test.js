@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   HELL_MAX_ROUNDS,
+  burnHellRound,
   enterHellPayload,
-  hellReturnRound,
   hellRoundsLeft,
   isInHell,
   normalizeHellRounds,
@@ -20,47 +20,45 @@ describe('normalizeHellRounds', () => {
 })
 
 describe('isInHell', () => {
-  it('active until the rounds elapse, then inert', () => {
-    const data = enterHellPayload(3, 2)
-    expect(isInHell(data, 2)).toBe(true)
-    expect(isInHell(data, 4)).toBe(true)
-    expect(isInHell(data, 5)).toBe(false)
-  })
-
-  it('missing or empty state is not hell', () => {
-    expect(isInHell(null, 3)).toBe(false)
-    expect(isInHell({}, 3)).toBe(false)
-    expect(isInHell({ hell: null }, 3)).toBe(false)
-    expect(isInHell({ hell: { rounds: 0, started_round: 1 } }, 3)).toBe(false)
-  })
-
-  it('a round reset never counts negative elapsed', () => {
-    const data = enterHellPayload(2, 5)
-    expect(isInHell(data, 1)).toBe(true)
-    expect(hellRoundsLeft(data, 1)).toBe(2)
+  it('active while rounds remain, inert at zero or missing', () => {
+    expect(isInHell(enterHellPayload(3))).toBe(true)
+    expect(isInHell({ hell: { rounds: 3, rounds_left: 1 } })).toBe(true)
+    expect(isInHell({ hell: { rounds: 3, rounds_left: 0 } })).toBe(false)
+    expect(isInHell({})).toBe(false)
+    expect(isInHell({ hell: null })).toBe(false)
+    expect(isInHell(null)).toBe(false)
   })
 })
 
 describe('hellRoundsLeft', () => {
-  it('counts down as rounds advance', () => {
-    const data = enterHellPayload(3, 1)
-    expect(hellRoundsLeft(data, 1)).toBe(3)
-    expect(hellRoundsLeft(data, 2)).toBe(2)
-    expect(hellRoundsLeft(data, 3)).toBe(1)
-    expect(hellRoundsLeft(data, 4)).toBe(0)
-  })
-})
-
-describe('hellReturnRound', () => {
-  it('is the round the sentence ends', () => {
-    expect(hellReturnRound(enterHellPayload(3, 2))).toBe(5)
-    expect(hellReturnRound({})).toBeNull()
+  it('reads the countdown directly', () => {
+    expect(hellRoundsLeft(enterHellPayload(4))).toBe(4)
+    expect(hellRoundsLeft({ hell: { rounds: 4, rounds_left: 2 } })).toBe(2)
+    expect(hellRoundsLeft({ hell: { rounds: 4, rounds_left: 0 } })).toBe(0)
+    expect(hellRoundsLeft({})).toBe(0)
   })
 })
 
 describe('enterHellPayload', () => {
-  it('clamps rounds and the starting round', () => {
-    expect(enterHellPayload(99, 3)).toEqual({ hell: { rounds: HELL_MAX_ROUNDS, started_round: 3 } })
-    expect(enterHellPayload(2, 'x')).toEqual({ hell: { rounds: 2, started_round: 1 } })
+  it('clamps the sentence', () => {
+    expect(enterHellPayload(99)).toEqual({ hell: { rounds: HELL_MAX_ROUNDS, rounds_left: HELL_MAX_ROUNDS } })
+    expect(enterHellPayload('x')).toEqual({ hell: { rounds: 3, rounds_left: 3 } })
+  })
+})
+
+describe('burnHellRound', () => {
+  it('decrements one round at a time and stops at zero', () => {
+    let data = enterHellPayload(2)
+    data = { ...data, hell: burnHellRound(data) }
+    expect(data.hell.rounds_left).toBe(1)
+    data = { ...data, hell: burnHellRound(data) }
+    expect(data.hell.rounds_left).toBe(0)
+    expect(isInHell(data)).toBe(false)
+    // a fully-served sentence has nothing left to burn
+    expect(burnHellRound(data)).toBeNull()
+  })
+
+  it('returns null when there is nothing to burn', () => {
+    expect(burnHellRound({})).toBeNull()
   })
 })

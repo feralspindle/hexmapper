@@ -285,7 +285,7 @@ function isOnline(userId) {
 
 function hellRoundsFor(card) {
     if (!card.char?.data) return 0;
-    return hellRoundsLeft(card.char.data, sessionStore.initiativeState?.round ?? 1);
+    return hellRoundsLeft(card.char.data);
 }
 
 // deterministic flame variants so the fire doesn't reshuffle on every render:

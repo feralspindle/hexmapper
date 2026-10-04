@@ -176,6 +176,10 @@ test.describe.serial('character sheet', () => {
       // own sheet tracks the sentence
       await expect(page.locator('.cs-hell-active')).toContainText('in hell · 4 rounds left')
 
+      // everyone sees the descent toast
+      await expect(gm.getByTestId('hell-toast')).toContainText('Gunner')
+      await expect(gm.getByTestId('hell-toast')).toContainText('descending')
+
       // the GM sees the dimmed card, flames, and the round stamp
       await gm.getByTestId('hex-party-toggle').click()
       const hellCard = gm.locator('.ds-player-card.in-hell')
@@ -183,6 +187,11 @@ test.describe.serial('character sheet', () => {
       await expect(hellCard).toContainText('Gunner')
       await expect(hellCard).toContainText('hell · 4 rounds')
       await expect(hellCard.locator('.ds-pc-hell-flames i')).toHaveCount(8)
+
+      // the condemned burns rounds off manually
+      await page.getByTestId('hell-burn-round').click()
+      await expect(page.locator('.cs-hell-active')).toContainText('in hell · 3 rounds left')
+      await expect(hellCard).toContainText('hell · 3 rounds')
 
       // clawing back out clears it everywhere
       await page.getByTestId('hell-return').click()

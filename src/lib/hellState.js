@@ -1,8 +1,7 @@
-// amulet hell state. hell is derived, never ticked: the character stores
-// { rounds, started_round } and liveness is computed against the session's
-// initiative round counter, so no client has to mutate anything each round
-// and racing writers are impossible. expired state is inert (it just stops
-// showing) and gets cleared lazily by the owner's sheet.
+// amulet hell state. the condemned manually burns rounds (the initiative
+// round counter is solo-play only), so the sentence is a plain countdown the
+// owner decrements - one writer, no races, and zero just reads as expired.
+// hell = { rounds, rounds_left } on the character sheet blob.
 
 export const HELL_CONDITION = 'in hell'
 export const HELL_MAX_ROUNDS = 20
@@ -13,42 +12,27 @@ export function normalizeHellRounds(value, fallback = 3) {
   return Math.max(1, Math.min(HELL_MAX_ROUNDS, n))
 }
 
-export function isHellState(data) {
-  const hell = data?.hell
-  return !!hell && normalizeHellRounds(hell.rounds, 0) > 0
+function roundsLeftOf(data) {
+  const left = Number(data?.hell?.rounds_left)
+  return Number.isFinite(left) ? Math.max(0, left) : 0
 }
 
-export function hellElapsedRounds(data, currentRound) {
-  if (!isHellState(data)) return 0
-  const started = Number(data.hell.started_round)
-  const now = Number(currentRound)
-  if (!Number.isFinite(started) || !Number.isFinite(now)) return 0
-  return Math.max(0, now - started)
+export function isInHell(data) {
+  return roundsLeftOf(data) > 0
 }
 
-export function isInHell(data, currentRound) {
-  if (!isHellState(data)) return false
-  return hellElapsedRounds(data, currentRound) < normalizeHellRounds(data.hell.rounds, 0)
+export function hellRoundsLeft(data) {
+  return isInHell(data) ? roundsLeftOf(data) : 0
 }
 
-export function hellRoundsLeft(data, currentRound) {
-  if (!isInHell(data, currentRound)) return 0
-  return normalizeHellRounds(data.hell.rounds, 0) - hellElapsedRounds(data, currentRound)
+export function enterHellPayload(rounds) {
+  const n = normalizeHellRounds(rounds)
+  return { hell: { rounds: n, rounds_left: n } }
 }
 
-// the round counter reads when hell expires (for "back at round N" copy)
-export function hellReturnRound(data) {
-  if (!isHellState(data)) return null
-  const started = Number(data.hell.started_round)
-  if (!Number.isFinite(started)) return null
-  return started + normalizeHellRounds(data.hell.rounds, 0)
-}
-
-export function enterHellPayload(rounds, currentRound) {
-  return {
-    hell: {
-      rounds: normalizeHellRounds(rounds),
-      started_round: Math.max(1, Math.round(Number(currentRound) || 1)),
-    },
-  }
+// one manual round tick; rounds_left floors at 0 (0 == done, caller clears)
+export function burnHellRound(data) {
+  const left = roundsLeftOf(data)
+  if (!left) return null
+  return { ...data.hell, rounds_left: left - 1 }
 }

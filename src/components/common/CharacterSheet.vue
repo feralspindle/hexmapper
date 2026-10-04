@@ -1174,8 +1174,17 @@
                         <div class="cs-hell-active">
                             <i class="fa-solid fa-fire cs-hell-flame" />
                             <span class="cs-hell-active-text">
-                                in hell · {{ hellRoundsLeft }} round{{ hellRoundsLeft === 1 ? "" : "s" }} left<template v-if="hellReturnRound"> (back at round {{ hellReturnRound }})</template>
+                                in hell · {{ hellRoundsLeft }} round{{ hellRoundsLeft === 1 ? "" : "s" }} left
                             </span>
+                            <button
+                                v-if="canEdit"
+                                class="cs-hell-return"
+                                data-testid="hell-burn-round"
+                                title="Count down one round"
+                                @click="characterStore.burnHellSentenceRound()"
+                            >
+                                burn a round
+                            </button>
                             <button
                                 v-if="canEdit"
                                 class="cs-hell-return"
@@ -2244,7 +2253,7 @@ import { useD } from "@/stores/dungeonStore.js";
 import { useConfirmDialog } from "@/composables/useConfirmDialog.js";
 import { useTimeAgo } from "@/composables/useTimeAgo.js";
 import { isGemItem, calcGearItemSlots } from "@/lib/gearSlots.js";
-import { isInHell as isInHellFn, hellRoundsLeft as hellRoundsLeftFn, hellReturnRound as hellReturnRoundFn } from "@/lib/hellState.js";
+import { isInHell as isInHellFn, hellRoundsLeft as hellRoundsLeftFn } from "@/lib/hellState.js";
 import { uploadTokenImage, tokenImageUrl } from "@/lib/tokenImage.js";
 import CharacterSpells from "@/components/common/CharacterSpells.vue";
 import CharacterTalents from "@/components/common/CharacterTalents.vue";
@@ -2617,25 +2626,20 @@ const newAtkInputRef = ref(null);
 // ---- amulet hell -----------------------------------------------------------
 const hellPickerOpen = ref(false);
 const hellDraft = ref(3);
-const hellRound = computed(() => sessionStore.initiativeState?.round ?? 1);
-const hellActive = computed(() => isInHellFn(char.value, hellRound.value));
-const hellRoundsLeft = computed(() => hellRoundsLeftFn(char.value, hellRound.value));
-const hellReturnRound = computed(() => hellReturnRoundFn(char.value));
+const hellActive = computed(() => isInHellFn(char.value));
+const hellRoundsLeft = computed(() => hellRoundsLeftFn(char.value));
 
 function openHellPicker() {
     hellDraft.value = 3;
     hellPickerOpen.value = true;
 }
 function descendToHell() {
-    characterStore.goToHell(hellDraft.value, hellRound.value);
+    characterStore.goToHell(hellDraft.value);
     hellPickerOpen.value = false;
 }
 
-// expired sentences clear lazily once the owner is looking at the sheet
-watch(
-    () => [characterStore.activeId, hellRound.value],
-    () => characterStore.reapExpiredHell(hellRound.value),
-);
+// stale zero-round states clear once the owner is looking at the sheet
+watch(() => characterStore.activeId, () => characterStore.reapExpiredHell());
 function submitAddAtk() {
     if (!newAtkDraft.value.raw.trim()) return;
     characterStore.addAttack(
@@ -3650,6 +3654,7 @@ button.cs-stat-val:hover {
     display: flex;
     justify-content: center;
     padding: 6px 0 2px;
+    max-width: 100%;
 }
 .cs-hell-btn {
     background: transparent;
@@ -3672,12 +3677,16 @@ button.cs-stat-val:hover {
 }
 .cs-hell-picker {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    gap: 4px;
     border: 1px solid var(--rule-strong, #c8baa0);
     border-radius: 2px;
-    padding: 5px 8px;
+    padding: 5px 6px;
     background: var(--paper-3, #d8ccb4);
+    max-width: 100%;
+    box-sizing: border-box;
 }
 .cs-hell-picker-label {
     font-family: var(--font-zine, 'Special Elite', serif);
@@ -3686,6 +3695,8 @@ button.cs-stat-val:hover {
     text-transform: uppercase;
     color: var(--ink-mute, #9e8e7e);
     margin-right: 2px;
+    flex-basis: 100%;
+    text-align: center;
 }
 .cs-hell-picker-count {
     font-family: var(--font-mono, monospace);
@@ -3713,12 +3724,16 @@ button.cs-stat-val:hover {
 }
 .cs-hell-active {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 4px 6px;
     border: 1px solid color-mix(in srgb, #b8541c 45%, transparent);
     background: color-mix(in srgb, #b8541c 10%, transparent);
     border-radius: 2px;
     padding: 4px 8px;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 .cs-hell-flame {
     color: #b8541c;
