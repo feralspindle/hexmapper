@@ -79,6 +79,14 @@
 
     <div v-if="hexMode === 'fow'" :class="['map-settings-section', isAlignmentLocked ? 'map-settings-locked' : '']">
 
+      <div v-if="mapStore.activeMapImageUrl" class="map-settings-subsection">
+        <div class="map-settings-label">Auto-align</div>
+        <button class="map-auto-align-btn" :disabled="autoAligning" @click="runAutoAlign">
+          {{ autoAligning ? 'Reading grid…' : 'Detect grid from image' }}
+        </button>
+        <p class="map-settings-hint">{{ autoAlignMessage }}</p>
+      </div>
+
       <div class="map-settings-subsection">
         <div class="map-settings-label">Image rotation</div>
         <RotationControl
@@ -181,6 +189,7 @@ import UploadControl from '@/components/common/mapSettings/UploadControl.vue'
 import RotationControl from '@/components/common/mapSettings/RotationControl.vue'
 import ScaleControl from '@/components/common/mapSettings/ScaleControl.vue'
 import MoveModeToggle from '@/components/common/mapSettings/MoveModeToggle.vue'
+import { autoAlignFromImage } from '@/lib/autoAlign.js'
 
 const props = defineProps({
   moveMode: { type: String, default: 'none' },
@@ -239,6 +248,34 @@ const hexHeightDraftInput = computed({
   get: () => hexHeightDraft.value ?? Math.round(Math.sqrt(3) * hexWidthDraft.value / 2),
   set: (v) => { hexHeightDraft.value = v },
 })
+
+const AUTO_ALIGN_IDLE_HINT = 'Finds the printed hex grid on the image and sets hex size, rotation, and offsets.'
+const autoAligning = ref(false)
+const autoAlignMessage = ref(AUTO_ALIGN_IDLE_HINT)
+
+async function runAutoAlign() {
+  autoAligning.value = true
+  autoAlignMessage.value = AUTO_ALIGN_IDLE_HINT
+  try {
+    const patch = await autoAlignFromImage(mapStore.activeMapImageUrl, {
+      imageScale: mapStore.mapImageScale,
+      imageRotation: mapStore.mapImageRotation,
+      imageOffsetX: mapStore.mapImageOffsetX,
+      imageOffsetY: mapStore.mapImageOffsetY,
+    })
+    if (!patch) {
+      autoAlignMessage.value = 'No grid found. This only works on maps with a printed hex grid.'
+      return
+    }
+    mapStore.applyLocalPatch(patch)
+    await mapStore.updateActiveMap(patch)
+    autoAlignMessage.value = 'Aligned to the detected grid. Fine-tune below if needed.'
+  } catch (e) {
+    autoAlignMessage.value = e?.message ?? 'Auto-align failed.'
+  } finally {
+    autoAligning.value = false
+  }
+}
 
 async function handleUpload(file) {
   uploadError.value = ''
@@ -527,4 +564,20 @@ async function setUnit(unit) {
   transition: background .15s, color .15s;
 }
 .map-lock-btn:hover { background: var(--paper-3); color: var(--ink); }
+
+.map-auto-align-btn {
+  width: 100%;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--ink-2);
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  border-bottom: 2px solid var(--rule-strong);
+  border-radius: 2px;
+  transition: background .15s, color .15s;
+}
+.map-auto-align-btn:hover:not(:disabled) { background: var(--paper-3); color: var(--ink); }
+.map-auto-align-btn:disabled { opacity: .6; }
 </style>
