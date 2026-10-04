@@ -254,6 +254,7 @@ pub enum SessionTable {
     PartyVaultContainers,
     PartyVaultLoot,
     PartyVaultItems,
+    SiegeWeapons,
     DungeonRooms,
     DungeonCorridors,
 }
@@ -267,6 +268,7 @@ impl SessionTable {
             Self::PartyVaultContainers  => "party_vault_containers",
             Self::PartyVaultLoot        => "party_vault_loot",
             Self::PartyVaultItems       => "party_vault_items",
+            Self::SiegeWeapons          => "siege_weapons",
             Self::DungeonRooms          => "dungeon_rooms",
             Self::DungeonCorridors      => "dungeon_corridors",
         }

@@ -174,6 +174,19 @@
                     "
                     >mod</span
                 >
+                <button
+                    class="ds-btn tiny ghost ds-explode-toggle"
+                    :class="{ active: exploding }"
+                    :title="
+                        exploding
+                            ? 'Exploding dice on — max rolls trigger another roll'
+                            : 'Exploding dice off'
+                    "
+                    data-testid="dice-explode-toggle"
+                    @click="exploding = !exploding"
+                >
+                    <i class="fa-solid fa-explosion" />
+                </button>
                 <div style="flex: 1" />
                 <button
                     v-if="hasDice && !savingMacro"
@@ -357,13 +370,8 @@
                     <div v-if="entry.results?.length" class="ds-roll-breakdown">
                         [<template v-for="(r, i) in entry.results" :key="i"
                             ><span
-                                :class="
-                                    r.value === 20 && r.die === 'd20'
-                                        ? 'result-crit'
-                                        : r.value === 1 && r.die === 'd20'
-                                          ? 'result-fumble'
-                                          : ''
-                                "
+                                :class="dieClass(r)"
+                                :title="dieTitle(r)"
                                 >{{ r.value }}</span
                             ><span
                                 v-if="i < entry.results.length - 1"
@@ -457,12 +465,14 @@ const DICE = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"];
 const ALL_DICE = ["d1", ...DICE];
 const pending = ref(Object.fromEntries(DICE.map((d) => [d, 0])));
 const modifier = ref(0);
+const exploding = ref(false);
 
 const hasDice = computed(() => DICE.some((d) => pending.value[d] > 0));
 const hasAnything = computed(() => hasDice.value || modifier.value !== 0);
 const formula = computed(() => {
+    const bang = exploding.value ? "!" : "";
     const parts = DICE.filter((d) => pending.value[d] > 0).map(
-        (d) => `${pending.value[d]}${d}`,
+        (d) => `${pending.value[d]}${d}${bang}`,
     );
     const joined = parts.join("+");
     if (modifier.value > 0)
@@ -488,7 +498,14 @@ function clear() {
 }
 function roll() {
     if (!hasDice.value) return;
-    diceStore.rollDice({ ...pending.value }, modifier.value);
+    if (exploding.value) {
+        const notation = DICE.filter((d) => pending.value[d] > 0)
+            .map((d) => `${pending.value[d]}${d}!`)
+            .join("+");
+        diceStore.rollDice(notation, modifier.value);
+    } else {
+        diceStore.rollDice({ ...pending.value }, modifier.value);
+    }
     clear();
 }
 
@@ -533,6 +550,7 @@ function formatMacroExpr(macro) {
 }
 
 function formatExpr(entry) {
+    if (entry.notation) return entry.notation;
     const parts = ALL_DICE.filter((d) => (entry.pending?.[d] ?? 0) > 0).map(
         (d) => `${entry.pending[d]}${d}`,
     );
@@ -546,7 +564,13 @@ function formatExpr(entry) {
     return joined || "?";
 }
 
+function loneKeptD20(e) {
+    const kept = (e.results ?? []).filter((r) => !r.dropped);
+    return kept.length === 1 && kept[0].die === "d20";
+}
+
 function isSingleD20(e) {
+    if (e.notation) return loneKeptD20(e);
     return (
         (e.pending?.d20 ?? 0) === 1 &&
         DICE.filter((d) => d !== "d20").every(
@@ -592,6 +616,21 @@ function streakTitle(entry) {
 
 function rollColor(userId) {
     return playerColorFor(userId);
+}
+
+function dieClass(r) {
+    if (r.dropped) return "result-dropped";
+    if (r.value === 20 && r.die === "d20") return "result-crit";
+    if (r.value === 1 && r.die === "d20") return "result-fumble";
+    if (r.exploded_from != null) return "result-exploded";
+    return "";
+}
+
+function dieTitle(r) {
+    if (r.exploded_from != null)
+        return `exploded from a ${r.exploded_from}`;
+    if (r.dropped) return "dropped";
+    return "";
 }
 
 const annotatingId = ref(null);
@@ -680,8 +719,22 @@ watch(
     color: var(--accent, #8a1c1c);
     font-weight: 700;
 }
+.result-exploded {
+    color: #b8541c;
+    font-weight: 700;
+}
+.result-dropped {
+    color: var(--ink-mute, #8a7a68);
+    text-decoration: line-through;
+    opacity: 0.55;
+}
 .result-sep {
     color: var(--ink-mute, #8a7a68);
+}
+
+.ds-explode-toggle.active {
+    color: #b8541c;
+    border-color: color-mix(in srgb, #b8541c 45%, transparent);
 }
 
 .ds-roll-streak {

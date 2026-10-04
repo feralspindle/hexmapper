@@ -17,5 +17,6 @@ pub mod oracle;
 pub mod photo;
 pub mod prefs;
 pub mod session;
+pub mod siege;
 pub mod statblock;
 pub mod vault;

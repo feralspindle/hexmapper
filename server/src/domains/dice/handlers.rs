@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 use axum::extract::State;
 use axum::Json;
 use chrono::{DateTime, Utc};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use ttrpg_dice_engine::{engine::LiveRng, DiceExpr, DiceSides, ExprBreakdown};
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
@@ -16,24 +16,40 @@ use crate::events::NewEvent;
 use crate::retry_tx;
 use crate::state::AppState;
 
-const ALLOWED_DICE: &[&str] = &["d1", "d4", "d6", "d8", "d10", "d12", "d20", "d100"];
-const MAX_PER_DIE: i32 = 20;
-const MAX_TOTAL_DICE: i32 = 40;
+const ALLOWED_SIDES: &[u32] = &[1, 4, 6, 8, 10, 12, 20, 100];
+const MAX_PER_DIE: u32 = 20;
+const MAX_TOTAL_DICE: u32 = 40;
 
 #[derive(Debug, Deserialize)]
 pub struct RollDiceRequest {
     pub session_id: Uuid,
+    #[serde(default)]
     pub pending: BTreeMap<String, i32>,
     #[serde(default)]
     pub modifier: i32,
+    /// full dice notation ("3d6!+1"). when present it replaces the pending map;
+    /// the pending path still works (macros, character sheet, old clients).
+    pub notation: Option<String>,
     pub label: Option<String>,
     pub character_id: Option<Uuid>,
 }
 
-#[derive(Debug, Serialize)]
-struct DieResult {
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct DieResult {
     die: String,
-    value: i32,
+    value: i64,
+    /// new fields are omitted when unset so old clients and old rows keep the
+    /// same shape they always had
+    #[serde(skip_serializing_if = "is_false")]
+    dropped: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exploded_from: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rerolled_from: Option<i64>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -44,6 +60,7 @@ pub struct DiceRollRow {
     pub display_name: String,
     pub pending: serde_json::Value,
     pub modifier: i32,
+    pub notation: Option<String>,
     pub results: serde_json::Value,
     pub total: i32,
     pub created_at: DateTime<Utc>,
@@ -119,8 +136,8 @@ pub async fn roll_dice(
         }
     }
 
-    let (results, total) = roll(&req.pending, req.modifier)?;
-    let stats = compute_stats(&req.pending, req.modifier, total);
+    let notation = effective_notation(&req.pending, req.modifier, req.notation.as_deref())?;
+    let outcome = roll_notation(&notation)?;
 
     let row_id = Uuid::new_v4();
 
@@ -132,11 +149,12 @@ pub async fn roll_dice(
         payload: json!({
             "pending": req.pending,
             "modifier": req.modifier,
+            "notation": notation,
             "label": req.label,
             "character_id": req.character_id,
-            "results": results,
-            "total": total,
-            "stats": stats,
+            "results": outcome.results,
+            "total": outcome.total,
+            "stats": outcome.stats,
         }),
         metadata: auth.metadata(),
     };
@@ -146,6 +164,34 @@ pub async fn roll_dice(
     })?;
 
     Ok(Json(row))
+}
+
+pub(crate) struct RollOutcome {
+    pub(crate) results: Vec<DieResult>,
+    pub(crate) total: i32,
+    pub(crate) stats: Option<ttrpg_dice_engine::engine::DistributionPosition>,
+}
+
+/// notation wins when provided; otherwise it is rebuilt from the pending map
+/// exactly like the old display/stats path did
+fn effective_notation(
+    pending: &BTreeMap<String, i32>,
+    modifier: i32,
+    notation: Option<&str>,
+) -> Result<String, AppError> {
+    let trimmed = notation.map(str::trim).filter(|s| !s.is_empty());
+    match trimmed {
+        Some(n) => Ok(append_modifier(n, modifier)),
+        None => Ok(build_notation(pending, modifier)),
+    }
+}
+
+fn append_modifier(notation: &str, modifier: i32) -> String {
+    if modifier == 0 {
+        notation.to_string()
+    } else {
+        format!("{notation}{modifier:+}")
+    }
 }
 
 fn build_notation(pending: &BTreeMap<String, i32>, modifier: i32) -> String {
@@ -164,57 +210,144 @@ fn build_notation(pending: &BTreeMap<String, i32>, modifier: i32) -> String {
     parts.join("+").replace("+-", "-")
 }
 
-fn compute_stats(pending: &BTreeMap<String, i32>, modifier: i32, total: i32) -> Option<ttrpg_dice_engine::engine::DistributionPosition> {
-    let notation = build_notation(pending, modifier);
-    match ttrpg_dice_engine::distribution(&notation) {
-        Ok(dist) => Some(dist.position_of(total as i64)),
-        Err(err) => {
-            tracing::warn!("failed to compute dice roll stats for notation {notation:?}: {err}");
-            None
+/// parse, validate, and roll `notation` through the vendored engine. the engine
+/// supplies the per-die breakdown (exploded/dropped/rerolled provenance), the
+/// total, and the distribution position for stats in one call. also used by the
+/// siege domain to fire weapons
+pub(crate) fn roll_notation(notation: &str) -> Result<RollOutcome, AppError> {
+    let expr = ttrpg_dice_engine::parse(notation)
+        .map_err(|err| AppError::BadRequest(format!("invalid notation {notation:?}: {err}")))?;
+    validate_expr(&expr)?;
+
+    let mut rng = LiveRng::new();
+    let result = ttrpg_dice_engine::roll(notation, &mut rng)
+        .map_err(|err| AppError::BadRequest(format!("failed to roll {notation:?}: {err}")))?;
+
+    let mut results = Vec::new();
+    flatten_results(&expr, &result.breakdown, &mut results);
+
+    Ok(RollOutcome {
+        results,
+        total: i32::try_from(result.total).unwrap_or(i32::MAX),
+        stats: Some(result.distribution_position),
+    })
+}
+
+/// walk the parsed tree and the roll breakdown in lockstep, flattening every
+/// dice group into the flat per-die results list stored on the row
+fn flatten_results(expr: &DiceExpr, breakdown: &ExprBreakdown, out: &mut Vec<DieResult>) {
+    match (expr, breakdown) {
+        (DiceExpr::Dice(node), ExprBreakdown::DiceGroup { dice, .. }) => {
+            let die = die_label(&node.sides);
+            for d in dice {
+                out.push(DieResult {
+                    die: die.clone(),
+                    value: d.value,
+                    dropped: d.dropped,
+                    exploded_from: d.exploded_from,
+                    rerolled_from: d.rerolled_from,
+                });
+            }
         }
+        (DiceExpr::Add(l, r), ExprBreakdown::Add(lb, rb, _)) => {
+            flatten_results(l, lb, out);
+            flatten_results(r, rb, out);
+        }
+        (DiceExpr::Sub(l, r), ExprBreakdown::Sub(lb, rb, _)) => {
+            flatten_results(l, lb, out);
+            flatten_results(r, rb, out);
+        }
+        (DiceExpr::Mul(l, r), ExprBreakdown::Mul(lb, rb, _)) => {
+            flatten_results(l, lb, out);
+            flatten_results(r, rb, out);
+        }
+        (DiceExpr::Neg(inner), ExprBreakdown::Neg(ib, _)) => flatten_results(inner, ib, out),
+        (DiceExpr::Literal(_), _) => {}
+        _ => {}
     }
 }
 
-fn roll(pending: &BTreeMap<String, i32>, modifier: i32) -> Result<(Vec<DieResult>, i32), AppError> {
-    let mut results = Vec::new();
-    let mut total = modifier;
-    let mut total_dice: i32 = 0;
-    let mut rng = rand::thread_rng();
-
-    for (die, &count) in pending {
-        if count <= 0 {
-            continue;
-        }
-
-        if !ALLOWED_DICE.contains(&die.as_str()) {
-            return Err(AppError::BadRequest(format!("invalid die type: {die}")));
-        }
-
-        if count > MAX_PER_DIE {
-            return Err(AppError::BadRequest(format!(
-                "max {MAX_PER_DIE} of any one die type (got {count} {die})"
-            )));
-        }
-
-        total_dice += count;
-        if total_dice > MAX_TOTAL_DICE {
-            return Err(AppError::BadRequest(format!("max {MAX_TOTAL_DICE} total dice per roll")));
-        }
-
-        let sides: i32 = die[1..].parse().map_err(|_| AppError::BadRequest(format!("invalid die type: {die}")))?;
-
-        for _ in 0..count {
-            let value = if sides == 1 { 1 } else { rng.gen_range(1..=sides) };
-            results.push(DieResult { die: die.clone(), value });
-            total += value;
-        }
+/// d% is stored as d100 to match the pending-path labels old rows already use
+fn die_label(sides: &DiceSides) -> String {
+    match sides {
+        DiceSides::Percentile => "d100".to_string(),
+        other => format!("d{other}"),
     }
+}
 
+/// enforce the same limits the old pending path enforced, but on the parsed
+/// tree: allowed die sizes, max dice per group, max dice per roll. modifiers
+/// (explodes, keeps, rerolls) are unrestricted — the engine handles them all
+fn validate_expr(expr: &DiceExpr) -> Result<(), AppError> {
+    let mut total_dice: u32 = 0;
+    validate_node(expr, &mut total_dice)?;
     if total_dice == 0 {
         return Err(AppError::BadRequest("no dice to roll".to_string()));
     }
+    Ok(())
+}
 
-    Ok((results, total))
+/// validate a notation without rolling it (siege weapon damage definitions)
+pub(crate) fn validate_notation(notation: &str) -> Result<(), AppError> {
+    let expr = ttrpg_dice_engine::parse(notation)
+        .map_err(|err| AppError::BadRequest(format!("invalid notation {notation:?}: {err}")))?;
+    validate_expr(&expr)
+}
+
+/// roll notation and build the exact `dice_roll.rolled` payload the roll_dice
+/// handler emits, so other domains (siege fire) produce identical events
+pub(crate) fn roll_event_payload(
+    notation: &str,
+    modifier: i32,
+    label: Option<&str>,
+    character_id: Option<Uuid>,
+) -> Result<serde_json::Value, AppError> {
+    let effective = append_modifier(notation.trim(), modifier);
+    let outcome = roll_notation(&effective)?;
+    Ok(json!({
+        "pending": {},
+        "modifier": modifier,
+        "notation": effective,
+        "label": label,
+        "character_id": character_id,
+        "results": outcome.results,
+        "total": outcome.total,
+        "stats": outcome.stats,
+    }))
+}
+
+fn validate_node(expr: &DiceExpr, total_dice: &mut u32) -> Result<(), AppError> {
+    match expr {
+        DiceExpr::Literal(_) => Ok(()),
+        DiceExpr::Dice(node) => {
+            let faces = node
+                .sides
+                .face_count()
+                .ok_or_else(|| AppError::BadRequest("unsupported die type".to_string()))?;
+            if !ALLOWED_SIDES.contains(&faces) {
+                return Err(AppError::BadRequest(format!("invalid die type: d{faces}")));
+            }
+            if node.count > MAX_PER_DIE {
+                return Err(AppError::BadRequest(format!(
+                    "max {MAX_PER_DIE} of any one die type (got {})",
+                    node.count
+                )));
+            }
+            *total_dice += node.count;
+            if *total_dice > MAX_TOTAL_DICE {
+                return Err(AppError::BadRequest(format!(
+                    "max {MAX_TOTAL_DICE} total dice per roll"
+                )));
+            }
+            Ok(())
+        }
+        DiceExpr::Add(l, r) | DiceExpr::Sub(l, r) | DiceExpr::Mul(l, r) => {
+            validate_node(l, total_dice)?;
+            validate_node(r, total_dice)
+        }
+        DiceExpr::Neg(inner) => validate_node(inner, total_dice),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -242,18 +375,107 @@ mod tests {
     }
 
     #[test]
-    fn compute_stats_for_all_allowed_dice() {
-        for die in ALLOWED_DICE {
-            let pending = BTreeMap::from([(die.to_string(), 1)]);
-            let stats = compute_stats(&pending, 0, 1);
-            assert!(stats.is_some(), "expected stats for {die}");
-        }
+    fn notation_replaces_pending_when_given() {
+        let pending = BTreeMap::from([("d6".to_string(), 2)]);
+        assert_eq!(
+            effective_notation(&pending, 0, Some("3d6!")).unwrap(),
+            "3d6!"
+        );
+        assert_eq!(effective_notation(&pending, 0, Some("  ")).unwrap(), "2d6");
+        assert_eq!(effective_notation(&pending, 0, None).unwrap(), "2d6");
     }
 
     #[test]
-    fn compute_stats_with_modifier_and_multiple_dice() {
-        let pending = BTreeMap::from([("d6".to_string(), 2), ("d20".to_string(), 1)]);
-        let stats = compute_stats(&pending, 3, 10).unwrap();
-        assert!((stats.mean - 20.5).abs() < 0.001);
+    fn modifier_appends_to_notation() {
+        assert_eq!(append_modifier("3d6!", 2), "3d6!+2");
+        assert_eq!(append_modifier("3d6!", -1), "3d6!-1");
+        assert_eq!(append_modifier("3d6!", 0), "3d6!");
+    }
+
+    #[test]
+    fn roll_notation_flat_roll_bounds() {
+        let outcome = roll_notation("1d20+5").unwrap();
+        assert_eq!(outcome.results.len(), 1);
+        assert_eq!(outcome.results[0].die, "d20");
+        assert!((1..=20).contains(&outcome.results[0].value));
+        assert!((6..=25).contains(&outcome.total));
+        assert!(outcome.stats.is_some());
+    }
+
+    #[test]
+    fn roll_notation_mixed_groups_flatten_in_order() {
+        let outcome = roll_notation("1d20+2d6").unwrap();
+        assert_eq!(outcome.results.len(), 3);
+        assert_eq!(outcome.results[0].die, "d20");
+        assert_eq!(outcome.results[1].die, "d6");
+        assert_eq!(outcome.results[2].die, "d6");
+        let sum: i64 = outcome.results.iter().map(|d| d.value).sum();
+        assert_eq!(outcome.total as i64, sum);
+    }
+
+    #[test]
+    fn roll_notation_exploding_dice() {
+        // !>=2 on 10 dice is effectively guaranteed to explode at least once
+        let outcome = roll_notation("10d6!>=2").unwrap();
+        assert!(outcome.results.len() >= 10);
+        let exploded: Vec<&DieResult> = outcome
+            .results
+            .iter()
+            .filter(|d| d.exploded_from.is_some())
+            .collect();
+        assert!(!exploded.is_empty());
+        for d in &exploded {
+            // extra dice only spawn from a triggering value (>= threshold)
+            assert!(d.exploded_from.unwrap() >= 2);
+            assert!((1..=6).contains(&d.value));
+        }
+        // no more than cap + original count per group
+        assert!(outcome.results.len() <= 10 * 21);
+    }
+
+    #[test]
+    fn roll_notation_keep_drop_marks_dropped() {
+        let outcome = roll_notation("4d6kh3").unwrap();
+        assert_eq!(outcome.results.len(), 4);
+        assert_eq!(outcome.results.iter().filter(|d| d.dropped).count(), 1);
+    }
+
+    #[test]
+    fn roll_notation_percentile_labels_as_d100() {
+        let outcome = roll_notation("d%").unwrap();
+        assert_eq!(outcome.results[0].die, "d100");
+    }
+
+    #[test]
+    fn roll_notation_rejects_disallowed_sides() {
+        assert!(roll_notation("2d13").is_err());
+        assert!(roll_notation("4dF").is_err());
+        assert!(roll_notation("1d666").is_err());
+    }
+
+    #[test]
+    fn roll_notation_enforces_dice_limits() {
+        assert!(roll_notation("21d6").is_err());
+        assert!(roll_notation("30d6+20d4").is_err());
+        assert!(roll_notation("20d6+20d4").is_ok());
+    }
+
+    #[test]
+    fn roll_notation_rejects_diceless_expressions() {
+        assert!(roll_notation("5").is_err());
+        assert!(roll_notation("3+4").is_err());
+    }
+
+    #[test]
+    fn roll_notation_rejects_garbage() {
+        assert!(roll_notation("haitch d six").is_err());
+    }
+
+    #[test]
+    fn stats_for_all_allowed_dice() {
+        for sides in ALLOWED_SIDES {
+            let outcome = roll_notation(&format!("1d{sides}")).unwrap();
+            assert!(outcome.stats.is_some(), "expected stats for d{sides}");
+        }
     }
 }

@@ -77,4 +77,77 @@ test.describe.serial('character sheet', () => {
       await room.close()
     }
   })
+
+  test('attack modifiers stack with the linked stat and the roll uses the total', async ({ browser }) => {
+    const room = await createThreeRoleCampaign(browser, e2eAccounts(), {
+      mode: 'fow',
+      name: uniqueCampaignName('E2E Attack Mods'),
+      contextOptions,
+    })
+
+    try {
+      const page = room.player1.page
+      await importCharacterJson(page, sampleCharacterJson, 'Shazkhag')
+      await openCharacterSheet(page)
+      await page.getByTestId('char-tab-combat').click()
+
+      const crossbow = page.locator('.cs-list-item').filter({ hasText: 'CROSSBOW' })
+      await crossbow.getByTitle('Edit').click()
+
+      // in edit mode the label becomes an input value, so the text filter no
+      // longer matches - target the (single) open edit form instead
+      const editForm = page.locator('.cs-list-item .cs-form-stack')
+
+      // link STR (13 -> +1) and stack a talent +2, a debuff -1, and a long one
+      await editForm.locator('select').selectOption('STR')
+      await page.getByTestId('atk-mod-add').click()
+      await page.getByTestId('atk-mod-label').last().fill('talent')
+      await page.getByTestId('atk-mod-value').last().fill('2')
+      await page.getByTestId('atk-mod-add').click()
+      await page.getByTestId('atk-mod-label').last().fill('debuff')
+      await page.getByTestId('atk-mod-value').last().fill('-1')
+      await page.getByTestId('atk-mod-add').click()
+      await page.getByTestId('atk-mod-label').last().fill('blessing of the war priest')
+      await page.getByTestId('atk-mod-value').last().fill('1')
+      const longDescription = 'Repeating heavy crossbow, 2H, skips move to reload, cold iron bolts, sighted against the eastern wind by a very picky dwarf'
+      await editForm.getByTestId('atk-description').fill(longDescription)
+      // the preview spells out what each source contributes
+      await expect(editForm.locator('.cs-atk-mod-editor-total')).toContainText('roll +3 (STR +1 + modifiers +2)')
+      await editForm.getByRole('button', { name: 'Save' }).click()
+
+      // description sits above the chips, the chips carry the math
+      const descEl = crossbow.locator('.cs-atk-desc')
+      await expect(descEl).toHaveText(longDescription)
+      // long descriptions wrap onto extra lines instead of clipping
+      expect(await descEl.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+      expect(await descEl.evaluate(el => el.scrollHeight > 18)).toBe(true)
+      const descBox = await descEl.boundingBox()
+      const modsBox = await crossbow.locator('.cs-atk-mods').boundingBox()
+      expect(descBox.y).toBeLessThan(modsBox.y)
+
+      // +1 stat, +2 talent, -1 debuff, +1 blessing = +3
+      await expect(crossbow).toContainText('STR +1')
+      await expect(crossbow).toContainText('talent +2')
+      await expect(crossbow).toContainText('debuff -1')
+      await expect(crossbow.locator('.cs-atk-mod-total')).toHaveText('= +3')
+
+      // chips wrap instead of pushing the action columns out of the sheet
+      const sheetBox = await page.getByTestId('char-sheet').boundingBox()
+      const editBox = await crossbow.getByTitle('Edit').boundingBox()
+      expect(editBox.x + editBox.width).toBeLessThanOrEqual(sheetBox.x + sheetBox.width + 1)
+      expect(editBox.x).toBeGreaterThanOrEqual(sheetBox.x - 1)
+
+      // the attack roll carries the stacked total
+      await crossbow.locator('.cs-list-main').first().click()
+      await expect(page.getByTestId('dice-roll-row').first()).toContainText('1d20+3')
+
+      // untouched attacks keep using the description bonus (+2 from "+2/+1")
+      const dagger = page.locator('.cs-list-item').filter({ hasText: 'DAGGER' })
+      await dagger.locator('.cs-list-main').first().click()
+      await expect(page.getByTestId('dice-roll-row').first()).toContainText('DAGGER (OBSIDIAN)')
+      await expect(page.getByTestId('dice-roll-row').first()).toContainText('1d20+2')
+    } finally {
+      await room.close()
+    }
+  })
 })

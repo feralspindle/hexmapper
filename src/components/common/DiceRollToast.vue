@@ -18,7 +18,7 @@
 
           <div v-if="toast.roll.results?.length" class="ds-rt-breakdown">
             [<template v-for="(r, i) in toast.roll.results" :key="i"
-              ><span :class="r.value === 20 && r.die === 'd20' ? 'ds-rt-crit' : r.value === 1 && r.die === 'd20' ? 'ds-rt-fumble' : ''">{{ r.value }}</span><span v-if="i < toast.roll.results.length - 1" class="ds-rt-sep">, </span
+              ><span :class="dieClass(r)" :title="dieTitle(r)">{{ r.value }}</span><span v-if="i < toast.roll.results.length - 1" class="ds-rt-sep">, </span
             ></template>]
           </div>
 
@@ -65,12 +65,32 @@ const DICE_ORDER = ['d1', 'd4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']
 function highestDie(roll) {
   for (const die of [...DICE_ORDER].reverse()) {
     if ((roll.pending?.[die] ?? 0) > 0) return die
+    if (roll.results?.some(r => r.die === die && !r.dropped)) return die
   }
   return null
 }
 
+function dieClass(r) {
+  if (r.dropped) return 'ds-rt-dropped'
+  if (r.value === 20 && r.die === 'd20') return 'ds-rt-crit'
+  if (r.value === 1 && r.die === 'd20') return 'ds-rt-fumble'
+  if (r.exploded_from != null) return 'ds-rt-exploded'
+  return ''
+}
+
+function dieTitle(r) {
+  if (r.exploded_from != null) return `exploded from a ${r.exploded_from}`
+  if (r.dropped) return 'dropped'
+  return ''
+}
+
+function loneKeptD20(roll) {
+  const kept = (roll.results ?? []).filter(r => !r.dropped)
+  return kept.length === 1 && kept[0].die === 'd20'
+}
 
 function isSingleD20(roll) {
+  if (roll.notation) return loneKeptD20(roll)
   return (roll.pending?.d20 ?? 0) === 1 &&
     DICE_ORDER.filter(d => d !== 'd20').every(d => (roll.pending?.[d] ?? 0) === 0)
 }
@@ -84,6 +104,7 @@ function isFumble(roll) {
 }
 
 function rollLabel(roll) {
+  if (roll.notation) return roll.notation
   const parts = DICE_ORDER
     .filter(d => (roll.pending?.[d] ?? 0) > 0)
     .map(d => `${roll.pending[d]}${d}`)
@@ -194,6 +215,17 @@ function rollLabel(roll) {
 
 .ds-rt-sep {
   color: var(--ink-mute, #8a7a68);
+}
+
+.ds-rt-exploded {
+  color: #b8541c;
+  font-weight: 700;
+}
+
+.ds-rt-dropped {
+  color: var(--ink-mute, #8a7a68);
+  text-decoration: line-through;
+  opacity: 0.55;
 }
 
 .ds-rt-who {

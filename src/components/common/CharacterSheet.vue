@@ -848,9 +848,28 @@
                                         >
                                             {{ atk.label }}
                                         </div>
-                                        <div class="cs-list-sub">
-                                            <span v-if="atk.statKey" class="cs-atk-stat-badge">{{ atk.statKey }} {{ atkEffectiveBonus(atk) >= 0 ? '+' : '' }}{{ atkEffectiveBonus(atk) }}</span>
-                                            <span v-else>{{ atk.raw.split(":").slice(1).join(":").trim() }}</span>
+                                        <div class="cs-list-sub cs-atk-sub">
+                                            <div
+                                                v-if="atk.description"
+                                                class="cs-atk-desc"
+                                            >{{ atk.description }}</div>
+                                            <div v-else-if="!atk.statKey && !atk.modifiers.length" class="cs-atk-desc">{{ atk.raw.split(":").slice(1).join(":").trim() }}</div>
+                                            <div v-if="atk.statKey || atk.modifiers.length" class="cs-atk-mods">
+                                                <span
+                                                    v-if="atk.statKey"
+                                                    class="cs-atk-mod-chip"
+                                                    :class="{ negative: atkStatBonus(atk) < 0 }"
+                                                    :title="`Linked stat (${atk.statKey})`"
+                                                >{{ atk.statKey }} {{ fmtSigned(atkStatBonus(atk)) }}</span>
+                                                <span
+                                                    v-for="m in atk.modifiers"
+                                                    :key="m.id"
+                                                    class="cs-atk-mod-chip"
+                                                    :class="{ negative: (Number(m.value) || 0) < 0 }"
+                                                    :title="`Labeled modifier: ${m.label}`"
+                                                >{{ m.label }} {{ fmtSigned(m.value) }}</span>
+                                                <span class="cs-atk-mod-total">= {{ fmtSigned(atkEffectiveBonus(atk)) }}</span>
+                                            </div>
                                         </div>
                                     </button>
                                     <button
@@ -1004,10 +1023,73 @@
                                         @keyup.enter="saveAtkEdit(atk.idx)"
                                         @keyup.escape="editingAtkIdx = null"
                                     />
+                                    <input
+                                        v-model="editAtkDraft.description"
+                                        class="cs-input"
+                                        placeholder="Weapon description (shown above the modifiers)…"
+                                        maxlength="200"
+                                        data-testid="atk-description"
+                                        @keyup.enter="saveAtkEdit(atk.idx)"
+                                        @keyup.escape="editingAtkIdx = null"
+                                    />
                                     <select v-model="editAtkDraft.statKey" class="cs-input">
                                         <option value="">No stat linked (use bonus in description)</option>
                                         <option v-for="k in ['STR','DEX','CON','INT','WIS','CHA']" :key="k" :value="k">{{ STAT_NAMES[k] }} ({{ k }})</option>
                                     </select>
+                                    <div class="cs-atk-mod-editor">
+                                        <span class="cs-atk-mod-editor-label">
+                                            Modifiers
+                                            <span
+                                                v-if="editAtkDraft.statKey || editAtkDraft.modifiers.length"
+                                                class="cs-atk-mod-editor-total"
+                                            >roll {{ fmtSigned(editAtkBonusPreview()) }}<span v-if="editAtkBreakdown()" class="cs-atk-mod-editor-breakdown"> ({{ editAtkBreakdown() }})</span></span>
+                                            <span v-else class="cs-atk-mod-editor-hint">description bonus used</span>
+                                        </span>
+                                        <div
+                                            v-for="m in editAtkDraft.modifiers"
+                                            :key="m.id"
+                                            class="cs-atk-mod-row"
+                                        >
+                                            <input
+                                                v-model="m.label"
+                                                type="text"
+                                                class="cs-input cs-atk-mod-label-input"
+                                                placeholder="Label, e.g. talent, debuff"
+                                                maxlength="40"
+                                                data-testid="atk-mod-label"
+                                            />
+                                            <input
+                                                v-model.number="m.value"
+                                                type="number"
+                                                class="cs-input cs-atk-mod-value-input"
+                                                data-testid="atk-mod-value"
+                                            />
+                                            <button
+                                                class="cs-icon-btn danger"
+                                                title="Remove modifier"
+                                                @click="removeAtkModifierDraft(m.id)"
+                                            >
+                                                <svg
+                                                    width="10"
+                                                    height="10"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2.5"
+                                                    stroke-linecap="round"
+                                                >
+                                                    <path d="M18 6L6 18M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <button
+                                            class="cs-atk-mod-add"
+                                            data-testid="atk-mod-add"
+                                            @click="addAtkModifierDraft"
+                                        >
+                                            + Add modifier
+                                        </button>
+                                    </div>
                                     <input
                                         v-model="editAtkDraft.damageDie"
                                         class="cs-input"
@@ -2107,6 +2189,8 @@ import {
     statMod,
     parseAttack,
     parseDamageDie,
+    effectiveAttackBonus,
+    fmtSigned,
 } from "@/stores/characterStore.js";
 import { useDiceStore } from "@/stores/diceStore.js";
 import { useSessionStore } from "@/stores/sessionStore.js";
@@ -2221,15 +2305,24 @@ const parsedAttacks = computed(() => {
         const disabled = typeof a === "object" ? (a.disabled ?? false) : false;
         const damageDie = typeof a === "object" ? (a.damageDie ?? null) : null;
         const statKey = typeof a === "object" ? (a.statKey ?? null) : null;
-        return { ...parseAttack(raw), idx, disabled, damageDie, statKey };
+        const description = typeof a === "object" ? (a.description ?? null) : null;
+        const modifiers =
+            typeof a === "object" && Array.isArray(a.modifiers)
+                ? a.modifiers
+                : [];
+        return { ...parseAttack(raw), idx, disabled, damageDie, statKey, description, modifiers };
     });
 });
 
-function atkEffectiveBonus(atk) {
+function atkStatBonus(atk) {
     if (atk.statKey && char.value?.stats?.[atk.statKey] !== undefined) {
         return statMod(char.value.stats[atk.statKey]);
     }
-    return atk.bonus;
+    return 0;
+}
+
+function atkEffectiveBonus(atk) {
+    return effectiveAttackBonus(atk, char.value?.stats);
 }
 
 const rationSlots = computed(() => {
@@ -2421,16 +2514,53 @@ function handleSpendLuck() {
 }
 
 const editingAtkIdx = ref(null);
-const editAtkDraft = ref({ raw: "", damageDie: "", statKey: "" });
+const editAtkDraft = ref({ raw: "", damageDie: "", statKey: "", description: "", modifiers: [] });
 function startAtkEdit(atk) {
     editingAtkIdx.value = atk.idx;
-    editAtkDraft.value = { raw: atk.raw, damageDie: atk.damageDie ?? "", statKey: atk.statKey ?? "" };
+    editAtkDraft.value = {
+        raw: atk.raw,
+        damageDie: atk.damageDie ?? "",
+        statKey: atk.statKey ?? "",
+        description: atk.description ?? "",
+        modifiers: (atk.modifiers ?? []).map((m) => ({ ...m })),
+    };
+}
+function addAtkModifierDraft() {
+    editAtkDraft.value.modifiers.push({ id: crypto.randomUUID(), label: "", value: 0 });
+}
+function removeAtkModifierDraft(id) {
+    editAtkDraft.value.modifiers = editAtkDraft.value.modifiers.filter((m) => m.id !== id);
+}
+function editAtkBonusPreview() {
+    const d = editAtkDraft.value;
+    const statLinked = d.statKey && char.value?.stats?.[d.statKey] !== undefined;
+    const sum = d.modifiers.reduce((s, m) => s + (Number(m.value) || 0), 0);
+    if (statLinked) return statMod(char.value.stats[d.statKey]) + sum;
+    if (d.modifiers.length) return sum;
+    return 0;
+}
+function editAtkBreakdown() {
+    const d = editAtkDraft.value;
+    const parts = [];
+    if (d.statKey && char.value?.stats?.[d.statKey] !== undefined) {
+        parts.push(`${d.statKey} ${fmtSigned(statMod(char.value.stats[d.statKey]))}`);
+    }
+    if (d.modifiers.length) {
+        const sum = d.modifiers.reduce((s, m) => s + (Number(m.value) || 0), 0);
+        parts.push(`modifiers ${fmtSigned(sum)}`);
+    }
+    return parts.join(" + ");
 }
 function saveAtkEdit(idx) {
+    const modifiers = editAtkDraft.value.modifiers
+        .map((m) => ({ id: m.id, label: String(m.label ?? "").trim(), value: Math.round(Number(m.value) || 0) }))
+        .filter((m) => m.label && m.value !== 0);
     characterStore.updateAttack(idx, {
         raw: editAtkDraft.value.raw.trim(),
         damageDie: editAtkDraft.value.damageDie.trim() || null,
         statKey: editAtkDraft.value.statKey || null,
+        description: editAtkDraft.value.description.trim() || null,
+        modifiers,
     });
     editingAtkIdx.value = null;
 }
@@ -3386,6 +3516,7 @@ button.cs-stat-val:hover {
 }
 .cs-list-main {
     flex: 1;
+    min-width: 0;
     text-align: left;
     padding: 6px 8px;
     background: transparent;
@@ -3415,12 +3546,122 @@ button.cs-stat-val:hover {
     color: var(--ink-soft, #6b5e4e);
     margin-top: 1px;
 }
-.cs-atk-stat-badge {
+.cs-atk-sub {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.cs-atk-desc {
+    font-family: var(--font-body, serif);
+    font-size: 12px;
+    font-style: italic;
+    color: var(--ink-soft, #6b5e4e);
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+.cs-atk-mods {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 5px;
+}
+.cs-atk-mod-total {
     font-family: var(--font-mono, monospace);
     font-size: 11px;
-    color: var(--accent, #8a1c1c);
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.03em;
+    color: var(--paper, #ede1c7);
+    background: var(--ink, #1a1410);
+    border-radius: 2px;
+    padding: 1px 5px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.cs-atk-mod-chip {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    color: var(--ink-soft, #5a4a3a);
+    border: 1px solid var(--rule, rgba(26, 20, 16, 0.25));
+    border-radius: 2px;
+    padding: 0 4px;
+    line-height: 1.5;
+    white-space: nowrap;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cs-atk-mod-chip.negative {
+    color: var(--accent, #8a1c1c);
+    border-color: color-mix(in srgb, var(--accent, #8a1c1c) 35%, transparent);
+}
+.cs-atk-mod-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: 1px solid var(--rule, rgba(26, 20, 16, 0.25));
+    border-radius: 2px;
+    padding: 6px;
+    background: var(--paper-2, #e3d4b3);
+}
+.cs-atk-mod-editor-label {
+    font-family: var(--font-zine, 'Special Elite', serif);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #8a7a68);
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+.cs-atk-mod-editor-total {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    color: var(--accent, #8a1c1c);
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0.03em;
+}
+.cs-atk-mod-editor-breakdown {
+    font-weight: 400;
+    color: var(--ink-mute, #8a7a68);
+}
+.cs-atk-mod-editor-hint {
+    font-family: var(--font-body, serif);
+    font-size: 10px;
+    font-style: italic;
+    color: var(--ink-mute, #8a7a68);
+    text-transform: none;
+    letter-spacing: 0;
+}
+.cs-atk-mod-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.cs-atk-mod-label-input {
+    flex: 1;
+    min-width: 0;
+}
+.cs-atk-mod-value-input {
+    width: 56px;
+    flex: 0 0 56px;
+    text-align: center;
+    font-family: var(--font-mono, monospace);
+}
+.cs-atk-mod-add {
+    background: none;
+    border: none;
+    padding: 2px 0 0;
+    font-family: var(--font-zine, 'Special Elite', serif);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-2, #b8541c);
+    cursor: pointer;
+    text-align: left;
+}
+.cs-atk-mod-add:hover {
+    color: var(--accent, #8a1c1c);
 }
 .cs-list-action-col {
     display: flex;

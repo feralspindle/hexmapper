@@ -35,6 +35,7 @@ export const REALTIME_TABLES = {
   session: 'sessions',
   session_member: 'session_members',
   session_oracle_table: 'session_oracle_tables',
+  siege_weapon: 'siege_weapons',
   stat_block: 'stat_blocks',
 }
 

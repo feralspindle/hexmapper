@@ -31,6 +31,9 @@
       <button class="pn-tab" :class="{ active: activeTab === 'vault' }" data-testid="notebook-tab-vault" @click="activeTab = 'vault'">
         Vault<span v-if="vaultStore.loot.length" class="pn-badge">{{ vaultStore.loot.length }}</span>
       </button>
+      <button class="pn-tab" :class="{ active: activeTab === 'siege' }" data-testid="notebook-tab-siege" @click="activeTab = 'siege'">
+        Siege<span v-if="siegeStore.weapons.length" class="pn-badge">{{ siegeStore.weapons.length }}</span>
+      </button>
       <button class="pn-tab" :class="{ active: activeTab === 'calendar' }" data-testid="notebook-tab-calendar" @click="activeTab = 'calendar'">
         Calendar
       </button>
@@ -723,6 +726,10 @@
 
       </template>
 
+      <template v-if="activeTab === 'siege'">
+        <SiegeWeaponsPanel />
+      </template>
+
       <template v-if="activeTab === 'calendar'">
         <PartyCalendar :session-id="sessionId" />
       </template>
@@ -740,9 +747,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import PartyCalendar from '@/components/common/PartyCalendar.vue'
+import SiegeWeaponsPanel from '@/components/common/SiegeWeaponsPanel.vue'
 import { useCharacterStore } from '@/stores/characterStore.js'
 import { useNotebookStore } from '@/stores/notebookStore.js'
 import { useVaultStore } from '@/stores/vaultStore.js'
+import { useSiegeStore } from '@/stores/siegeStore.js'
 import { useSessionStore } from '@/stores/sessionStore.js'
 import { useAuthStore } from '@/stores/authStore.js'
 import { usePartyNotebook } from '@/composables/usePartyNotebook.js'
@@ -758,6 +767,7 @@ const { visible, activeTab, close } = usePartyNotebook()
 const notebookStore   = useNotebookStore()
 const characterStore  = useCharacterStore()
 const vaultStore      = useVaultStore()
+const siegeStore      = useSiegeStore()
 const sessionStore    = useSessionStore()
 const authStore       = useAuthStore()
 
@@ -780,6 +790,7 @@ onMounted(async () => {
   await Promise.all([
     notebookStore.init(props.sessionId),
     vaultStore.init(props.sessionId),
+    siegeStore.init(props.sessionId),
   ])
 })
 

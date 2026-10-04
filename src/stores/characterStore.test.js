@@ -25,7 +25,7 @@ vi.mock('@/lib/diceSound.js', () => ({
   playChatSound: vi.fn(),
 }))
 
-import { statMod, parseDamageDie, parseAttack, useCharacterStore } from './characterStore.js'
+import { statMod, parseDamageDie, parseAttack, effectiveAttackBonus, fmtSigned, useCharacterStore } from './characterStore.js'
 
 const char = (id, overrides = {}) => ({
   id,
@@ -617,5 +617,73 @@ describe('shadowdark sheet support', () => {
     expect(data.XP).toBe(3)
     expect(data.treasures).toEqual(['worthless but pretty stone'])
     expect(data.xpLog[0].xp).toBe(0)
+  })
+})
+
+describe('effectiveAttackBonus (labeled attack modifiers)', () => {
+  const STATS = { STR: 16, DEX: 9, CON: 10, INT: 12, WIS: 8, CHA: 14 }
+
+  test('stat modifier alone when no labeled modifiers', () => {
+    const atk = { ...parseAttack('Longsword: +5 flaming'), statKey: 'STR' }
+    expect(effectiveAttackBonus(atk, STATS)).toBe(3)
+  })
+
+  test('stacks labeled modifiers on the linked stat', () => {
+    const atk = {
+      ...parseAttack('Longsword: +9 (ignored while stat linked)'),
+      statKey: 'STR',
+      modifiers: [
+        { id: 'a', label: 'talent', value: 2 },
+        { id: 'b', label: 'debuff', value: -1 },
+      ],
+    }
+    expect(effectiveAttackBonus(atk, STATS)).toBe(4)
+  })
+
+  test('sums labeled modifiers when no stat is linked', () => {
+    const atk = {
+      ...parseAttack('Bite: +7'),
+      statKey: null,
+      modifiers: [
+        { id: 'a', label: 'rage', value: 2 },
+        { id: 'b', label: 'bless', value: 1 },
+      ],
+    }
+    expect(effectiveAttackBonus(atk, STATS)).toBe(3)
+  })
+
+  test('description bonus only when no stat and no modifiers', () => {
+    expect(effectiveAttackBonus(parseAttack('Dagger: +2 sneaky'), STATS)).toBe(2)
+    expect(effectiveAttackBonus(parseAttack('Clumsy swing'), STATS)).toBe(0)
+  })
+
+  test('ignores a stat key with no matching stat', () => {
+    const atk = {
+      ...parseAttack('Ray: +1'),
+      statKey: 'STR',
+      modifiers: [{ id: 'a', label: 'focus', value: 1 }],
+    }
+    expect(effectiveAttackBonus(atk, {})).toBe(1)
+  })
+
+  test('tolerates junk modifier values', () => {
+    const atk = {
+      ...parseAttack('Slam: +1'),
+      statKey: null,
+      modifiers: [
+        { id: 'a', label: 'weird', value: '3' },
+        { id: 'b', label: 'broken', value: null },
+      ],
+    }
+    expect(effectiveAttackBonus(atk, STATS)).toBe(3)
+  })
+})
+
+describe('fmtSigned', () => {
+  test('formats positives with a plus and negatives with a minus', () => {
+    expect(fmtSigned(4)).toBe('+4')
+    expect(fmtSigned(-1)).toBe('-1')
+    expect(fmtSigned(0)).toBe('+0')
+    expect(fmtSigned('2.4')).toBe('+2')
   })
 })
