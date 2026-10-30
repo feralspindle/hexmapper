@@ -2,7 +2,7 @@
 
 a real-time multiplayer campaign management tool for tabletop RPG groups. Share a URL to invite players — no accounts required for guests.
 
-Live at [squeak.guru](https://squeak.guru) but signups are currently closed
+Live at [squeak.guru](https://squeak.guru)
 
 ## Features
 
