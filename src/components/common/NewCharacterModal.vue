@@ -1,9 +1,12 @@
 <template>
-  <Teleport to="body">
+  <!-- the design tokens live on each view's root, so a teleport to body leaves
+       every var() unresolved and the panel goes transparent. not rendered in
+       place because the topbar's z-index would trap it under the floating panels -->
+  <Teleport to=".dungeon-scribe" defer>
     <div class="fixed inset-0 z-[100] flex items-center justify-center">
       <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="emit('close')" />
 
-      <div class="relative w-full max-w-lg mx-4 bg-stone-900 border border-stone-600 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div class="relative w-full max-w-lg mx-4 bg-stone-900 border border-stone-600 rounded-xl shadow-2xl flex flex-col max-h-[90vh]" data-testid="new-char-panel">
 
         <div class="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
           <div class="text-sm font-display text-parchment-200 uppercase tracking-wider">New Character</div>
