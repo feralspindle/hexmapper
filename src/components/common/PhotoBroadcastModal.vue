@@ -1,9 +1,12 @@
 <template>
-  <Teleport to="body">
+  <!-- not body, the design tokens live on the view's root. defer because a
+       broadcast can already be set when the view mounts, before its root is in
+       the dom -->
+  <Teleport to=".dungeon-scribe" defer>
     <div class="fixed inset-0 z-[200] flex items-center justify-center" data-testid="photo-broadcast">
       <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" @click="photoStore.dismissBroadcast()" />
 
-      <div class="relative mx-4 flex flex-col bg-stone-900 border border-stone-600 rounded-xl shadow-2xl overflow-hidden max-w-2xl w-full">
+      <div class="relative mx-4 flex flex-col bg-stone-900 border border-stone-600 rounded-xl shadow-2xl overflow-hidden max-w-2xl w-full" data-testid="photo-broadcast-panel">
         <div class="flex items-center justify-between px-4 py-3 shrink-0 border-b border-stone-700">
           <div class="flex items-center gap-2 min-w-0">
             <i class="fa-solid fa-tower-broadcast text-parchment-400 text-xs shrink-0" />
