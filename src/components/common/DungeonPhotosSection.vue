@@ -114,10 +114,12 @@
   </div>
 
 
-  <Teleport to="body">
+  <!-- not body, the design tokens live on the view's root. defer because this
+       mounts with the view, before its root is in the dom -->
+  <Teleport to=".dungeon-scribe" defer>
     <div v-if="enlarged" class="fixed inset-0 z-[200] flex items-center justify-center" @click="enlarged = null">
       <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      <div class="relative mx-4 flex flex-col bg-stone-900 border border-stone-600 rounded-xl shadow-2xl overflow-hidden max-w-2xl w-full" @click.stop>
+      <div class="relative mx-4 flex flex-col bg-stone-900 border border-stone-600 rounded-xl shadow-2xl overflow-hidden max-w-2xl w-full" data-testid="photo-enlarged-panel" @click.stop>
         <div class="flex items-center justify-between px-4 py-3 shrink-0 border-b border-stone-700">
           <span class="text-sm font-display text-parchment-200 tracking-wide truncate">{{ enlarged.name }}</span>
           <button
